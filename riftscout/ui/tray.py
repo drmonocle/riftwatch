@@ -21,16 +21,9 @@ log = logging.getLogger(__name__)
 
 
 def create_tray_image():
-    """Generate a crisp 64x64 Hextech emblem icon for the system tray."""
-    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    # Hextech gold circle
-    d.ellipse((4, 4, 60, 60), fill=(9, 20, 40, 255), outline=(200, 170, 110, 255), width=4)
-    # Magic teal diamond
-    d.polygon([(32, 14), (50, 32), (32, 50), (14, 32)], outline=(10, 200, 185, 255), width=4)
-    # Core gold jewel
-    d.ellipse((26, 26, 38, 38), fill=(200, 170, 110, 255))
-    return img
+    """Load or generate the Vector Rift Herald icon for the system tray."""
+    from .icons import get_tray_icon_image
+    return get_tray_icon_image(64)
 
 
 class TrayManager:

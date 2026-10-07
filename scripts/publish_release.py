@@ -34,15 +34,12 @@ def main():
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel & 24/7 Stream Companion
 
 ### ✨ What's New & Refined in {version}
-* **Zero White Screen Flash on Startup & Update Relaunch:**
-  * **Off-Screen Window Staging:** Windows are now initialized in a withdrawn off-screen state (`root.withdraw()`) while dark Hextech themes and widgets are assembled, revealing via `deiconify()` only after all off-screen geometry and dark canvas buffers are calculated.
-  * **Windows 10/11 Immersive Dark Mode Titlebars:** Native Win32 HWNDs now automatically activate `DWMWA_USE_IMMERSIVE_DARK_MODE` (20), preventing Windows from painting default `#FFFFFF` white window classes on application launch or after in-app updater restarts.
-* **LoL Esports Leagues Multi-Selector & Schedule Expansion:**
-  * **Dedicated League Filter Modal:** Replaced the single-league dropdown with a comprehensive Hextech league selector dialog (`LeagueFilterDialog`). Users can now select any combination of individual pro leagues to track together on the Schedule page.
-  * **Full Riot Leagues Coverage (LCK, LPL, LEC, LCS, Worlds):** Directly queries Riot's API across 12+ league IDs in parallel, fetching 80+ events per league (LCK, LPL, LEC, LCS, Worlds, MSI, First Stand, Demacia Cup, CBLOL, LCP) and expanding cache retention to 60 days.
-  * **1-Click Quick Presets & Real-Time Search:** Includes instant filters for "★ All Leagues", "⭐ Big 4 Major (LCK/LPL/LEC/LCS)", "🌐 International", and "★ Followed in Watchlist", plus dynamic instant-search filtering.
-* **Streamlined 24/7 Broadcast Replays Tab:**
-  * Cleaned up redundant streaming buttons: high-contrast "▶ Watch on Twitch" and "▶ Watch on YouTube" buttons remain front-and-center on the current live broadcast hero card, while the Next S-Tier Banger card and individual upcoming rebroadcast rows have been decluttered.
+* **Vector Rift Herald Emblem Branding (Taskbar & System Tray):**
+  * **Custom Vector Herald Artwork:** Replaced procedural geometry with the community-voted Vector Rift Herald emblem: sharp golden and purple horns curving upward, glowing purple eyes, and angular gold shield lines on a deep Hextech navy-purple rounded squircle badge.
+  * **Multi-Resolution Windows PE Icon:** Master `app.ico` packed with native Win32 icon mipmaps across 7 standard resolutions (`16x16`, `24x24`, `32x32`, `48x48`, `64x64`, `128x128`, `256x256`) for razor-sharp rendering in the Windows Taskbar, Alt-Tab switcher, File Explorer, and Desktop shortcuts.
+  * **Custom System Tray Icon:** Updated the background `pystray` system notification tray icon with the Vector Rift Herald branding, complete with subtle sharpening and contrast optimization at 64x64 and 32x32.
+  * **Dual Win32 / Tkinter Icon Binding:** Automatically applies native `iconbitmap` to the window HWND alongside multi-resolution `iconphoto` frames, guaranteeing crisp rendering across all DPI display scales.
+  * **Zero White Screen Flash & Immersive Dark Mode:** Fully preserved all v0.2.4 dark mode enhancements (`root.withdraw()` staging and `DWMWA_USE_IMMERSIVE_DARK_MODE`).
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`

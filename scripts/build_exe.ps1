@@ -14,23 +14,22 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 2. Ensure multi-resolution app.ico exists
-Write-Host "[*] Generating / verifying app.ico..." -ForegroundColor Yellow
+# 2. Ensure multi-resolution Vector Rift Herald app.ico exists
+Write-Host "[*] Verifying multi-resolution Vector Rift Herald app.ico..." -ForegroundColor Yellow
 py -3.12 -c "
-from PIL import Image, ImageDraw
-def make_icon():
-    img = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.ellipse((8, 8, 247, 247), fill=(9, 20, 40, 255), outline=(200, 170, 110, 255), width=16)
-    d.ellipse((24, 24, 231, 231), outline=(30, 42, 56, 255), width=4)
-    diamond = [(128, 48), (208, 128), (128, 208), (48, 128)]
-    d.polygon(diamond, outline=(10, 200, 185, 255), width=16)
-    d.ellipse((104, 104, 152, 152), fill=(200, 170, 110, 255), outline=(240, 230, 210, 255), width=4)
-    return img
+import os
+from PIL import Image
 
-icon = make_icon()
-icon.save('app.ico', format='ICO', sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+assert os.path.exists('app.ico'), 'app.ico missing!'
+img = Image.open('app.ico')
+sizes = img.info.get('sizes', set())
+print(f'Verified app.ico with sizes: {sorted(list(sizes))}')
+assert (256, 256) in sizes and (16, 16) in sizes, 'app.ico missing required resolutions!'
 "
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Vector Rift Herald app.ico verification failed! Aborting build."
+    exit 1
+}
 
 # 3. Clean previous build artifacts
 Write-Host "[*] Cleaning previous build artifacts..." -ForegroundColor Yellow

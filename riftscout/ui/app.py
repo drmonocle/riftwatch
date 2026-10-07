@@ -93,14 +93,8 @@ class RiftScoutApp:
     # ================================================================ chrome
     def _set_icon(self) -> None:
         try:
-            from PIL import Image, ImageDraw, ImageTk
-            img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-            d = ImageDraw.Draw(img)
-            d.ellipse((2, 2, 61, 61), fill=(9, 20, 40, 255), outline=(200, 170, 110, 255), width=4)
-            d.polygon([(32, 12), (48, 32), (32, 52), (16, 32)], outline=(10, 200, 185, 255), width=4)
-            d.ellipse((27, 27, 37, 37), fill=(200, 170, 110, 255))
-            self._icon = ImageTk.PhotoImage(img, master=self.root)
-            self.root.iconphoto(True, self._icon)
+            from .icons import set_window_icon
+            set_window_icon(self.root)
         except Exception:
             pass
 

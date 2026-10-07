@@ -4,7 +4,7 @@ a = Analysis(
     ['run_riftwatch.pyw'],
     pathex=[],
     binaries=[],
-    datas=[('app.ico', '.')],
+    datas=[('app.ico', '.'), ('riftscout/assets', 'riftscout/assets')],
     hiddenimports=[
         'PIL',
         'PIL.Image',
