@@ -34,6 +34,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "schedule_filter_range": "upcoming",
     "window_geometry": "",
     "last_tab": "live",
+    "default_tab": "live",
     # Used by Phase 4 (tray / toasts / ticker); stored now so they persist.
     "notify_pregame": True,
     "notify_pregame_mins": 30,
@@ -83,6 +84,9 @@ def migrate(data: Dict[str, Any]) -> Dict[str, Any]:
 
     if "minimize_to_tray_on_close" not in out:
         out["minimize_to_tray_on_close"] = True
+
+    if "default_tab" not in out:
+        out["default_tab"] = "live"
 
     for stale in ("ticker_bar_enabled", "ticker_bar_coords", "sound_enabled", "minimize_to_tray",
                   "notify_stream_banger"):
@@ -247,3 +251,12 @@ class SettingsManager:
             self.data["followed_players"] = players
             self.save()
             return now_followed
+
+    def reset_all_follows(self) -> None:
+        """Clear all followed teams, players, leagues, and regions."""
+        with self._lock:
+            self.data["followed_teams"] = []
+            self.data["followed_players"] = []
+            self.data["followed_leagues"] = []
+            self.data["followed_regions"] = []
+            self.save()

@@ -117,7 +117,9 @@ class ScrollFrame(tk.Frame):
     def __init__(self, parent, bg=C.COLOR_BG, **kw):
         super().__init__(parent, bg=bg, **kw)
         self.canvas = tk.Canvas(self, bg=bg, highlightthickness=0, bd=0)
-        self.vbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview, width=px(12))
+        self.vbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview, width=px(10),
+                                 bg=C.COLOR_SURFACE, activebackground=C.COLOR_GOLD, troughcolor=C.COLOR_BG_DARK,
+                                 bd=0, highlightthickness=0, relief="flat")
         self.body = tk.Frame(self.canvas, bg=bg)
         self._win = self.canvas.create_window((0, 0), window=self.body, anchor="nw")
         self.canvas.configure(yscrollcommand=self.vbar.set)
@@ -148,11 +150,29 @@ class ScrollFrame(tk.Frame):
         sf.canvas.yview_scroll(int(-event.delta / 120) * 3, "units")
 
     def keep_scroll(self, rebuild: Callable[[], None]) -> None:
-        """Rebuild the contents without jumping back to the top."""
-        pos = self.canvas.yview()[0]
-        rebuild()
+        """Rebuild contents smoothly using double-buffered frame swapping to prevent white flashes."""
+        try:
+            pos = self.canvas.yview()[0]
+        except Exception:
+            pos = 0.0
+        bg = self.cget("bg") or C.COLOR_BG
+        old_body = self.body
+        new_body = tk.Frame(self.canvas, bg=bg)
+        self.body = new_body
+        try:
+            rebuild()
+        except Exception:
+            self.body = old_body
+            new_body.destroy()
+            raise
+        self.canvas.itemconfigure(self._win, window=new_body)
+        new_body.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        w = self.canvas.winfo_width()
+        if w > 1:
+            self.canvas.itemconfigure(self._win, width=w)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         self.canvas.yview_moveto(pos)
+        old_body.destroy()
 
     def to_top(self) -> None:
         self.canvas.yview_moveto(0)

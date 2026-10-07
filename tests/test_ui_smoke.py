@@ -171,19 +171,20 @@ def test_header_pills_and_stream_status(app):
     assert app.sep_header.winfo_exists()
     assert app.pill_stream.winfo_exists()
 
-    # With stream_online=True and live stream
+    # With stream_online=True and live stream: clean title, no "ON AIR"
     app._refresh_header()
-    assert "ON AIR" in app.l_stream.cget("text")
+    assert "SKT vs SSG" in app.l_stream.cget("text")
+    assert "ON AIR" not in app.l_stream.cget("text")
 
-    # With stream_online=False
+    # With stream_online=False: says "Offline" strictly without match title
     app._apply("stream_online", False)
     app._refresh_header()
-    assert "OFFLINE" in app.l_stream.cget("text")
+    assert app.l_stream.cget("text") == "Twitch 24/7: Offline"
 
     # With no stream airing
     app._apply("stream", [])
     app._refresh_header()
-    assert "OFF AIR" in app.l_stream.cget("text")
+    assert app.l_stream.cget("text") == "Twitch 24/7: Offline"
 
 
 def test_no_redundant_version_bumps(app):
@@ -206,3 +207,41 @@ def test_schedule_filters_preserve_widgets(app):
     sched_view.render()
     assert sched_view._range_btns["upcoming"] is btn
     assert btn.winfo_exists()
+
+
+def test_settings_comprehensive_controls(app):
+    app.show_tab("settings")
+    settings_view = app.views["settings"]
+    settings_view.render()
+    s = app.settings
+    assert s.get("default_tab") in ("live", "schedule", "stream", "watchlist")
+    assert "notify_kickoff" in s.data
+    assert "notify_pregame" in s.data
+    assert "notify_stream" in s.data
+
+    # Test reset_all_follows
+    s.data["followed_teams"] = [{"code": "T1", "name": "T1"}]
+    s.data["followed_players"] = ["Faker"]
+    s.reset_all_follows()
+    assert s.followed_teams() == []
+    assert s.get("followed_players") == []
+    assert s.get("followed_regions") == []
+    assert s.get("followed_leagues") == []
+
+
+def test_scrollframe_double_buffering(app):
+    sf = app.views["schedule"].scroll
+    old_body = sf.body
+    assert old_body.winfo_exists()
+
+    rebuilt = False
+    def rebuild():
+        nonlocal rebuilt
+        rebuilt = True
+        # In double-buffered swap, sf.body is the new body
+        assert sf.body is not old_body
+        assert sf.body.winfo_exists()
+
+    sf.keep_scroll(rebuild)
+    assert rebuilt
+    assert not old_body.winfo_exists()

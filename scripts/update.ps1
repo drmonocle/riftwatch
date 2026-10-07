@@ -1,28 +1,28 @@
 <#
 .SYNOPSIS
-    RiftScout 1-Click Updater Script
+    RiftWatch 1-Click Updater Script
 .DESCRIPTION
-    Checks GitHub Releases for the latest RiftScout binary, verifies SHA-256 hash,
+    Checks GitHub Releases for the latest RiftWatch binary, verifies SHA-256 hash,
     and updates the local installation.
 #>
 
 [CmdletBinding()]
 param (
     [string]$Repo = "drmonocle/rift-scout",
-    [string]$InstallDir = "$env:LOCALAPPDATA\Programs\RiftScout"
+    [string]$InstallDir = "$env:LOCALAPPDATA\Programs\RiftWatch"
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "             RiftScout Automated Updater                  " -ForegroundColor Cyan
+Write-Host "             RiftWatch Automated Updater                  " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 $ReleaseApi = "https://api.github.com/repos/$Repo/releases/latest"
 Write-Host "[*] Checking for updates from $ReleaseApi..." -ForegroundColor DarkGray
 
 try {
-    $Release = Invoke-RestMethod -Uri $ReleaseApi -Headers @{ "User-Agent" = "RiftScout-Updater" }
+    $Release = Invoke-RestMethod -Uri $ReleaseApi -Headers @{ "User-Agent" = "RiftWatch-Updater" }
 } catch {
     Write-Warning "Could not connect to GitHub API or repo not published yet: $_"
     return
@@ -43,17 +43,17 @@ if (-not $SumAsset) {
 }
 
 $DownloadUrl = $ExeAsset.browser_download_url
-$TempExe = "$env:TEMP\RiftScout_$LatestTag.exe"
+$TempExe = "$env:TEMP\RiftWatch_$LatestTag.exe"
 
 Write-Host "[*] Downloading $($ExeAsset.name) from $DownloadUrl..." -ForegroundColor Yellow
-Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempExe -UserAgent "RiftScout-Updater"
+Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempExe -UserAgent "RiftWatch-Updater"
 
 if (-not (Test-Path $TempExe)) {
     Write-Error "Download failed. File not found at $TempExe"
     return
 }
 
-$Sums = (Invoke-WebRequest -Uri $SumAsset.browser_download_url -UserAgent "RiftScout-Updater" -UseBasicParsing).Content
+$Sums = (Invoke-WebRequest -Uri $SumAsset.browser_download_url -UserAgent "RiftWatch-Updater" -UseBasicParsing).Content
 if ($Sums -is [byte[]]) { $Sums = [System.Text.Encoding]::UTF8.GetString($Sums) }
 $Expected = $null
 foreach ($line in ($Sums -split "`n")) {
@@ -68,16 +68,16 @@ if (-not $Expected -or $Actual -ne $Expected) {
 }
 Write-Host "[+] SHA-256 verified: $Actual" -ForegroundColor Green
 
-# Stop running RiftScout processes if any
-$RunningProc = Get-Process -Name "RiftScout" -ErrorAction SilentlyContinue
+# Stop running RiftWatch processes if any
+$RunningProc = Get-Process -Name "RiftWatch" -ErrorAction SilentlyContinue
 if ($RunningProc) {
-    Write-Host "[*] Stopping running RiftScout process (PID $($RunningProc.Id))..." -ForegroundColor Yellow
-    Stop-Process -Id $RunningProc.Id -Force
+    Write-Host "[*] Stopping running RiftWatch process..." -ForegroundColor Yellow
+    $RunningProc | Stop-Process -Force
     Start-Sleep -Milliseconds 500
 }
 
 # Determine target path
-$TargetPath = "$InstallDir\RiftScout.exe"
+$TargetPath = "$InstallDir\RiftWatch.exe"
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
@@ -85,6 +85,6 @@ if (-not (Test-Path $InstallDir)) {
 Copy-Item -Path $TempExe -Destination $TargetPath -Force
 Remove-Item -Path $TempExe -Force -ErrorAction SilentlyContinue
 
-Write-Host "[✓] Successfully updated RiftScout to $LatestTag at $TargetPath" -ForegroundColor Green
-Write-Host "[*] Launching updated RiftScout..." -ForegroundColor Cyan
-Start-Process -FilePath $TargetPath
+Write-Host "[✓] Successfully updated RiftWatch to $LatestTag at $TargetPath" -ForegroundColor Green
+Write-Host "[*] Launching updated RiftWatch..." -ForegroundColor Cyan
+Start-Process -FilePath $TargetPath -WindowStyle Normal

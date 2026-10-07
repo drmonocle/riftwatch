@@ -28,7 +28,10 @@ class View(tk.Frame):
         self.app = app
         self.scroll = ScrollFrame(self)
         self.scroll.pack(fill="both", expand=True)
-        self.body = self.scroll.body
+
+    @property
+    def body(self) -> tk.Frame:
+        return self.scroll.body
 
     def signature(self) -> tuple:
         sig = tuple(self.app.versions.get(d, 0) for d in self.deps)
@@ -375,7 +378,7 @@ class StreamView(View):
         if cur and is_live:
             top = tk.Frame(hero, bg=C.COLOR_SURFACE)
             top.pack(fill="x", padx=px(14), pady=(px(12), 0))
-            pill(top, "● ON AIR", C.COLOR_LIVE, fg="white").pack(side="left")
+            pill(top, "TWITCH 24/7", C.COLOR_CYAN_DIM, fg=C.COLOR_TEXT_PRIMARY).pack(side="left")
             if cur.get("is_banger"):
                 pill(top, "S-TIER BANGER", C.COLOR_BANGER, fg="white").pack(side="left", padx=px(6))
             started = parse_iso_datetime(cur["start_utc"])
@@ -388,28 +391,18 @@ class StreamView(View):
             if nxt:
                 label(hero, f"Up next: {event_title(nxt[0])}  ·  {format_relative_time(nxt[0]['start_utc'], now)}",
                       9, fg=C.COLOR_CYAN).pack(anchor="w", padx=px(14), pady=(px(6), 0))
-        elif cur and not is_live:
-            top = tk.Frame(hero, bg=C.COLOR_SURFACE)
-            top.pack(fill="x", padx=px(14), pady=(px(12), 0))
-            pill(top, "○ STREAM OFFLINE", C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED).pack(side="left")
-            label(hero, f"Scheduled: {event_title(cur)}", 16, True, fg=C.COLOR_TEXT_MUTED).pack(
-                anchor="w", padx=px(14), pady=(px(6), 0))
-            label(hero, f"{event_subtitle(cur)} · Stream is currently offline on Twitch", 10,
-                  fg=C.COLOR_TEXT_DIM).pack(anchor="w", padx=px(14))
-            nxt = upcoming(events, now, limit=1)
-            if nxt:
-                label(hero, f"Next up: {event_title(nxt[0])} · {format_relative_time(nxt[0]['start_utc'], now)}",
-                      10, fg=C.COLOR_CYAN).pack(anchor="w", padx=px(14))
         else:
             top = tk.Frame(hero, bg=C.COLOR_SURFACE)
             top.pack(fill="x", padx=px(14), pady=(px(12), 0))
-            pill(top, "○ OFF AIR", C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED).pack(side="left")
-            label(hero, "Off air or between tournaments", 14, True, fg=C.COLOR_TEXT_MUTED).pack(
+            pill(top, "OFFLINE", C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED).pack(side="left")
+            label(hero, "Stream Offline", 18, True, fg=C.COLOR_TEXT_MUTED).pack(
                 anchor="w", padx=px(14), pady=(px(6), 0))
+            label(hero, "The 24/7 Twitch broadcast is currently offline.", 10,
+                  fg=C.COLOR_TEXT_DIM).pack(anchor="w", padx=px(14))
             nxt = upcoming(events, now, limit=1)
             if nxt:
-                label(hero, f"Next: {event_title(nxt[0])} · {format_relative_time(nxt[0]['start_utc'], now)}",
-                      10, fg=C.COLOR_CYAN).pack(anchor="w", padx=px(14))
+                label(hero, f"Next scheduled rebroadcast: {event_title(nxt[0])} · {format_relative_time(nxt[0]['start_utc'], now)}",
+                      10, fg=C.COLOR_CYAN).pack(anchor="w", padx=px(14), pady=(px(4), 0))
         btns = tk.Frame(hero, bg=C.COLOR_SURFACE)
         btns.pack(fill="x", padx=px(14), pady=px(12))
         button(btns, "▶ Watch on Twitch", lambda: a.open_url(C.TWITCH_CHANNEL_URL), bg="#9146ff", fg="white",
@@ -741,40 +734,85 @@ class SettingsView(View):
         clear(self.body)
         a, s = self.app, self.app.settings
 
-        self.section("Display")
+        self.section("Display & Experience")
         self._toggle("Spoiler mode", "Hide all scores, results and in-game stats until you reveal a match.",
                      s.get("spoiler_mode", False), a.toggle_spoiler)
 
-        self.section("System Tray")
+        # Default tab selector
+        tab_row = tk.Frame(self.body, bg=C.COLOR_SURFACE)
+        tab_row.pack(fill="x", padx=px(18), pady=px(2))
+        tab_txt = tk.Frame(tab_row, bg=C.COLOR_SURFACE)
+        tab_txt.pack(side="left", padx=px(12), pady=px(8))
+        label(tab_txt, "Default tab on launch", 10, True).pack(anchor="w")
+        label(tab_txt, "Choose which view opens automatically when starting RiftWatch.", 8,
+              fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
+        tab_btns = tk.Frame(tab_row, bg=C.COLOR_SURFACE)
+        tab_btns.pack(side="right", padx=px(12))
+        cur_def = s.get("default_tab", "live")
+        for t_key, t_label in (("live", "Live"), ("schedule", "Schedule"), ("stream", "24/7 Stream"), ("watchlist", "Watchlist")):
+            is_sel = (t_key == cur_def)
+            b = button(tab_btns, t_label,
+                       lambda k=t_key: (s.set("default_tab", k), a.bump("prefs")),
+                       size=8, padx=8, pady=3,
+                       bg=C.COLOR_GOLD if is_sel else C.COLOR_BORDER,
+                       fg=C.COLOR_BG if is_sel else C.COLOR_TEXT_MUTED)
+            b.pack(side="left", padx=px(2))
+
+        self.section("Desktop Notifications & Alerts")
+        self._toggle("Live kickoff alerts",
+                     "Display desktop toast notifications when followed teams or players begin a match.",
+                     s.get("notify_kickoff", True),
+                     lambda: (s.set("notify_kickoff", not s.get("notify_kickoff", True)), a.bump("prefs")))
+        self._toggle("Pre-match 15m countdown",
+                     "Display a reminder notification 15 minutes before followed matches start.",
+                     s.get("notify_pregame", True),
+                     lambda: (s.set("notify_pregame", not s.get("notify_pregame", True)), a.bump("prefs")))
+        self._toggle("24/7 stream broadcast alerts",
+                     "Notify when the 24/7 stream goes online or S-Tier banger matches begin.",
+                     s.get("notify_stream", True),
+                     lambda: (s.set("notify_stream", not s.get("notify_stream", True)), a.bump("prefs")))
+
+        self.section("System Tray & Startup")
         self._toggle("Close button minimizes to system tray",
                      "Keep RiftWatch running in the background notification area when the window is closed.",
                      s.get("minimize_to_tray_on_close", True),
                      lambda: (s.set("minimize_to_tray_on_close", not s.get("minimize_to_tray_on_close", True)), a.bump("prefs")))
-
-        self.section("Startup")
         self._toggle("Start RiftWatch with Windows", "Launch automatically when you sign in.",
                      s.get("start_with_windows", False), a.toggle_autostart)
 
-        self.section("Watchlist Setup")
+        self.section("Watchlist & Following")
         wbox = tk.Frame(self.body, bg=C.COLOR_SURFACE)
         wbox.pack(fill="x", padx=px(18), pady=px(4))
         wtxt = tk.Frame(wbox, bg=C.COLOR_SURFACE)
         wtxt.pack(side="left", padx=px(12), pady=px(10))
-        label(wtxt, "Watchlist Setup Wizard", 10, True).pack(anchor="w")
-        label(wtxt, "Quickly select regions, international tournaments, popular teams, and star players.", 8,
-              fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
-        button(wbox, "Run Setup Wizard", a.open_onboarding_wizard, size=9).pack(side="right", padx=px(10))
+        n_teams = len(s.followed_teams())
+        n_players = len(s.get("followed_players", []))
+        n_regions = len(s.get("followed_regions", []))
+        n_leagues = len(s.get("followed_leagues", []))
+        label(wtxt, "Watchlist Management", 10, True).pack(anchor="w")
+        label(wtxt, f"Currently following {n_teams} teams · {n_players} players · {n_regions} regions · {n_leagues} leagues",
+              8, fg=C.COLOR_GOLD).pack(anchor="w", pady=(px(2), 0))
+        w_actions = tk.Frame(wbox, bg=C.COLOR_SURFACE)
+        w_actions.pack(side="right", padx=px(10))
+        button(w_actions, "Run Setup Wizard", a.open_onboarding_wizard, size=9,
+               bg=C.COLOR_GOLD, fg=C.COLOR_BG, hover_bg=C.COLOR_GOLD_HOVER).pack(side="left", padx=px(4))
+        button(w_actions, "Reset All Follows", a.reset_watchlist, size=8, bold=False,
+               bg=C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_LIVE).pack(side="left", padx=px(4))
 
-        self.section("Support RiftWatch")
-        sbox = tk.Frame(self.body, bg=C.COLOR_SURFACE)
-        sbox.pack(fill="x", padx=px(18), pady=px(4))
-        stxt = tk.Frame(sbox, bg=C.COLOR_SURFACE)
-        stxt.pack(side="left", padx=px(12), pady=px(10))
-        label(stxt, "Enjoying RiftWatch & the 24/7 Twitch Broadcast?", 10, True, fg=C.COLOR_GOLD).pack(anchor="w")
-        label(stxt, "RiftWatch is 100% free and open-source. Support ongoing development and streaming servers on Ko-fi.", 8,
+        self.section("Twitch 24/7 Stream Rebroadcasts")
+        tbox = tk.Frame(self.body, bg=C.COLOR_SURFACE)
+        tbox.pack(fill="x", padx=px(18), pady=px(4))
+        ttxt = tk.Frame(tbox, bg=C.COLOR_SURFACE)
+        ttxt.pack(side="left", padx=px(12), pady=px(10))
+        label(ttxt, f"Channel: twitch.tv/{C.TWITCH_CHANNEL}", 10, True, fg=C.COLOR_CYAN).pack(anchor="w")
+        label(ttxt, f"Schedule synced with {C.STREAM_SITE_URL} continuous marathon database.", 8,
               fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
-        button(sbox, "☕ Support on Ko-fi ↗", lambda: a.open_url(C.KOFI_URL), bg="#720e9e", fg="white",
-               hover_bg="#8c19bd", size=9).pack(side="right", padx=px(10))
+        t_actions = tk.Frame(tbox, bg=C.COLOR_SURFACE)
+        t_actions.pack(side="right", padx=px(10))
+        button(t_actions, "Watch on Twitch ↗", lambda: a.open_url(C.TWITCH_CHANNEL_URL),
+               bg="#9146ff", fg="white", hover_bg="#a970ff", size=8).pack(side="left", padx=px(4))
+        button(t_actions, "View Schedule ↗", lambda: a.open_url(C.STREAM_SITE_URL), size=8, bold=False).pack(
+            side="left", padx=px(4))
 
         self.section("Updates", f"you are running v{__version__}")
         self._toggle("Check for updates automatically", "Looks for a new GitHub release every 6 hours.",
@@ -795,10 +833,10 @@ class SettingsView(View):
         else:
             checked = a.state.get("update_checked")
             label(box, "You're up to date." if checked else "Not checked yet this session.", 10,
-                  fg=C.COLOR_TEXT_MUTED).pack(side="left", padx=px(12), pady=px(10))
+                   fg=C.COLOR_TEXT_MUTED).pack(side="left", padx=px(12), pady=px(10))
             button(box, "Check now", a.check_updates).pack(side="right", padx=px(10))
 
-        self.section("Data sources")
+        self.section("Data Sources & Storage Diagnostics")
         names = {"schedule": "Match schedule (LoL Esports API)", "live": "Live matches (LoL Esports API)",
                  "stream": "24/7 stream schedule (lolworlds.com)", "catalog": "Teams & rosters (LoL Esports API)"}
         for key, name in names.items():
@@ -818,9 +856,22 @@ class SettingsView(View):
             label(r, txt, 9, fg=C.COLOR_TEXT_MUTED).pack(side="right", padx=px(12))
         row = tk.Frame(self.body, bg=C.COLOR_BG)
         row.pack(fill="x", padx=px(18), pady=px(8))
-        button(row, "Refresh team directory now", lambda: a.worker_request("catalog"), size=8).pack(side="left")
+        button(row, "Refresh team directory", lambda: a.worker_request("catalog"), size=8).pack(side="left")
+        button(row, "Clear logo cache", a.clear_logo_cache, size=8, bold=False).pack(side="left", padx=px(6))
         button(row, "Open data folder", lambda: os.startfile(str(C.APPDATA_DIR)), size=8, bold=False).pack(
             side="left", padx=px(6))
+        button(row, "View log file", a.open_logs, size=8, bold=False).pack(side="left", padx=px(6))
+
+        self.section("Support RiftWatch")
+        sbox = tk.Frame(self.body, bg=C.COLOR_SURFACE)
+        sbox.pack(fill="x", padx=px(18), pady=px(4))
+        stxt = tk.Frame(sbox, bg=C.COLOR_SURFACE)
+        stxt.pack(side="left", padx=px(12), pady=px(10))
+        label(stxt, "Enjoying RiftWatch & the 24/7 Twitch Broadcast?", 10, True, fg=C.COLOR_GOLD).pack(anchor="w")
+        label(stxt, "RiftWatch is 100% free and open-source. Support ongoing development and streaming servers on Ko-fi.", 8,
+              fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
+        button(sbox, "☕ Support on Ko-fi ↗", lambda: a.open_url(C.KOFI_URL), bg="#720e9e", fg="white",
+               hover_bg="#8c19bd", size=9).pack(side="right", padx=px(10))
 
         self.section("About")
         about = tk.Frame(self.body, bg=C.COLOR_BG)

@@ -206,15 +206,12 @@ class RiftScoutApp:
 
         cur = now_airing(self.state["stream"]) if self.state["stream"] else None
         online = self.state.get("stream_online", True)
-        if cur and online is not False:
-            self.l_stream.configure(text=f"Twitch 24/7: ● ON AIR  {event_title(cur)}", fg=C.COLOR_CYAN, font=W.font(9, True))
-            self.pill_stream.configure(highlightbackground=C.COLOR_CYAN_DIM)
-        elif cur and online is False:
-            self.l_stream.configure(text=f"Twitch 24/7: ○ OFFLINE ({event_title(cur)})", fg=C.COLOR_TEXT_DIM, font=W.font(9, False))
+        if online is False or not cur:
+            self.l_stream.configure(text="Twitch 24/7: Offline", fg=C.COLOR_TEXT_DIM, font=W.font(9, False))
             self.pill_stream.configure(highlightbackground=C.COLOR_BORDER)
         else:
-            self.l_stream.configure(text="Twitch 24/7: ○ OFF AIR", fg=C.COLOR_TEXT_DIM, font=W.font(9, False))
-            self.pill_stream.configure(highlightbackground=C.COLOR_BORDER)
+            self.l_stream.configure(text=f"Twitch 24/7: {event_title(cur)}", fg=C.COLOR_CYAN, font=W.font(9, True))
+            self.pill_stream.configure(highlightbackground=C.COLOR_CYAN_DIM)
         on = self.spoiler_on()
         W.set_button_colors(self.b_spoiler, C.COLOR_GOLD if on else C.COLOR_SURFACE_HOVER,
                             C.COLOR_BG if on else C.COLOR_TEXT_PRIMARY)
@@ -478,8 +475,28 @@ class RiftScoutApp:
         threading.Thread(target=run, name="riftwatch-update", daemon=True).start()
         self.show_tab("settings")
 
+    def clear_logo_cache(self) -> None:
+        count = self.images.clear_cache()
+        self.bump("prefs")
+        messagebox.showinfo("Logo Cache", f"Cleared {count} cached team logo files.", parent=self.root)
+
+    def reset_watchlist(self) -> None:
+        if messagebox.askyesno("Reset Watchlist",
+                               "Are you sure you want to unfollow all teams, players, leagues, and regions?",
+                               parent=self.root):
+            self.settings.reset_all_follows()
+            self.bump("prefs")
+            messagebox.showinfo("Reset Watchlist", "Watchlist has been cleared.", parent=self.root)
+
+    def open_logs(self) -> None:
+        if C.LOG_PATH.exists():
+            os.startfile(str(C.LOG_PATH))
+        else:
+            os.startfile(str(C.APPDATA_DIR))
+
     def _finish_update(self, path: str) -> None:
         try:
+            _release_single_instance()
             updater.launch_swap_and_restart(Path(path))
         except Exception as exc:
             self.state["update_progress"] = ""
@@ -487,6 +504,11 @@ class RiftScoutApp:
             messagebox.showerror("RiftWatch update", str(exc), parent=self.root)
             return
         self.close()
+        try:
+            self.root.quit()
+        except Exception:
+            pass
+        sys.exit(0)
 
     # ---- shutdown
     def close(self) -> None:
@@ -503,6 +525,7 @@ class RiftScoutApp:
             self.root.after_cancel(self._poll_id)
         except Exception:
             pass
+        _release_single_instance()
         self.root.destroy()
 
 
@@ -529,6 +552,17 @@ def _single_instance() -> bool:
         return True
 
 
+def _release_single_instance() -> None:
+    handle = getattr(_single_instance, "handle", None)
+    if handle:
+        try:
+            import ctypes
+            ctypes.windll.kernel32.CloseHandle(handle)
+        except Exception:
+            pass
+        _single_instance.handle = None
+
+
 def run() -> None:
     _setup_logging()
     if not _single_instance():
@@ -536,5 +570,10 @@ def run() -> None:
         return
     W.enable_dpi_awareness()
     root = tk.Tk()
+    root.option_add("*Background", C.COLOR_BG)
+    root.option_add("*Foreground", C.COLOR_TEXT_PRIMARY)
     RiftScoutApp(root)
-    root.mainloop()
+    try:
+        root.mainloop()
+    finally:
+        _release_single_instance()

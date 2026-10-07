@@ -113,6 +113,19 @@ def fetch_json(
         return None
 
 
+def fetch_text(
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = C.HTTP_TIMEOUT_DEFAULT,
+    max_retries: int = C.HTTP_MAX_RETRIES,
+) -> Optional[str]:
+    """Fetch and decode a text payload as UTF-8 string. Returns None on any failure."""
+    raw = fetch_bytes(url, headers=headers, timeout=timeout, max_retries=max_retries)
+    if raw is None:
+        return None
+    return raw.decode("utf-8", errors="replace")
+
+
 def download_file(
     url: str,
     dest_path: str,

@@ -102,6 +102,22 @@ class ImageCache:
         self._photos[key] = photo
         return photo
 
+    def clear_cache(self) -> int:
+        count = 0
+        try:
+            for p in C.LOGO_CACHE_DIR.glob("*.png"):
+                try:
+                    p.unlink()
+                    count += 1
+                except OSError:
+                    pass
+            with self._lock:
+                self._photos.clear()
+                self._failed.clear()
+        except Exception:
+            pass
+        return count
+
     def shutdown(self) -> None:
         self._pool.shutdown(wait=False, cancel_futures=True)
 

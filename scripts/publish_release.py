@@ -33,13 +33,22 @@ def main():
 
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel
 
-### 🐛 Bug Fixes & Refinements in {version}
-* **Screen Flashing & Canvas Stuttering Fixed:** Eliminated destructive widget clearing and intermediate canvas repaints across the Schedule and Watchlist views. Filter buttons and mode selectors now persist across updates.
-* **Direct Watch Live Search (DCGI & Co-Streams):** Demacia Cup Global Invitational and regional matches without static stream URLs now dynamically open targeted live broadcast searches instead of generic landing pages.
-* **Onboarding Setup Wizard Trigger:** Fixed settings migration logic so the initial setup wizard reliably triggers on fresh installations, allowing users to select their favorite regions, teams, and players.
-* **Header Capsule Separation:** Added visual capsule containers and a sleek Hextech border divider between the Live Match indicator and the Twitch 24/7 Rebroadcast badge.
-* **Twitch 24/7 Channel Offline Detection:** Added real-time channel uptime checks to distinguish between active scheduled matches, off-air intervals, and offline Twitch broadcasts.
-* **Zero-Redundant Rendering:** Background polling skips UI tree updates when state payloads remain identical.
+### ✨ What's New & Refined in {version}
+* **Robust 1-Click In-App Updater & Auto-Restart:**
+  * Fixed process locking and relaunch failures during executable updates. The updater now waits for all running bootloader processes to exit, safely renames in-use binaries to `.old`, atomically swaps the verified executable, and releases the single-instance mutex before relaunching with a visible window.
+  * Added detailed logging to `%APPDATA%\\RiftWatch\\update.log`.
+* **Double-Buffered Smooth UI (Zero White Screen Flashing):**
+  * Implemented an off-screen double-buffering frame swap in `ScrollFrame`. Pages now build new card hierarchies completely in the background before atomically swapping the canvas window, eliminating Win32 `WM_ERASEBKGND` white flashes and widget flicker.
+  * Themed native scrollbars with dark Hextech colors (`#091428` trough, `#1e2328` thumb) and enforced global dark widget background defaults.
+* **Twitch 24/7 Clean Status & Offline Mode:**
+  * When the Twitch broadcast is offline, the top header badge and 24/7 tab hero card strictly display `Offline` without showing any scheduled match titles (e.g. "BLG vs WBG").
+  * Fixed `net.fetch_text` to correctly query Twitch channel uptime.
+  * Streamlined active stream titles by removing redundant "ON AIR" badges.
+* **Expanded Settings Hub:**
+  * **Default Launch Tab:** Choose whether RiftWatch opens to Live, Schedule, 24/7 Stream, or Watchlist.
+  * **Desktop Toast Notifications:** Configurable toggles for match kickoffs, 15m pre-match countdowns, and 24/7 stream broadcasts.
+  * **Watchlist Summary & Reset:** Shows live counts of followed entities and provides a 1-click Reset All Follows action.
+  * **Diagnostics & Maintenance:** Quick actions to clear downloaded logo caches, open log files, and inspect data feed health.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`
