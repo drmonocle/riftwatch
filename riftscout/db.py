@@ -243,15 +243,24 @@ def get_live_matches(db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
         conn.close()
 
 
-def get_schedule(limit: int = 200, league_slug: Optional[str] = None,
-                 db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
-    """Cached matches in chronological order (recent results + upcoming)."""
+def get_schedule(limit: int = 1000, league_slug: Optional[str] = None,
+                 since_days: int = 30, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Cached matches in chronological order (recent results + today + upcoming)."""
     conn = get_connection(db_path)
     try:
         if league_slug:
-            return _rows(conn, "SELECT * FROM matches WHERE league_slug = ? ORDER BY start_time_utc LIMIT ?",
-                         (league_slug, limit))
-        return _rows(conn, "SELECT * FROM matches ORDER BY start_time_utc LIMIT ?", (limit,))
+            return _rows(
+                conn,
+                "SELECT * FROM matches WHERE league_slug = ? "
+                "AND start_time_utc >= datetime('now', ?) ORDER BY start_time_utc LIMIT ?",
+                (league_slug, f"-{since_days} days", limit),
+            )
+        return _rows(
+            conn,
+            "SELECT * FROM matches WHERE start_time_utc >= datetime('now', ?) "
+            "ORDER BY start_time_utc LIMIT ?",
+            (f"-{since_days} days", limit),
+        )
     finally:
         conn.close()
 

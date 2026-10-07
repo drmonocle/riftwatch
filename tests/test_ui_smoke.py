@@ -339,3 +339,49 @@ def test_apply_dark_titlebar_safe(app):
     # Calling apply_dark_titlebar on any window must execute safely
     apply_dark_titlebar(app.root)
 
+
+def test_onboarding_wizard_toggles_preserve_widgets(app):
+    from riftscout.ui.wizard import OnboardingWizard
+    wiz = OnboardingWizard(app.root, app)
+    try:
+        initial_count = len(wiz.body.winfo_children())
+        assert initial_count > 0, "Wizard body must have sections rendered initially"
+
+        # Toggle region
+        wiz._toggle_region("KOREA")
+        after_region = len(wiz.body.winfo_children())
+        assert after_region == initial_count, "Children count must be preserved after toggling region"
+
+        # Toggle team
+        wiz._toggle_team("T1", "T1")
+        after_team = len(wiz.body.winfo_children())
+        assert after_team == initial_count, "Children count must be preserved after toggling team"
+
+        # Toggle player
+        wiz._toggle_player("Faker")
+        after_player = len(wiz.body.winfo_children())
+        assert after_player == initial_count, "Children count must be preserved after toggling player"
+
+        # Presets
+        wiz._preset_recommended()
+        assert len(wiz.body.winfo_children()) == initial_count
+    finally:
+        wiz.destroy()
+
+
+def test_settings_view_in_place_status(app):
+    app.show_tab("settings")
+    sv = app.views["settings"]
+    sv.render()
+
+    # Initial status
+    assert hasattr(sv, "_status_labels")
+    assert "schedule" in sv._status_labels
+    dot, txt = sv._status_labels["schedule"]
+
+    # Simulate in-place status arrival
+    payload = {"source": "schedule", "ok": True, "detail": "cached", "at": 123456789.0}
+    app._apply("status", payload)
+    assert txt.cget("text") == "cached copy is fresh"
+    assert dot.cget("text") == "●"
+

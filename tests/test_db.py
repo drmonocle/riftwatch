@@ -37,6 +37,24 @@ def test_none_values_get_defaults(dbp):
     assert m["winner"] == "" and m["stream_url"] == ""
 
 
+def test_schedule_window_returns_recent_and_future_matches(dbp):
+    import datetime
+    now = datetime.datetime.now(datetime.timezone.utc)
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    m_ancient = _match("ancient", (now - datetime.timedelta(days=45)).strftime(fmt))
+    m_recent = _match("recent", (now - datetime.timedelta(days=5)).strftime(fmt), state="completed")
+    m_today = _match("today", now.strftime(fmt), state="inProgress")
+    m_future = _match("future", (now + datetime.timedelta(days=10)).strftime(fmt), state="unstarted")
+
+    db.upsert_matches([m_ancient, m_recent, m_today, m_future], dbp)
+    sched = db.get_schedule(since_days=30, db_path=dbp)
+    ids = [m["match_id"] for m in sched]
+    assert "ancient" not in ids, "Ancient matches older than 30 days should be excluded from active schedule"
+    assert "recent" in ids, "Recent results within 30 days should be included"
+    assert "today" in ids, "Today's matches must be included"
+    assert "future" in ids, "Future matches must be included"
+
+
 def test_catalog_roundtrip_and_replace(dbp):
     leagues = [{"slug": "lck", "name": "LCK", "priority": 1}]
     teams = [{"slug": "t1", "code": "T1", "name": "T1", "league_name": "LCK"}]

@@ -197,7 +197,6 @@ class LeagueFilterDialog(tk.Toplevel):
         # Scrollable list of leagues
         self.scroll = ScrollFrame(self)
         self.scroll.pack(fill="both", expand=True, padx=px(20), pady=px(6))
-        self.body = self.scroll.body
 
         # Footer
         tk.Frame(self, bg=C.COLOR_BORDER, height=1).pack(fill="x")
@@ -214,6 +213,10 @@ class LeagueFilterDialog(tk.Toplevel):
 
         self._render_league_cards()
         self._update_summary()
+
+    @property
+    def body(self) -> tk.Frame:
+        return self.scroll.body
 
     def _render_league_cards(self) -> None:
         clear(self.body)

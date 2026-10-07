@@ -254,6 +254,10 @@ class RiftScoutApp:
         if kind == "status":
             self.state["status"][payload["source"]] = payload
             self.bump("status")
+            if getattr(self, "active", None) == "settings":
+                sv = self.views.get("settings")
+                if sv and hasattr(sv, "update_status"):
+                    sv.update_status(payload["source"], payload)
         elif kind == "catalog":
             if self.state.get("catalog") != payload:
                 self.state["catalog"] = payload

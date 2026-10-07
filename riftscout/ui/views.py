@@ -754,7 +754,7 @@ class WatchlistView(View):
 # SETTINGS
 # =============================================================================
 class SettingsView(View):
-    deps = ("update", "status", "update_progress")
+    deps = ("update", "update_progress")
 
     def _build(self) -> None:
         clear(self.body)
@@ -867,21 +867,18 @@ class SettingsView(View):
         self.section("Data Sources & Storage Diagnostics")
         names = {"schedule": "Match schedule (LoL Esports API)", "live": "Live matches (LoL Esports API)",
                  "stream": "24/7 stream schedule (lolworlds.com)", "catalog": "Teams & rosters (LoL Esports API)"}
+        self._status_labels = {}
         for key, name in names.items():
-            st = a.state["status"].get(key)
             r = tk.Frame(self.body, bg=C.COLOR_SURFACE)
             r.pack(fill="x", padx=px(18), pady=1)
-            if st is None:
-                dot, col, txt = "○", C.COLOR_TEXT_DIM, "waiting"
-            elif st["ok"]:
-                dot, col = "●", C.COLOR_CYAN
-                txt = ("cached copy is fresh" if st.get("detail") == "cached" else
-                       "updated " + datetime.datetime.fromtimestamp(st["at"]).strftime("%I:%M:%S %p").lstrip("0"))
-            else:
-                dot, col, txt = "●", C.COLOR_LIVE, st.get("detail") or "error"
-            label(r, dot, 10, fg=col).pack(side="left", padx=(px(12), px(6)), pady=px(6))
+            dot_lbl = label(r, "○", 10, fg=C.COLOR_TEXT_DIM)
+            dot_lbl.pack(side="left", padx=(px(12), px(6)), pady=px(6))
             label(r, name, 9, True).pack(side="left")
-            label(r, txt, 9, fg=C.COLOR_TEXT_MUTED).pack(side="right", padx=px(12))
+            txt_lbl = label(r, "waiting", 9, fg=C.COLOR_TEXT_MUTED)
+            txt_lbl.pack(side="right", padx=px(12))
+            self._status_labels[key] = (dot_lbl, txt_lbl)
+            self._apply_status_item(key, a.state["status"].get(key))
+
         row = tk.Frame(self.body, bg=C.COLOR_BG)
         row.pack(fill="x", padx=px(18), pady=px(8))
         button(row, "Refresh team directory", lambda: a.worker_request("catalog"), size=8).pack(side="left")
@@ -924,3 +921,24 @@ class SettingsView(View):
         b = button(r, "ON" if on else "OFF", command, size=9, padx=14,
                    bg=C.COLOR_CYAN_DIM if on else C.COLOR_BORDER, fg=C.COLOR_TEXT_PRIMARY)
         b.pack(side="right", padx=px(12))
+
+    def _apply_status_item(self, key: str, st: Optional[Dict[str, Any]]) -> None:
+        if not hasattr(self, "_status_labels") or key not in self._status_labels:
+            return
+        dot_lbl, txt_lbl = self._status_labels[key]
+        if st is None:
+            dot, col, txt = "○", C.COLOR_TEXT_DIM, "waiting"
+        elif st.get("ok"):
+            dot, col = "●", C.COLOR_CYAN
+            txt = ("cached copy is fresh" if st.get("detail") == "cached" else
+                   "updated " + datetime.datetime.fromtimestamp(st["at"]).strftime("%I:%M:%S %p").lstrip("0"))
+        else:
+            dot, col, txt = "●", C.COLOR_LIVE, st.get("detail") or "error"
+        dot_lbl.configure(text=dot, fg=col)
+        txt_lbl.configure(text=txt)
+
+    def update_status(self, key: str, st: Dict[str, Any]) -> None:
+        try:
+            self._apply_status_item(key, st)
+        except Exception:
+            pass

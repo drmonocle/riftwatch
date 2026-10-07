@@ -186,6 +186,7 @@ class ScrollFrame(tk.Frame):
             self.body = old_body
             new_body.destroy()
             raise
+        new_body.update_idletasks()
         self.canvas.itemconfigure(self._win, window=new_body)
         new_body.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         w = self.canvas.winfo_width()

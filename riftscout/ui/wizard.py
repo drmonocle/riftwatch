@@ -84,7 +84,6 @@ class OnboardingWizard(tk.Toplevel):
         # Main scrollable body
         self.scroll = ScrollFrame(self)
         self.scroll.pack(fill="both", expand=True, padx=px(20), pady=px(6))
-        self.body = self.scroll.body
 
         # Footer
         tk.Frame(self, bg=C.COLOR_BORDER, height=1).pack(fill="x")
@@ -97,6 +96,10 @@ class OnboardingWizard(tk.Toplevel):
                bg=C.COLOR_BG_DARK, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_SURFACE).pack(side="right", padx=px(8))
 
         self._render_sections()
+
+    @property
+    def body(self) -> tk.Frame:
+        return self.scroll.body
 
     def _render_sections(self):
         for w in self.body.winfo_children():

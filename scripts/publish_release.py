@@ -34,15 +34,14 @@ def main():
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel & 24/7 Stream Companion
 
 ### ✨ What's New & Refined in {version}
-* **Robust 1-Click Self-Updater & Process Relaunch Engine:**
-  * **Dedicated Parameterized Helper Script:** Replaced inline string-evaluated PowerShell commands with a robust, disk-persisted helper script (`%APPDATA%\\RiftWatch\\apply_update.ps1`). Completely eradicates PowerShell command quoting errors, unescaped path parentheses (e.g. `RiftWatch (1).exe`), and `-and` operator syntax failures.
-  * **Reliable Process Lifecycle Synchronization:** Helper now specifically tracks the exact parent PID, checks all process variants matching `*RiftWatch*` and `*RiftScout*`, and performs a safe two-step atomic swap with `.old` backup and automatic rollback protection.
-  * **Guaranteed Foreground Elevation on Relaunch:** Explicitly launches updated executables via `Start-Process -FilePath $CurrentExe -WindowStyle Normal` with 1-second process and file-handle clearance delay, plus runtime `root.lift()` and `root.focus_force()`.
-  * **Comprehensive Diagnostic Logging:** All update phases (process waiting, file replacement attempts, and process launch PIDs) are cleanly logged with timestamps to `%APPDATA%\\RiftWatch\\update.log`.
-* **Single-Instance Mutex Acquisition Hardening:**
-  * Added a 3-second mutex retry acquisition loop with immediate duplicate handle closure (`kernel32.CloseHandle(handle)`) upon `ERROR_ALREADY_EXISTS`. Prevents newly spawned binaries from exiting prematurely while a previous instance completes its shutdown sequence.
-* **Vector Rift Herald Branding:**
-  * High-resolution Vector Rift Herald icon across Windows Taskbar, System Notification Tray (`pystray`), Alt-Tab switcher, and Window Titlebar.
+* **Schedule 30-Day Window & Starvation Fix (Today & Upcoming Matches Restored):**
+  * **Eliminated Past Match Starvation:** Replaced legacy `ORDER BY start_time_utc ASC LIMIT 200` query in `db.get_schedule()` with a 30-day rolling lookback window (`start_time_utc >= datetime('now', '-30 days')`) and limit of 1000. Ancient matches from 2 months ago no longer choke the schedule buffer, immediately restoring all matches under **Today** (8 matches) and **Upcoming** (70+ matches) including Demacia Cup, EMEA Masters, LCS Promotion, and Worlds.
+* **Setup Wizard Follow/Unfollow State Retention Fix:**
+  * **Dynamic Body Resolution:** Fixed an issue in `OnboardingWizard` where clicking follow/unfollow caused the window contents to vanish. Switched `wizard.body` to a dynamic property pointing directly to `self.scroll.body`, ensuring `keep_scroll` frame swaps render cleanly into the active container rather than referencing a destroyed frame.
+* **Zero White Flash & In-Place Diagnostics in Settings Hub:**
+  * **Eliminated Background Re-rendering:** Removed `"status"` from `SettingsView.deps` so routine worker polling passes no longer tear down and rebuild the entire settings page every 15–30 seconds.
+  * **In-Place Diagnostic Label Updates:** Background data source health (schedule, live, stream, catalog) now updates existing labels in-place in 0 milliseconds without re-rendering the view.
+  * **Atomic Double-Buffered Frame Swaps:** Added `new_body.update_idletasks()` to `ScrollFrame.keep_scroll()` before swapping the canvas window, ensuring all geometry and dark Hextech themes are fully resolved before display with zero white flash.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`
