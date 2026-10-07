@@ -80,16 +80,19 @@ def button(parent, text: str, command: Callable, *, bg=C.COLOR_SURFACE_HOVER, fg
     b = tk.Label(parent, text=text, font=font(size, bold), fg=fg, bg=bg, cursor="hand2",
                  padx=px(padx), pady=px(pady))
     b._base_bg = bg  # type: ignore[attr-defined]
-    b.bind("<Enter>", lambda e: b.configure(bg=hover_bg))
-    b.bind("<Leave>", lambda e: b.configure(bg=b._base_bg))  # type: ignore[attr-defined]
+    b._hover_bg = hover_bg  # type: ignore[attr-defined]
+    b.bind("<Enter>", lambda e: b.configure(bg=getattr(b, "_hover_bg", hover_bg)))
+    b.bind("<Leave>", lambda e: b.configure(bg=getattr(b, "_base_bg", bg)))  # type: ignore[attr-defined]
     b.bind("<Button-1>", lambda e: command())
     if tooltip:
         Tooltip(b, tooltip)
     return b
 
 
-def set_button_colors(b: tk.Label, bg: str, fg: str) -> None:
+def set_button_colors(b: tk.Label, bg: str, fg: str, hover_bg: Optional[str] = None) -> None:
     b._base_bg = bg  # type: ignore[attr-defined]
+    if hover_bg is not None:
+        b._hover_bg = hover_bg  # type: ignore[attr-defined]
     b.configure(bg=bg, fg=fg)
 
 

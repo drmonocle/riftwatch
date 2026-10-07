@@ -112,6 +112,14 @@ def download_update(update_info: Dict[str, Any],
     return dest
 
 
+def _find_powershell() -> str:
+    system32_ps = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    if system32_ps.exists():
+        return str(system32_ps)
+    import shutil
+    return shutil.which("powershell.exe") or "powershell.exe"
+
+
 def launch_swap_and_restart(new_exe: Path) -> None:
     """Start a hidden helper that waits for this process to exit, replaces the
     running exe with `new_exe`, and relaunches it. The caller must then quit."""
@@ -125,10 +133,10 @@ def launch_swap_and_restart(new_exe: Path) -> None:
     script_path = C.APPDATA_DIR / "apply_update.ps1"
 
     ps_script = """param(
-    [Parameter(Mandatory=$true)][string]$CurrentExe,
-    [Parameter(Mandatory=$true)][string]$NewExe,
-    [Parameter(Mandatory=$true)][int]$OldPid,
-    [Parameter(Mandatory=$true)][string]$LogFile
+    [string]$CurrentExe,
+    [string]$NewExe,
+    [int]$OldPid,
+    [string]$LogFile
 )
 
 $ErrorActionPreference = 'Continue'
@@ -172,18 +180,23 @@ if ($procs) {
 }
 
 # 3. Two-step atomic file swap with retries
-$oldBackup = "$CurrentExe.old"
-if (Test-Path -LiteralPath $oldBackup) {
-    Remove-Item -LiteralPath $oldBackup -Force -ErrorAction SilentlyContinue
+$oldBackup = "$CurrentExe.old.$([System.IO.Path]::GetRandomFileName())"
+$replaced = $false
+
+# Unblock new executable to remove Mark-of-the-Web
+try {
+    Unblock-File -LiteralPath $NewExe -ErrorAction SilentlyContinue
+    Log "Unblocked new executable: $NewExe"
+} catch {
+    Log "Unblock-File on new exe: $($_.Exception.Message)"
 }
 
-$replaced = $false
 for ($i = 1; $i -le 30; $i++) {
     try {
         if (Test-Path -LiteralPath $CurrentExe) {
             Move-Item -LiteralPath $CurrentExe -Destination $oldBackup -Force -ErrorAction Stop
         }
-        Move-Item -LiteralPath $NewExe -Destination $CurrentExe -Force -ErrorAction Stop
+        Copy-Item -LiteralPath $NewExe -Destination $CurrentExe -Force -ErrorAction Stop
         $replaced = $true
         Log "File swapped successfully on attempt $i"
         break
@@ -206,10 +219,44 @@ if ($replaced) {
 
 # 4. Relaunch the updated executable in normal interactive desktop window state
 if ($replaced -and (Test-Path -LiteralPath $CurrentExe)) {
+    try {
+        Unblock-File -LiteralPath $CurrentExe -ErrorAction SilentlyContinue
+    } catch {}
+
     Log "Launching updated executable: $CurrentExe"
     Start-Sleep -Seconds 1
-    $proc = Start-Process -FilePath $CurrentExe -WindowStyle Normal -PassThru
-    Log "Successfully launched new process PID: $($proc.Id)"
+
+    $workingDir = Split-Path -Parent $CurrentExe
+    if (-not $workingDir) { $workingDir = $PSScriptRoot }
+
+    $launched = $false
+    try {
+        $shell = New-Object -ComObject Shell.Application
+        $shell.ShellExecute($CurrentExe, "", $workingDir, "open", 1)
+        $launched = $true
+        Log "Successfully launched updated client via Shell.Application (SW_SHOWNORMAL)"
+    } catch {
+        Log "Shell.Application failed: $($_.Exception.Message)"
+    }
+
+    if (-not $launched) {
+        try {
+            $proc = Start-Process -FilePath "explorer.exe" -ArgumentList "`"$CurrentExe`"" -PassThru
+            $launched = $true
+            Log "Launched via explorer.exe fallback"
+        } catch {
+            Log "explorer.exe fallback failed: $($_.Exception.Message)"
+        }
+    }
+
+    if (-not $launched) {
+        try {
+            $proc = Start-Process -FilePath $CurrentExe -WorkingDirectory $workingDir -WindowStyle Normal -PassThru
+            Log "Launched via Start-Process fallback PID: $($proc.Id)"
+        } catch {
+            Log "Start-Process fallback failed: $($_.Exception.Message)"
+        }
+    }
 }
 
 Log "=== RiftWatch Update Helper Completed ==="
@@ -224,7 +271,7 @@ Log "=== RiftWatch Update Helper Completed ==="
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
 
     cmd = [
-        "powershell.exe",
+        _find_powershell(),
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-WindowStyle", "Hidden",
@@ -235,4 +282,11 @@ Log "=== RiftWatch Update Helper Completed ==="
         "-LogFile", str(log_file),
     ]
 
-    subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+    subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=flags,
+        close_fds=True
+    )

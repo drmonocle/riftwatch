@@ -7,7 +7,7 @@ that show relative times), and only while it is visible.
 import datetime
 import os
 import tkinter as tk
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .. import __version__
 from .. import config as C
@@ -661,6 +661,7 @@ class WatchlistView(View):
         self.query = tk.StringVar()
         self.applied_query = ""
         self.expanded: Optional[str] = None
+        self._row_bindings: Dict[str, Tuple[Any, ...]] = {}
         self.scroll.pack_forget()
         bar = tk.Frame(self, bg=C.COLOR_BG)
         bar.pack(fill="x", padx=px(18), pady=(px(12), px(4)))
@@ -733,8 +734,10 @@ class WatchlistView(View):
 
     def _build(self) -> None:
         self._update_modebar()
+        self._row_bindings.clear()
         clear(self.body)
-        self._following()
+        self._build_following_container()
+        self._refresh_following()
         cat = self.app.state["catalog"]
         if cat.empty and self.mode not in ("leagues", "regions"):
             self.empty("Loading the team directory…", "Downloading teams and rosters from Riot (about 1.5 MB, "
@@ -743,28 +746,76 @@ class WatchlistView(View):
         {"teams": self._teams, "players": self._players, "regions": self._regions, "leagues": self._leagues}[self.mode]()
         tk.Frame(self.body, bg=C.COLOR_BG, height=px(16)).pack()
 
-    # ---- following summary
-    def _following(self) -> None:
+    # ---- following summary (isolated sub-container)
+    def _build_following_container(self) -> None:
+        self._following_section = tk.Frame(self.body, bg=C.COLOR_BG)
+        self._following_section.pack(fill="x", padx=px(18), pady=(px(16), px(6)))
+        label(self._following_section, "FOLLOWING", 10, True, fg=C.COLOR_GOLD).pack(side="left")
+        self._following_count_lbl = label(self._following_section, "", 9, fg=C.COLOR_TEXT_MUTED)
+        self._following_count_lbl.pack(side="left", padx=px(10))
+        self._following_chips_frame = tk.Frame(self.body, bg=C.COLOR_BG)
+        self._following_chips_frame.pack(fill="x", padx=px(18))
+
+    def _refresh_following(self) -> None:
+        if not hasattr(self, "_following_chips_frame") or not self._following_chips_frame.winfo_exists():
+            return
         s = self.app.settings
-        teams, players = s.followed_teams(), s.get("followed_players", [])
+        teams = s.followed_teams()
+        players = s.get("followed_players", [])
         regions = s.followed_regions()
         leagues = s.get("followed_leagues", [])
-        self.section("Following", f"{len(teams)} teams · {len(players)} players · {len(regions)} regions · {len(leagues)} leagues")
-        wrap = tk.Frame(self.body, bg=C.COLOR_BG)
-        wrap.pack(fill="x", padx=px(18))
+
+        if hasattr(self, "_following_count_lbl") and self._following_count_lbl.winfo_exists():
+            self._following_count_lbl.configure(
+                text=f"{len(teams)} teams · {len(players)} players · {len(regions)} regions · {len(leagues)} leagues"
+            )
+        clear(self._following_chips_frame)
+
         if not (teams or players or regions or leagues):
-            label(wrap, "Star teams, players, and regions below (or on any match card) to follow them.", 9,
-                  fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
-        chips = [(f"🌐 {r}", lambda r=r: self.app.toggle_region(r), C.COLOR_CYAN_DIM) for r in regions]
-        chips += [(f"★ {t.get('name') or t['code']}", lambda t=t: self.app.toggle_team(t["code"], t.get("name", "")),
-                  C.COLOR_GOLD) for t in teams]
-        chips += [(f"★ {p}", lambda p=p: self.app.toggle_player(p), C.COLOR_CYAN_DIM) for p in players]
-        # Wrap by estimated text width (Tk has no flow layout).
-        budget, used, row = max(px(500), self.winfo_width() - px(80)), 0, None
+            label(self._following_chips_frame,
+                  "Star teams, players, and regions below (or on any match card) to follow them.",
+                  9, fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
+            return
+
+        chips = []
+        for r in regions:
+            chips.append((
+                f"🌐 {r}",
+                lambda reg=r: self._handle_toggle("region", reg.lower(), lambda: self.app.toggle_region(reg),
+                                                  lambda: self.app.settings.is_region_followed(reg)),
+                C.COLOR_CYAN_DIM
+            ))
+        for t in teams:
+            code = t.get("code", "")
+            name = t.get("name", "")
+            chips.append((
+                f"★ {name or code}",
+                lambda c=code, n=name: self._handle_toggle("team", c.upper(), lambda: self.app.toggle_team(c, n),
+                                                           lambda: self.app.settings.is_team_followed(c, n)),
+                C.COLOR_GOLD
+            ))
+        for p in players:
+            chips.append((
+                f"★ {p}",
+                lambda pl=p: self._handle_toggle("player", pl.lower(), lambda: self.app.toggle_player(pl),
+                                                 lambda: self.app.settings.is_player_followed(pl)),
+                C.COLOR_CYAN_DIM
+            ))
+        for l in leagues:
+            chips.append((
+                f"🏆 {l.upper()}",
+                lambda lg=l: self._handle_toggle("league", lg.lower(), lambda: self.app.toggle_league(lg),
+                                                 lambda: self.app.settings.is_league_followed(lg)),
+                C.COLOR_GOLD
+            ))
+
+        budget = max(px(500), (self.winfo_width() or 800) - px(80))
+        used = 0
+        row = None
         for text, cb, color in chips:
             w = px(len(text) * 8 + 40)
             if row is None or used + w > budget:
-                row = tk.Frame(wrap, bg=C.COLOR_BG)
+                row = tk.Frame(self._following_chips_frame, bg=C.COLOR_BG)
                 row.pack(fill="x", anchor="w")
                 used = 0
             self._chip(row, text, cb, color=color)
@@ -779,6 +830,32 @@ class WatchlistView(View):
         x.pack(side="left")
         x.bind("<Button-1>", lambda e: on_remove())
         Tooltip(x, "Unfollow")
+
+    def _apply_button_state(self, btn: tk.Label, on: bool) -> None:
+        if not btn or not btn.winfo_exists():
+            return
+        bg = C.COLOR_GOLD if on else C.COLOR_SURFACE_HOVER
+        fg = C.COLOR_BG if on else C.COLOR_TEXT_PRIMARY
+        hover_bg = C.COLOR_GOLD_HOVER if on else C.COLOR_BORDER
+        text = "★ Following" if on else "☆ Follow"
+        set_button_colors(btn, bg, fg, hover_bg)
+        btn.configure(text=text)
+
+    def _handle_toggle(self, kind: str, key: str, toggle_fn: Callable, check_fn: Callable) -> None:
+        toggle_fn()
+        # Keep rendered signature up-to-date so poll loop doesn't trigger full View.render()
+        self.app.rendered["watchlist"] = self.signature()
+        full_key = f"{kind}:{key}"
+        binding = self._row_bindings.get(full_key)
+        if binding:
+            btn, row_frame, name_lbl = binding
+            is_on = check_fn()
+            self._apply_button_state(btn, is_on)
+            if row_frame and row_frame.winfo_exists():
+                row_frame.configure(highlightbackground=C.COLOR_GOLD if is_on else C.COLOR_BORDER)
+            if name_lbl and name_lbl.winfo_exists():
+                name_lbl.configure(fg=C.COLOR_GOLD if is_on else C.COLOR_TEXT_PRIMARY)
+        self._refresh_following()
 
     def _follow_btn(self, parent, on: bool, command) -> tk.Label:
         return button(parent, "★ Following" if on else "☆ Follow", command, size=8,
@@ -810,16 +887,26 @@ class WatchlistView(View):
 
     def _team_row(self, t: Dict[str, Any]) -> None:
         a = self.app
-        on = a.settings.is_team_followed(t["code"], t["name"])
+        code, name = t["code"], t["name"]
+        full_key = f"team:{code.upper()}"
+        on = a.settings.is_team_followed(code, name)
         row = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightthickness=1,
                        highlightbackground=C.COLOR_GOLD if on else C.COLOR_BORDER)
         row.pack(fill="x", padx=px(18), pady=px(2))
         head = tk.Frame(row, bg=C.COLOR_SURFACE)
         head.pack(fill="x")
-        cards.logo(head, a, t.get("image", ""), 28, t["code"]).pack(side="left", padx=px(10), pady=px(6))
-        label(head, t["name"], 10, True).pack(side="left")
-        label(head, f"  {t['code']} · {t.get('league_name', '')}", 9, fg=C.COLOR_TEXT_MUTED).pack(side="left")
-        self._follow_btn(head, on, lambda: a.toggle_team(t["code"], t["name"])).pack(side="right", padx=px(10))
+        cards.logo(head, a, t.get("image", ""), 28, code).pack(side="left", padx=px(10), pady=px(6))
+        name_lbl = label(head, name, 10, True)
+        name_lbl.pack(side="left")
+        label(head, f"  {code} · {t.get('league_name', '')}", 9, fg=C.COLOR_TEXT_MUTED).pack(side="left")
+        btn = self._follow_btn(
+            head, on,
+            lambda c=code, n=name: self._handle_toggle(
+                "team", c.upper(), lambda: a.toggle_team(c, n), lambda: a.settings.is_team_followed(c, n)
+            )
+        )
+        btn.pack(side="right", padx=px(10))
+        self._row_bindings[full_key] = (btn, row, None)
         is_open = self.expanded == t["slug"]
         tog = button(head, "▾ Roster" if not is_open else "▴ Roster", lambda: self._expand(t["slug"]), size=8,
                      bold=False, bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_MUTED)
@@ -858,13 +945,16 @@ class WatchlistView(View):
 
     def _player_line(self, parent, p, show_team: bool) -> None:
         a = self.app
-        on = a.settings.is_player_followed(p.name)
+        p_name = p.name
+        full_key = f"player:{p_name.lower()}"
+        on = a.settings.is_player_followed(p_name)
         bg = parent.cget("bg") if parent is not self.body else C.COLOR_SURFACE
         row = tk.Frame(parent, bg=bg)
         row.pack(fill="x", padx=px(18) if parent is self.body else px(8), pady=1)
         label(row, role_label(p.role), 8, fg=C.COLOR_TEXT_DIM, bg=bg, width=8, anchor="w").pack(side="left",
                                                                                               padx=px(8), pady=px(4))
-        label(row, p.name, 10, True, fg=C.COLOR_GOLD if on else C.COLOR_TEXT_PRIMARY, bg=bg).pack(side="left")
+        name_lbl = label(row, p_name, 10, True, fg=C.COLOR_GOLD if on else C.COLOR_TEXT_PRIMARY, bg=bg)
+        name_lbl.pack(side="left")
         if p.real_name:
             label(row, f"  {p.real_name}", 8, fg=C.COLOR_TEXT_DIM, bg=bg).pack(side="left")
         if show_team:
@@ -872,9 +962,35 @@ class WatchlistView(View):
             img = cat.team_image(p.team_code, p.team_name) if cat else ""
             cards.logo(row, a, img, 18, p.team_code).pack(side="left", padx=(px(6), px(2)))
             label(row, f"{p.team_name} ({p.team_code})", 9, fg=C.COLOR_TEXT_MUTED, bg=bg).pack(side="left")
-        self._follow_btn(row, on, lambda: a.toggle_player(p.name)).pack(side="right", padx=px(8))
+        btn = self._follow_btn(
+            row, on,
+            lambda pl=p_name: self._handle_toggle(
+                "player", pl.lower(), lambda: a.toggle_player(pl), lambda: a.settings.is_player_followed(pl)
+            )
+        )
+        btn.pack(side="right", padx=px(8))
+        self._row_bindings[full_key] = (btn, row if parent is self.body else None, name_lbl)
 
     # ---- regions
+    def _batch_toggle_regions(self, follow: bool) -> None:
+        if follow:
+            self.app.follow_all_regions()
+        else:
+            self.app.unfollow_all_regions()
+        self.app.rendered["watchlist"] = self.signature()
+        for r in C.MAJOR_REGIONS:
+            r_name = r["name"]
+            binding = self._row_bindings.get(f"region:{r_name.lower()}")
+            if binding:
+                btn, card, name_lbl = binding
+                is_on = self.app.settings.is_region_followed(r_name) or self.app.settings.is_region_followed(r["code"])
+                self._apply_button_state(btn, is_on)
+                if card and card.winfo_exists():
+                    card.configure(highlightbackground=C.COLOR_GOLD if is_on else C.COLOR_BORDER)
+                if name_lbl and name_lbl.winfo_exists():
+                    name_lbl.configure(fg=C.COLOR_GOLD if is_on else C.COLOR_TEXT_PRIMARY)
+        self._refresh_following()
+
     def _regions(self) -> None:
         a = self.app
         q = self.applied_query
@@ -886,26 +1002,50 @@ class WatchlistView(View):
         row = tk.Frame(self.body, bg=C.COLOR_BG)
         row.pack(fill="x", padx=px(18), pady=(0, px(6)))
         button(row, "★ Follow All Major Regions",
-               lambda: a.follow_all_regions(), size=8, bold=False).pack(side="left")
+               lambda: self._batch_toggle_regions(True), size=8, bold=False).pack(side="left")
         button(row, "Unfollow All Regions",
-               lambda: a.unfollow_all_regions(), size=8, bold=False).pack(side="left", padx=px(6))
+               lambda: self._batch_toggle_regions(False), size=8, bold=False).pack(side="left", padx=px(6))
         if not regions:
             self.empty("No regions match that search")
             return
         for r in regions:
-            on = a.settings.is_region_followed(r["name"]) or a.settings.is_region_followed(r["code"])
+            r_name, r_code = r["name"], r["code"]
+            full_key = f"region:{r_name.lower()}"
+            on = a.settings.is_region_followed(r_name) or a.settings.is_region_followed(r_code)
             card = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightthickness=1,
                             highlightbackground=C.COLOR_GOLD if on else C.COLOR_BORDER)
             card.pack(fill="x", padx=px(18), pady=px(2))
             head = tk.Frame(card, bg=C.COLOR_SURFACE)
             head.pack(fill="x", padx=px(12), pady=px(8))
             label(head, r.get("badge", "🌐"), 14).pack(side="left", padx=(0, px(8)))
-            label(head, r["name"], 11, True, fg=C.COLOR_GOLD if on else C.COLOR_TEXT_PRIMARY).pack(side="left")
+            name_lbl = label(head, r_name, 11, True, fg=C.COLOR_GOLD if on else C.COLOR_TEXT_PRIMARY)
+            name_lbl.pack(side="left")
             leagues_str = " · ".join(r.get("leagues", []))
             label(head, f"  ({leagues_str})", 9, fg=C.COLOR_TEXT_MUTED).pack(side="left")
-            self._follow_btn(head, on, lambda reg=r["name"]: a.toggle_region(reg)).pack(side="right")
+            btn = self._follow_btn(
+                head, on,
+                lambda reg=r_name, code=r_code: self._handle_toggle(
+                    "region", reg.lower(), lambda: a.toggle_region(reg),
+                    lambda: a.settings.is_region_followed(reg) or a.settings.is_region_followed(code)
+                )
+            )
+            btn.pack(side="right")
+            self._row_bindings[full_key] = (btn, card, name_lbl)
 
     # ---- leagues
+    def _batch_follow_leagues(self, slugs: List[str]) -> None:
+        self.app.follow_leagues(slugs)
+        self.app.rendered["watchlist"] = self.signature()
+        for s in slugs:
+            binding = self._row_bindings.get(f"league:{s.lower()}")
+            if binding:
+                btn, r, _ = binding
+                is_on = self.app.settings.is_league_followed(s)
+                self._apply_button_state(btn, is_on)
+                if r and r.winfo_exists():
+                    r.configure(highlightbackground=C.COLOR_GOLD if is_on else C.COLOR_BORDER)
+        self._refresh_following()
+
     def _leagues(self) -> None:
         a = self.app
         leagues = a.state["catalog"].leagues
@@ -919,20 +1059,29 @@ class WatchlistView(View):
         row = tk.Frame(self.body, bg=C.COLOR_BG)
         row.pack(fill="x", padx=px(18), pady=(0, px(6)))
         button(row, "Follow the international events (Worlds, MSI, First Stand)",
-               lambda: a.follow_leagues(["worlds", "msi", "first_stand"]), size=8, bold=False).pack(side="left")
+               lambda: self._batch_follow_leagues(["worlds", "msi", "first_stand"]), size=8, bold=False).pack(side="left")
         region = None
         for l in sorted(leagues, key=lambda l: (l.get("region") != "INTERNATIONAL", l.get("region") or "", l["priority"])):
             if l.get("region") != region:
                 region = l.get("region")
                 label(self.body, (region or "Other").title(), 9, True, fg=C.COLOR_TEXT_MUTED).pack(
                     anchor="w", padx=px(20), pady=(px(8), px(2)))
-            on = a.settings.is_league_followed(l["slug"])
+            slug, name = l["slug"], l["name"]
+            full_key = f"league:{slug.lower()}"
+            on = a.settings.is_league_followed(slug)
             r = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightthickness=1,
                          highlightbackground=C.COLOR_GOLD if on else C.COLOR_BORDER)
             r.pack(fill="x", padx=px(18), pady=px(2))
-            cards.logo(r, a, l.get("image", ""), 24, l["name"][:3]).pack(side="left", padx=px(10), pady=px(5))
-            label(r, l["name"], 10, True).pack(side="left")
-            self._follow_btn(r, on, lambda s=l["slug"]: a.toggle_league(s)).pack(side="right", padx=px(10))
+            cards.logo(r, a, l.get("image", ""), 24, name[:3]).pack(side="left", padx=px(10), pady=px(5))
+            label(r, name, 10, True).pack(side="left")
+            btn = self._follow_btn(
+                r, on,
+                lambda s=slug: self._handle_toggle(
+                    "league", s.lower(), lambda: a.toggle_league(s), lambda: a.settings.is_league_followed(s)
+                )
+            )
+            btn.pack(side="right", padx=px(10))
+            self._row_bindings[full_key] = (btn, r, None)
 
 
 # =============================================================================

@@ -47,7 +47,13 @@ def team_star(parent, app, code: str, name: str) -> tk.Label:
     star = tk.Label(parent, text="★" if on else "☆", font=font(11, True),
                     fg=C.COLOR_GOLD if on else C.COLOR_TEXT_DIM, bg=parent.cget("bg"), cursor="hand2")
     if code and code.upper() != "TBD":
-        star.bind("<Button-1>", lambda e: app.toggle_team(code, name))
+        def _toggle(e=None):
+            app.toggle_team(code, name)
+            new_on = app.settings.is_team_followed(code, name)
+            if star.winfo_exists():
+                star.configure(text="★" if new_on else "☆",
+                               fg=C.COLOR_GOLD if new_on else C.COLOR_TEXT_DIM)
+        star.bind("<Button-1>", _toggle)
         Tooltip(star, f"{'Unfollow' if on else 'Follow'} {name or code}")
     return star
 

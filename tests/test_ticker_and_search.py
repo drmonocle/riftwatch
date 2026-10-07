@@ -171,3 +171,60 @@ def test_ticker_bar_cycling_and_visibility(ticker_app):
     ticker_app.set_ticker_visible(True)
     assert ticker_app.settings.get("show_ticker_bar") is True
     assert tb.winfo_manager() == "pack"
+
+
+def test_watchlist_inplace_follow_toggle(ticker_app):
+    """Clicking follow button must toggle button text, styling, and top chips in-place without triggering full render."""
+    ticker_app.show_tab("watchlist")
+    wv = ticker_app.views["watchlist"]
+    wv.render()
+
+    assert "team:GEN" in wv._row_bindings
+    btn, row, _ = wv._row_bindings["team:GEN"]
+    assert btn.cget("text") == "☆ Follow"
+    assert not ticker_app.settings.is_team_followed("GEN", "Gen.G")
+
+    # Capture signature before toggle
+    sig_before = wv.signature()
+
+    # Click the follow button on GEN
+    wv._handle_toggle(
+        "team", "GEN",
+        lambda: ticker_app.toggle_team("GEN", "Gen.G"),
+        lambda: ticker_app.settings.is_team_followed("GEN", "Gen.G")
+    )
+
+    # 1. State must update
+    assert ticker_app.settings.is_team_followed("GEN", "Gen.G")
+    # 2. Button text must toggle in-place
+    assert btn.cget("text") == "★ Following"
+    # 3. Row highlight border must be gold
+    assert row.cget("highlightbackground") == C.COLOR_GOLD
+    # 4. Rendered cache must match current signature to prevent app._poll from re-rendering
+    assert ticker_app.rendered["watchlist"] == wv.signature()
+    assert wv.signature() != sig_before
+
+    # Now toggle again to unfollow
+    wv._handle_toggle(
+        "team", "GEN",
+        lambda: ticker_app.toggle_team("GEN", "Gen.G"),
+        lambda: ticker_app.settings.is_team_followed("GEN", "Gen.G")
+    )
+    assert not ticker_app.settings.is_team_followed("GEN", "Gen.G")
+    assert btn.cget("text") == "☆ Follow"
+    assert row.cget("highlightbackground") == C.COLOR_BORDER
+
+
+def test_updater_relaunch_script_structure():
+    """Verify updater helper uses Shell.Application, Unblock-File, and Copy-Item for reliable desktop relaunch."""
+    from riftscout import updater
+    ps_path = updater._find_powershell()
+    assert ps_path and ("powershell" in ps_path.lower())
+
+    import inspect
+    src = inspect.getsource(updater.launch_swap_and_restart)
+    assert "Shell.Application" in src
+    assert "Unblock-File" in src
+    assert "Copy-Item" in src
+    assert "SW_SHOWNORMAL" in src
+

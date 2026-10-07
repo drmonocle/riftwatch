@@ -34,16 +34,15 @@ def main():
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel & 24/7 Stream Companion
 
 ### ✨ What's New & Refined in {version}
-* **Search Bar Keystroke Flicker Eradication:**
-  * **Decoupled Keystrokes from Polling Signature:** In `WatchlistView`, typing into the search bar is now decoupled from the polling signature (`applied_query`). Keystrokes no longer trigger rapid 150ms frame teardowns, widget clearing, or layout rebuilds.
-  * **Debounced Query Execution:** Added an ultra-smooth 280ms debounce timer (and snappy 40ms clear), with immediate search application on `<Return>` and `<Escape>`, guaranteeing a 100% flicker-free search experience.
-  * **Optimized League Filter Search:** Debounced search queries in `LeagueFilterDialog` and added mapping checks so widgets are never redundantly re-packed.
-* **Live Broadcast Ticker Bar:**
-  * **Docked Real-Time Sports Ticker:** Added a sleek Hextech sports ticker bar docked beneath the navigation tabs, providing persistent live game awareness across all tabs.
-  * **Live Scores & In-Game Gold Differentials:** Displays live pro matches with current game number and gold leads (e.g. `● LIVE · DCGI · SR 0 : 0 FLY · Game 1 · FLY +13.2k gold`).
-  * **Upcoming Countdown Timers & 24/7 Stream Highlights:** Cycles upcoming fixtures with relative countdowns and currently airing 24/7 Twitch marathon events.
-  * **Spoiler-Safe & Clickable Navigation:** Clicking any ticker item jumps directly to its corresponding tab (`Live`, `Schedule`, or `Stream`). Under Spoiler Mode, all scores and gold leads remain 100% masked.
-  * **Controls & Settings Toggle:** Includes manual ◀ / ▶ cycle buttons, item counter, pause-on-hover, quick `✕` hide button, and a toggle under `Settings -> Display & Experience`.
+* **Instant In-Place Follow Toggling (Zero Page Reloads):**
+  * **Reactive In-Place Button Updates:** Clicking `☆ Follow` / `★ Following` on any team, player, region, or league row now updates the button text, colors, and row border immediately in-place (<0.1ms).
+  * **Eliminated Full-Page Rebuilds:** Synchronized the rendered view signature upon user toggles so the background 150ms poll loop never tears down or re-renders the 50+ item directory while actively browsing.
+  * **Isolated Following Summary Container:** The top "Following" chips section now updates independently in an isolated container without affecting list scroll position or tearing down existing rows.
+  * **Immediate Match Card Star Feedback:** Match card `☆`/`★` buttons in Live and Schedule views now update their visual state immediately on click.
+* **Hardened Self-Updater Desktop Relaunch:**
+  * **Windows Desktop Shell Execution (`SW_SHOWNORMAL`):** Resolved the issue where clicking Update on remote or secondary PCs closed the app after downloading but failed to open it. Replaced child-process launching with direct Windows Shell COM execution (`Shell.Application.ShellExecute`), guaranteeing the updated client opens visibly in the user's interactive desktop session (`SW_SHOWNORMAL = 1`) without inheriting hidden process window flags.
+  * **Automatic Mark-of-the-Web Unblocking:** Automatically runs `Unblock-File` on the downloaded binary to strip Windows SmartScreen/Zone.Identifier download locks.
+  * **Safe Non-Destructive Binary Swap:** Uses `Copy-Item` with randomized backup files to ensure the source update binary remains safely cached in `%APPDATA%\\RiftWatch\\updates\\` if initial locks occur.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`
