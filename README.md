@@ -25,21 +25,6 @@ Get the latest standalone release from [**GitHub Releases**](https://github.com/
 
 ---
 
-## ⚡ Architecture Comparison (Rebuild Highlights)
-
-In version `v0.3.0`, RiftWatch was completely re-architected from legacy Python/Tkinter into **Tauri v2 + Rust + React 19 + Tailwind CSS v4**.
-
-| Metric | Legacy Python (`v0.2.13`) | Typical Electron Client | **RiftWatch v0.3.0 (Tauri v2 + Rust)** |
-| :--- | :---: | :---: | :---: |
-| **Executable Size** | 45.2 MB | ~160 – 240 MB | **4.44 MB** *(90% smaller)* |
-| **Idle Memory (RAM)** | ~55 – 65 MB | ~140 – 200 MB | **~36 MB** *(hardware-accelerated)* |
-| **Launch Speed** | ~2.0s | ~2.5s – 4.0s | **< 0.35s (instantaneous)** |
-| **Rendering Engine** | Tkinter CPU Software Canvas | Bundled Chromium | **Evergreen WebView2 (DirectX 12 GPU)** |
-| **Detached HUD** | Hand-rolled Tk Toplevel | Heavy Web Browser Window | **Native Transparent Multi-Window** |
-| **Settings Navigation**| Full widget tree re-draw | Varies | **100% In-Place Reactive (Zero Scroll Resets)** |
-
----
-
 ## ✨ Features
 
 ### 📌 1. Detached Desktop HUD Ribbon (`720x36px`)
