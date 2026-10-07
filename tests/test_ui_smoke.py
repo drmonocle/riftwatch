@@ -108,6 +108,7 @@ def test_all_tabs_render_with_scores(app):
     assert "Hanwha Life Esports" in all_text
     assert "RIFTWATCH" in all_text
     assert "Hide to Tray" in all_text
+    assert "Monocle Productions LLC" in all_text
 
 
 def test_spoiler_mode_leaks_nothing(app):

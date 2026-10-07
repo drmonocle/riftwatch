@@ -13,6 +13,8 @@ def test_browser_allowlist():
     assert net.is_safe_browser_url("https://www.twitch.tv/lolworldchampionship")
     assert net.is_safe_browser_url("https://www.youtube.com/watch?v=abc")
     assert net.is_safe_browser_url("https://lolesports.com/schedule")
+    assert net.is_safe_browser_url("https://drmonocle.com")
+    assert net.is_safe_browser_url("https://ko-fi.com/monocle")
     assert not net.is_safe_browser_url("http://www.twitch.tv/x")       # https only
     assert not net.is_safe_browser_url("https://evil.com")
     assert not net.is_safe_browser_url("javascript:alert(1)")

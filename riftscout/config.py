@@ -65,6 +65,7 @@ GITHUB_LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPO}/release
 GITHUB_PROJECT_URL = f"https://github.com/{GITHUB_REPO}"
 
 KOFI_URL = "https://ko-fi.com/monocle"
+PORTAL_URL = "https://drmonocle.com"
 
 # Honest User-Agent header
 USER_AGENT = f"RiftWatch/{APP_VERSION} (Esports Desktop Companion; +{GITHUB_PROJECT_URL})"
@@ -88,6 +89,7 @@ BROWSER_HOSTS = {
     "youtube.com", "www.youtube.com", "youtu.be",
     "lolesports.com", "www.lolesports.com",
     "lolworlds.com", "www.lolworlds.com",
+    "drmonocle.com", "www.drmonocle.com",
     "ko-fi.com", "www.ko-fi.com",
     "github.com",
 }

@@ -159,6 +159,13 @@ class RiftScoutApp:
                                     bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_SURFACE_HOVER,
                                     tooltip="Minimize RiftWatch to system notification area")
         self.b_hide_tray.pack(side="right", padx=W.px(8), pady=W.px(2))
+        self.l_tag = tk.Label(footer, text="Monocle Productions LLC", font=W.font(8, True),
+                              fg=C.COLOR_TEXT_DIM, bg=C.COLOR_BG_DARK, cursor="hand2")
+        self.l_tag.pack(side="right", padx=W.px(10), pady=W.px(4))
+        self.l_tag.bind("<Enter>", lambda e: self.l_tag.configure(fg=C.COLOR_GOLD))
+        self.l_tag.bind("<Leave>", lambda e: self.l_tag.configure(fg=C.COLOR_TEXT_DIM))
+        self.l_tag.bind("<Button-1>", lambda e: self.open_url(C.PORTAL_URL))
+        W.Tooltip(self.l_tag, "Monocle Productions LLC · drmonocle.com")
         self.l_spoiler_foot = W.label(footer, "", 8, True, fg=C.COLOR_GOLD)
         self.l_spoiler_foot.pack(side="right", padx=W.px(8))
 
