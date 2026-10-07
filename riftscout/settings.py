@@ -42,6 +42,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "notify_kickoff": True,
     "notify_final": True,
     "notify_stream": True,
+    "show_ticker_bar": True,
 }
 
 _LEGACY_REGION_MAP = {"lta": ["lcs", "cblol-brazil"]}

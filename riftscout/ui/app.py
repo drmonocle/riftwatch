@@ -26,6 +26,7 @@ from ..watchlist import Watchlist
 from ..worker import Worker
 from . import widgets as W
 from .images import ImageCache
+from .ticker import TickerBar
 from .tray import TrayManager
 from .views import LiveView, ScheduleView, SettingsView, StreamView, WatchlistView
 
@@ -168,6 +169,13 @@ class RiftScoutApp:
             self.tab_buttons[key] = (b, line)
         tk.Frame(r, bg=C.COLOR_BORDER, height=1).pack(fill="x")
 
+        # Live Ticker Bar
+        self.ticker_bar = TickerBar(r, self)
+        self.ticker_sep = tk.Frame(r, bg=C.COLOR_BORDER, height=1)
+        if self.settings.get("show_ticker_bar", True):
+            self.ticker_bar.pack(fill="x")
+            self.ticker_sep.pack(fill="x")
+
         footer = tk.Frame(r, bg=C.COLOR_BG_DARK)
         footer.pack(side="bottom", fill="x")
         self.l_status = W.label(footer, "Starting…", 8, fg=C.COLOR_TEXT_MUTED)
@@ -221,6 +229,8 @@ class RiftScoutApp:
             self.b_update.pack(side="right", padx=W.px(4))
         elif not info and self.b_update.winfo_ismapped():
             self.b_update.pack_forget()
+        if hasattr(self, "ticker_bar"):
+            self.ticker_bar.refresh_data()
 
     def _refresh_status(self) -> None:
         st = self.state["status"]
@@ -318,6 +328,19 @@ class RiftScoutApp:
         self.views[key].tkraise()
         self.settings.set("last_tab", key)
         self._render_active()
+
+    def set_ticker_visible(self, visible: bool) -> None:
+        self.settings.set("show_ticker_bar", visible)
+        if visible:
+            if self.ticker_bar.winfo_manager() != "pack":
+                self.ticker_bar.pack(fill="x", before=self.container)
+                self.ticker_sep.pack(fill="x", before=self.container)
+                self.ticker_bar.refresh_data()
+        else:
+            if self.ticker_bar.winfo_manager() == "pack":
+                self.ticker_bar.pack_forget()
+                self.ticker_sep.pack_forget()
+        self.bump("prefs")
 
     def spoiler_on(self) -> bool:
         return bool(self.settings.get("spoiler_mode", False))
@@ -522,6 +545,8 @@ class RiftScoutApp:
         self.settings.save()
         if getattr(self, "tray", None):
             self.tray.stop()
+        if getattr(self, "ticker_bar", None):
+            self.ticker_bar._cancel_timer()
         self.worker.stop()
         self.images.shutdown()
         try:

@@ -34,11 +34,16 @@ def main():
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel & 24/7 Stream Companion
 
 ### ✨ What's New & Refined in {version}
-* **Comprehensive Live Information Audit & Official Stream Routing:**
-  * **International Streaming Provider Ingestion:** Expanded `_stream_url()` to recognize and parse official broadcast providers from Riot's live match feeds: **SOOP / AfreecaTV** (`play.sooplive.co.kr`), **Bilibili** (`live.bilibili.com`), **Huya** (`huya.com`), **Chzzk** (`chzzk.naver.com`), and **Trovo**.
-  * **DCGI / Global Invitational Stream Resolution:** The live Demacia Cup Global Invitational (DCGI) match between Shopify Rebellion and FlyQuest now resolves directly to its official Korean live broadcast (`https://play.sooplive.co.kr/aflol`) rather than an empty stream URL.
-  * **Accurate Fallback Search Routing:** When stream links are absent, the YouTube search fallback now constructs a targeted query (`{league} {team1} vs {team2} live`) ensuring precise search results for all tournaments (e.g. `DCGI SR vs FLY live`).
-  * **Guaranteed Closure Safety in LiveView:** Bound `▶ Watch live` and `Reveal scores` button lambdas to explicit default values (`m=m`, `mid=m['match_id']`), preventing closure reference leaks across multi-match broadcasts.
+* **Search Bar Keystroke Flicker Eradication:**
+  * **Decoupled Keystrokes from Polling Signature:** In `WatchlistView`, typing into the search bar is now decoupled from the polling signature (`applied_query`). Keystrokes no longer trigger rapid 150ms frame teardowns, widget clearing, or layout rebuilds.
+  * **Debounced Query Execution:** Added an ultra-smooth 280ms debounce timer (and snappy 40ms clear), with immediate search application on `<Return>` and `<Escape>`, guaranteeing a 100% flicker-free search experience.
+  * **Optimized League Filter Search:** Debounced search queries in `LeagueFilterDialog` and added mapping checks so widgets are never redundantly re-packed.
+* **Live Broadcast Ticker Bar:**
+  * **Docked Real-Time Sports Ticker:** Added a sleek Hextech sports ticker bar docked beneath the navigation tabs, providing persistent live game awareness across all tabs.
+  * **Live Scores & In-Game Gold Differentials:** Displays live pro matches with current game number and gold leads (e.g. `● LIVE · DCGI · SR 0 : 0 FLY · Game 1 · FLY +13.2k gold`).
+  * **Upcoming Countdown Timers & 24/7 Stream Highlights:** Cycles upcoming fixtures with relative countdowns and currently airing 24/7 Twitch marathon events.
+  * **Spoiler-Safe & Clickable Navigation:** Clicking any ticker item jumps directly to its corresponding tab (`Live`, `Schedule`, or `Stream`). Under Spoiler Mode, all scores and gold leads remain 100% masked.
+  * **Controls & Settings Toggle:** Includes manual ◀ / ▶ cycle buttons, item counter, pause-on-hover, quick `✕` hide button, and a toggle under `Settings -> Display & Experience`.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`

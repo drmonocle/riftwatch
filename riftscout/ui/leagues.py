@@ -78,8 +78,9 @@ class LeagueFilterDialog(tk.Toplevel):
             saved = [legacy]
         self.selected_leagues: Set[str] = set(saved)
 
+        self._search_after = None
         self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", lambda *_: self._filter_cards())
+        self.search_var.trace_add("write", lambda *_: self._debounce_filter())
 
         self._all_leagues: List[Dict[str, Any]] = self._gather_all_leagues()
         self._league_widgets: List[tuple] = []  # (slug, frame, match_texts)
@@ -316,12 +317,26 @@ class LeagueFilterDialog(tk.Toplevel):
                 txt = f"Showing {sel_count} of {total} leagues selected."
             self.l_summary.configure(text=txt)
 
+    def _debounce_filter(self) -> None:
+        if getattr(self, "_search_after", None):
+            try:
+                self.after_cancel(self._search_after)
+            except Exception:
+                pass
+            self._search_after = None
+        delay = 30 if not self.search_var.get().strip() else 120
+        self._search_after = self.after(delay, self._filter_cards)
+
     def _filter_cards(self) -> None:
+        if getattr(self, "_search_after", None):
+            self._search_after = None
         q = self.search_var.get().strip().lower()
         for _, card, match_text in self._league_widgets:
-            if not q or q in match_text:
+            match = not q or q in match_text
+            mapped = bool(card.winfo_ismapped())
+            if match and not mapped:
                 card.pack(fill="x", padx=px(6), pady=px(2))
-            else:
+            elif not match and mapped:
                 card.pack_forget()
 
     # ---- presets

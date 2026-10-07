@@ -659,6 +659,7 @@ class WatchlistView(View):
         super().__init__(parent, app)
         self.mode = "teams"
         self.query = tk.StringVar()
+        self.applied_query = ""
         self.expanded: Optional[str] = None
         self.scroll.pack_forget()
         bar = tk.Frame(self, bg=C.COLOR_BG)
@@ -670,6 +671,9 @@ class WatchlistView(View):
         self.entry = tk.Entry(entry_wrap, textvariable=self.query, font=font(10), bg=C.COLOR_SURFACE,
                               fg=C.COLOR_TEXT_PRIMARY, insertbackground=C.COLOR_GOLD, relief="flat", width=28)
         self.entry.pack(padx=1, pady=1, ipady=px(4), ipadx=px(6))
+        self.entry.bind("<Return>", lambda e: self._apply_search())
+        self.entry.bind("<KP_Enter>", lambda e: self._apply_search())
+        self.entry.bind("<Escape>", lambda e: self._clear_search())
         label(bar, "Search", 9, fg=C.COLOR_TEXT_MUTED).pack(side="right", padx=px(6))
         self._after = None
         self.query.trace_add("write", lambda *_: self._debounce())
@@ -683,11 +687,34 @@ class WatchlistView(View):
 
     def _debounce(self):
         if self._after:
-            self.after_cancel(self._after)
-        self._after = self.after(250, lambda: (self.scroll.to_top(), self.render()))
+            try:
+                self.after_cancel(self._after)
+            except Exception:
+                pass
+            self._after = None
+        # Fast debounce (40ms) when input is emptied, standard (280ms) while typing
+        delay = 40 if not self.query.get().strip() else 280
+        self._after = self.after(delay, self._apply_search)
+
+    def _apply_search(self):
+        if self._after:
+            try:
+                self.after_cancel(self._after)
+            except Exception:
+                pass
+            self._after = None
+        new_q = self.query.get().strip().lower()
+        if new_q != self.applied_query:
+            self.applied_query = new_q
+            self.scroll.to_top()
+            self.render()
+
+    def _clear_search(self):
+        self.query.set("")
+        self._apply_search()
 
     def signature(self) -> tuple:
-        return super().signature() + (self.mode, self.query.get().strip().lower(), self.expanded)
+        return super().signature() + (self.mode, self.applied_query, self.expanded)
 
     def _update_modebar(self):
         for key, b in self._mode_btns.items():
@@ -697,6 +724,9 @@ class WatchlistView(View):
 
     def _set_mode(self, mode):
         self.mode, self.expanded = mode, None
+        new_q = self.query.get().strip().lower()
+        if new_q != self.applied_query:
+            self.applied_query = new_q
         self._update_modebar()
         self.scroll.to_top()
         self.after(1, lambda: self.app.request_render(self))
@@ -759,7 +789,7 @@ class WatchlistView(View):
     def _teams(self) -> None:
         a = self.app
         cat = a.state["catalog"]
-        q = self.query.get().strip()
+        q = self.applied_query
         if q:
             teams = cat.search_teams(q, limit=50)
             self.section("Teams", f"{len(teams)} result(s) for “{q}”")
@@ -810,7 +840,7 @@ class WatchlistView(View):
     # ---- players
     def _players(self) -> None:
         cat = self.app.state["catalog"]
-        q = self.query.get().strip()
+        q = self.applied_query
         if not q:
             followed = self.app.settings.get("followed_players", [])
             self.section("Players", "type a name to search every registered pro player")
@@ -847,7 +877,7 @@ class WatchlistView(View):
     # ---- regions
     def _regions(self) -> None:
         a = self.app
-        q = self.query.get().strip().lower()
+        q = self.applied_query
         regions = list(C.MAJOR_REGIONS)
         if q:
             regions = [r for r in regions if q in r["name"].lower() or q in r["code"].lower()
@@ -882,7 +912,7 @@ class WatchlistView(View):
         if not leagues:
             self.empty("Loading leagues…")
             return
-        q = self.query.get().strip().lower()
+        q = self.applied_query
         if q:
             leagues = [l for l in leagues if q in l["name"].lower() or q in (l.get("region") or "").lower()]
         self.section("Leagues", "matches from followed leagues show in 'Followed only' and on the Live tab")
@@ -918,6 +948,10 @@ class SettingsView(View):
         self.section("Display & Experience")
         self._toggle("Spoiler mode", "Hide all scores, results and in-game stats until you reveal a match.",
                      s.get("spoiler_mode", False), a.toggle_spoiler)
+        self._toggle("Show Live Ticker Bar",
+                     "Display real-time scores, countdowns, and 24/7 stream highlights beneath tabs.",
+                     s.get("show_ticker_bar", True),
+                     lambda: a.set_ticker_visible(not s.get("show_ticker_bar", True)))
 
         # Default tab selector
         tab_row = tk.Frame(self.body, bg=C.COLOR_SURFACE)
