@@ -79,8 +79,7 @@ def migrate(data: Dict[str, Any]) -> Dict[str, Any]:
         out["followed_leagues"] = list(C.DEFAULT_FOLLOWED_LEAGUES)
 
     if "onboarding_completed" not in out:
-        # If user already had teams or players followed, consider onboarding done
-        out["onboarding_completed"] = bool(out.get("followed_teams") or out.get("followed_players"))
+        out["onboarding_completed"] = False
 
     if "minimize_to_tray_on_close" not in out:
         out["minimize_to_tray_on_close"] = True

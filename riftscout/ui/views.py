@@ -16,7 +16,7 @@ from ..data import (format_local_day, format_local_match_time, format_relative_t
                     parse_iso_datetime, utcnow)
 from ..stream import event_subtitle, event_title, next_banger, now_airing, upcoming
 from . import cards
-from .widgets import ScrollFrame, button, clear, font, label, pill, px, Tooltip
+from .widgets import ScrollFrame, button, clear, font, label, pill, px, Tooltip, set_button_colors
 
 
 class View(tk.Frame):
@@ -247,37 +247,55 @@ class ScheduleView(View):
         self.filters.pack(fill="x", padx=px(18), pady=(px(12), px(4)))
         self.scroll.pack(fill="both", expand=True)
 
-    def _filters(self) -> None:
-        clear(self.filters)
+        self._range_btns = {}
+        for key, text in RANGES:
+            b = button(self.filters, text, lambda k=key: self._set("schedule_filter_range", k), size=9)
+            b.pack(side="left", padx=(0, px(4)))
+            self._range_btns[key] = b
+
+        self._btn_fo = button(self.filters, "☆ Followed only",
+                              lambda: self._set("schedule_filter_followed",
+                                                not self.app.settings.get("schedule_filter_followed", False)),
+                              size=9)
+        self._btn_fo.pack(side="left", padx=(px(12), px(4)))
+
+        self._mb_league = tk.Menubutton(self.filters, text="League: All  ▾", font=font(9, True),
+                                        bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_PRIMARY, activebackground=C.COLOR_BORDER,
+                                        activeforeground=C.COLOR_TEXT_PRIMARY, relief="flat", padx=px(10), pady=px(4),
+                                        cursor="hand2")
+        self._menu_league = tk.Menu(self._mb_league, tearoff=0, bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_PRIMARY,
+                                    activebackground=C.COLOR_GOLD, activeforeground=C.COLOR_BG, font=font(9))
+        self._mb_league.configure(menu=self._menu_league)
+        self._mb_league.pack(side="left", padx=px(4))
+        label(self.filters, "Times in your local time zone", 8, fg=C.COLOR_TEXT_DIM).pack(side="right")
+        self._known_leagues = None
+
+    def _update_filters(self) -> None:
         s = self.app.settings
         cur = s.get("schedule_filter_range", "upcoming")
-        for key, text in RANGES:
+        for key, b in self._range_btns.items():
             on = key == cur
-            button(self.filters, text, lambda k=key: self._set("schedule_filter_range", k), size=9,
-                   bg=C.COLOR_GOLD if on else C.COLOR_SURFACE, fg=C.COLOR_BG if on else C.COLOR_TEXT_PRIMARY,
-                   hover_bg=C.COLOR_GOLD_HOVER if on else C.COLOR_BORDER).pack(side="left", padx=(0, px(4)))
+            set_button_colors(b, C.COLOR_GOLD if on else C.COLOR_SURFACE,
+                              C.COLOR_BG if on else C.COLOR_TEXT_PRIMARY)
+            b.configure(text=dict(RANGES).get(key, key))
+
         fo = s.get("schedule_filter_followed", False)
-        button(self.filters, ("★ " if fo else "☆ ") + "Followed only",
-               lambda: self._set("schedule_filter_followed", not fo), size=9,
-               bg=C.COLOR_CYAN_DIM if fo else C.COLOR_SURFACE,
-               fg=C.COLOR_TEXT_PRIMARY).pack(side="left", padx=(px(12), px(4)))
+        set_button_colors(self._btn_fo, C.COLOR_CYAN_DIM if fo else C.COLOR_SURFACE,
+                          C.COLOR_TEXT_PRIMARY)
+        self._btn_fo.configure(text=("★ " if fo else "☆ ") + "Followed only")
 
         leagues = sorted({(m["league_slug"], m["league_name"]) for m in self.app.state["schedule"]},
                          key=lambda x: x[1].lower())
         sel = s.get("schedule_filter_league", "")
         names = dict(leagues)
-        mb = tk.Menubutton(self.filters, text=f"League: {names.get(sel, 'All')}  ▾", font=font(9, True),
-                           bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_PRIMARY, activebackground=C.COLOR_BORDER,
-                           activeforeground=C.COLOR_TEXT_PRIMARY, relief="flat", padx=px(10), pady=px(4),
-                           cursor="hand2")
-        menu = tk.Menu(mb, tearoff=0, bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_PRIMARY,
-                       activebackground=C.COLOR_GOLD, activeforeground=C.COLOR_BG, font=font(9))
-        menu.add_command(label="All leagues", command=lambda: self._set("schedule_filter_league", ""))
-        for slug, name in leagues:
-            menu.add_command(label=name, command=lambda sl=slug: self._set("schedule_filter_league", sl))
-        mb.configure(menu=menu)
-        mb.pack(side="left", padx=px(4))
-        label(self.filters, "Times in your local time zone", 8, fg=C.COLOR_TEXT_DIM).pack(side="right")
+        self._mb_league.configure(text=f"League: {names.get(sel, 'All')}  ▾")
+
+        if leagues != self._known_leagues:
+            self._known_leagues = leagues
+            self._menu_league.delete(0, "end")
+            self._menu_league.add_command(label="All leagues", command=lambda: self._set("schedule_filter_league", ""))
+            for slug, name in leagues:
+                self._menu_league.add_command(label=name, command=lambda sl=slug: self._set("schedule_filter_league", sl))
 
     def _set(self, key: str, value) -> None:
         self.app.settings.set(key, value)
@@ -312,7 +330,7 @@ class ScheduleView(View):
         return out[:80]
 
     def _build(self) -> None:
-        self._filters()
+        self._update_filters()
         clear(self.body)
         matches = self.filtered()
         if not self.app.state["schedule"]:
@@ -348,11 +366,13 @@ class StreamView(View):
             return
         now = utcnow()
         cur = now_airing(events, now)
+        online = a.state.get("stream_online", True)
         self.section("Now on Twitch", f"twitch.tv/{C.TWITCH_CHANNEL}")
-        hero = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightbackground=C.COLOR_LIVE if cur else C.COLOR_BORDER,
+        is_live = cur and (online is not False)
+        hero = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightbackground=C.COLOR_LIVE if is_live else C.COLOR_BORDER,
                         highlightthickness=1)
         hero.pack(fill="x", padx=px(18))
-        if cur:
+        if cur and is_live:
             top = tk.Frame(hero, bg=C.COLOR_SURFACE)
             top.pack(fill="x", padx=px(14), pady=(px(12), 0))
             pill(top, "● ON AIR", C.COLOR_LIVE, fg="white").pack(side="left")
@@ -368,9 +388,24 @@ class StreamView(View):
             if nxt:
                 label(hero, f"Up next: {event_title(nxt[0])}  ·  {format_relative_time(nxt[0]['start_utc'], now)}",
                       9, fg=C.COLOR_CYAN).pack(anchor="w", padx=px(14), pady=(px(6), 0))
+        elif cur and not is_live:
+            top = tk.Frame(hero, bg=C.COLOR_SURFACE)
+            top.pack(fill="x", padx=px(14), pady=(px(12), 0))
+            pill(top, "○ STREAM OFFLINE", C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED).pack(side="left")
+            label(hero, f"Scheduled: {event_title(cur)}", 16, True, fg=C.COLOR_TEXT_MUTED).pack(
+                anchor="w", padx=px(14), pady=(px(6), 0))
+            label(hero, f"{event_subtitle(cur)} · Stream is currently offline on Twitch", 10,
+                  fg=C.COLOR_TEXT_DIM).pack(anchor="w", padx=px(14))
+            nxt = upcoming(events, now, limit=1)
+            if nxt:
+                label(hero, f"Next up: {event_title(nxt[0])} · {format_relative_time(nxt[0]['start_utc'], now)}",
+                      10, fg=C.COLOR_CYAN).pack(anchor="w", padx=px(14))
         else:
+            top = tk.Frame(hero, bg=C.COLOR_SURFACE)
+            top.pack(fill="x", padx=px(14), pady=(px(12), 0))
+            pill(top, "○ OFF AIR", C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED).pack(side="left")
             label(hero, "Off air or between tournaments", 14, True, fg=C.COLOR_TEXT_MUTED).pack(
-                anchor="w", padx=px(14), pady=(px(12), 0))
+                anchor="w", padx=px(14), pady=(px(6), 0))
             nxt = upcoming(events, now, limit=1)
             if nxt:
                 label(hero, f"Next: {event_title(nxt[0])} · {format_relative_time(nxt[0]['start_utc'], now)}",
@@ -467,6 +502,12 @@ class WatchlistView(View):
         self.query.trace_add("write", lambda *_: self._debounce())
         self.scroll.pack(fill="both", expand=True)
 
+        self._mode_btns = {}
+        for key, text in (("teams", "Teams"), ("players", "Players"), ("regions", "Regions"), ("leagues", "Leagues")):
+            b = button(self.modebar, text, lambda k=key: self._set_mode(k), size=9)
+            b.pack(side="left", padx=(0, px(4)))
+            self._mode_btns[key] = b
+
     def _debounce(self):
         if self._after:
             self.after_cancel(self._after)
@@ -475,13 +516,11 @@ class WatchlistView(View):
     def signature(self) -> tuple:
         return super().signature() + (self.mode, self.query.get().strip().lower(), self.expanded)
 
-    def _modebar(self):
-        clear(self.modebar)
-        for key, text in (("teams", "Teams"), ("players", "Players"), ("regions", "Regions"), ("leagues", "Leagues")):
+    def _update_modebar(self):
+        for key, b in self._mode_btns.items():
             on = key == self.mode
-            button(self.modebar, text, lambda k=key: self._set_mode(k),
-                   bg=C.COLOR_GOLD if on else C.COLOR_SURFACE, fg=C.COLOR_BG if on else C.COLOR_TEXT_PRIMARY,
-                   hover_bg=C.COLOR_GOLD_HOVER if on else C.COLOR_BORDER).pack(side="left", padx=(0, px(4)))
+            set_button_colors(b, C.COLOR_GOLD if on else C.COLOR_SURFACE,
+                              C.COLOR_BG if on else C.COLOR_TEXT_PRIMARY)
 
     def _set_mode(self, mode):
         self.mode, self.expanded = mode, None
@@ -489,7 +528,7 @@ class WatchlistView(View):
         self.app.request_render(self)
 
     def _build(self) -> None:
-        self._modebar()
+        self._update_modebar()
         clear(self.body)
         self._following()
         cat = self.app.state["catalog"]

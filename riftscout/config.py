@@ -77,6 +77,8 @@ ALLOWED_HOSTS = {
     "static.lolesports.com",
     "lolstatic-a.akamaihd.net",  # older team logos still live on Riot's legacy CDN
     "lolworlds.com",
+    "decapi.me",
+    "gql.twitch.tv",
     "api.github.com",
     "github.com",
     "objects.githubusercontent.com",

@@ -151,7 +151,6 @@ class ScrollFrame(tk.Frame):
         """Rebuild the contents without jumping back to the top."""
         pos = self.canvas.yview()[0]
         rebuild()
-        self.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         self.canvas.yview_moveto(pos)
 

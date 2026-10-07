@@ -16,7 +16,7 @@ from . import config as C
 from . import updater
 from .data import DataCoordinator, current_game
 from .settings import SettingsManager
-from .stream import StreamScheduleReader
+from .stream import StreamScheduleReader, is_stream_online
 
 log = logging.getLogger(__name__)
 
@@ -110,6 +110,8 @@ class Worker(threading.Thread):
 
     def _job_stream(self) -> None:
         events = self.stream.fetch()
+        online = is_stream_online(C.TWITCH_CHANNEL)
+        self._post("stream_online", online)
         if events is None:
             self._post("stream", self.stream.cached())
             self._status("stream", False, "Stream schedule unreachable (showing cache)")

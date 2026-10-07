@@ -142,3 +142,67 @@ def test_hide_to_tray_and_restore(app):
     assert app.root.state() == "withdrawn"
     app.show_from_tray()
     assert app.root.state() == "normal"
+
+
+def test_watch_live_fallback_search(app, monkeypatch):
+    opened = []
+    monkeypatch.setattr(app, "open_url", lambda url: opened.append(url))
+    # DCGI FlyQuest match without stream_url
+    dcgi_match = {
+        "match_id": "dcgi_1",
+        "league_name": "DCGI",
+        "team1_name": "FlyQuest",
+        "team2_name": "LGD GAMING",
+        "stream_url": "",
+    }
+    app.watch(dcgi_match)
+    assert len(opened) == 1
+    assert "youtube.com/results?search_query=" in opened[0]
+    assert "DCGI" in opened[0] and "FlyQuest" in opened[0]
+
+    # Match with explicit stream_url should open directly
+    direct_match = {"match_id": "m2", "stream_url": "https://www.twitch.tv/lck"}
+    app.watch(direct_match)
+    assert opened[-1] == "https://www.twitch.tv/lck"
+
+
+def test_header_pills_and_stream_status(app):
+    assert app.pill_live.winfo_exists()
+    assert app.sep_header.winfo_exists()
+    assert app.pill_stream.winfo_exists()
+
+    # With stream_online=True and live stream
+    app._refresh_header()
+    assert "ON AIR" in app.l_stream.cget("text")
+
+    # With stream_online=False
+    app._apply("stream_online", False)
+    app._refresh_header()
+    assert "OFFLINE" in app.l_stream.cget("text")
+
+    # With no stream airing
+    app._apply("stream", [])
+    app._refresh_header()
+    assert "OFF AIR" in app.l_stream.cget("text")
+
+
+def test_no_redundant_version_bumps(app):
+    ver_before = app.versions.get("schedule", 0)
+    # Applying identical schedule payload must NOT bump version
+    app._apply("schedule", list(app.state["schedule"]))
+    assert app.versions.get("schedule", 0) == ver_before
+
+    # Applying changed schedule payload MUST bump version
+    new_sched = list(app.state["schedule"]) + [{"match_id": "new_m"}]
+    app._apply("schedule", new_sched)
+    assert app.versions.get("schedule", 0) == ver_before + 1
+
+
+def test_schedule_filters_preserve_widgets(app):
+    sched_view = app.views["schedule"]
+    sched_view.render()
+    btn = sched_view._range_btns["upcoming"]
+    # Re-rendering must update button state in-place without destroying and recreating widget
+    sched_view.render()
+    assert sched_view._range_btns["upcoming"] is btn
+    assert btn.winfo_exists()

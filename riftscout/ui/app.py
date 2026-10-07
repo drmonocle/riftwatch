@@ -50,8 +50,8 @@ class RiftScoutApp:
         self.settings = settings or SettingsManager()
         self.q: "queue.Queue[tuple]" = queue.Queue()
         self.state: Dict[str, Any] = {
-            "schedule": [], "live": [], "livestats": {}, "stream": [], "catalog": Catalog(),
-            "update": None, "update_checked": False, "update_progress": "", "status": {},
+            "schedule": [], "live": [], "livestats": {}, "stream": [], "stream_online": True,
+            "catalog": Catalog(), "update": None, "update_checked": False, "update_progress": "", "status": {},
         }
         self.versions: Dict[str, int] = {}
         self.revealed: set = set()
@@ -129,12 +129,31 @@ class RiftScoutApp:
 
         mid = tk.Frame(header, bg=C.COLOR_BG_DARK)
         mid.pack(side="left", fill="x", expand=True, padx=W.px(10))
-        self.l_live = W.label(mid, "", 9, True, fg=C.COLOR_LIVE, cursor="hand2")
-        self.l_live.pack(side="left", padx=W.px(8))
+
+        self.pill_live = tk.Frame(mid, bg=C.COLOR_SURFACE, highlightbackground=C.COLOR_BORDER,
+                                  highlightthickness=1, cursor="hand2")
+        self.pill_live.pack(side="left", padx=(0, W.px(6)), pady=W.px(2))
+        self.l_live = tk.Label(self.pill_live, text="Pro Matches: Idle", font=W.font(9, True),
+                               fg=C.COLOR_TEXT_DIM, bg=C.COLOR_SURFACE, cursor="hand2",
+                               padx=W.px(8), pady=W.px(2))
+        self.l_live.pack()
+        self.pill_live.bind("<Button-1>", lambda e: self.show_tab("live"))
         self.l_live.bind("<Button-1>", lambda e: self.show_tab("live"))
-        self.l_stream = W.label(mid, "", 9, fg=C.COLOR_TEXT_MUTED, cursor="hand2")
-        self.l_stream.pack(side="left", padx=W.px(8))
+        W.Tooltip(self.pill_live, "Click to view Live Pro Match action")
+
+        self.sep_header = tk.Frame(mid, bg=C.COLOR_BORDER, width=1, height=W.px(16))
+        self.sep_header.pack(side="left", padx=W.px(6))
+
+        self.pill_stream = tk.Frame(mid, bg=C.COLOR_SURFACE, highlightbackground=C.COLOR_BORDER,
+                                    highlightthickness=1, cursor="hand2")
+        self.pill_stream.pack(side="left", padx=(W.px(6), 0), pady=W.px(2))
+        self.l_stream = tk.Label(self.pill_stream, text="Twitch 24/7: ○ OFF AIR", font=W.font(9, False),
+                                 fg=C.COLOR_TEXT_DIM, bg=C.COLOR_SURFACE, cursor="hand2",
+                                 padx=W.px(8), pady=W.px(2))
+        self.l_stream.pack()
+        self.pill_stream.bind("<Button-1>", lambda e: self.show_tab("stream"))
         self.l_stream.bind("<Button-1>", lambda e: self.show_tab("stream"))
+        W.Tooltip(self.pill_stream, "Click to view 24/7 Twitch Rebroadcast Schedule")
 
         tabbar = tk.Frame(r, bg=C.COLOR_BG)
         tabbar.pack(fill="x", padx=W.px(12), pady=(W.px(6), 0))
@@ -179,11 +198,23 @@ class RiftScoutApp:
             first = live[0]
             more = f"  +{len(live) - 1} more" if len(live) > 1 else ""
             self.l_live.configure(text=f"● LIVE  {first['team1_code']} vs {first['team2_code']} "
-                                       f"({first['league_name']}){more}")
+                                       f"({first['league_name']}){more}", fg=C.COLOR_LIVE)
+            self.pill_live.configure(highlightbackground=C.COLOR_LIVE)
         else:
-            self.l_live.configure(text="")
+            self.l_live.configure(text="Pro Matches: Idle", fg=C.COLOR_TEXT_DIM)
+            self.pill_live.configure(highlightbackground=C.COLOR_BORDER)
+
         cur = now_airing(self.state["stream"]) if self.state["stream"] else None
-        self.l_stream.configure(text=f"Twitch 24/7: {event_title(cur)}" if cur else "")
+        online = self.state.get("stream_online", True)
+        if cur and online is not False:
+            self.l_stream.configure(text=f"Twitch 24/7: ● ON AIR  {event_title(cur)}", fg=C.COLOR_CYAN, font=W.font(9, True))
+            self.pill_stream.configure(highlightbackground=C.COLOR_CYAN_DIM)
+        elif cur and online is False:
+            self.l_stream.configure(text=f"Twitch 24/7: ○ OFFLINE ({event_title(cur)})", fg=C.COLOR_TEXT_DIM, font=W.font(9, False))
+            self.pill_stream.configure(highlightbackground=C.COLOR_BORDER)
+        else:
+            self.l_stream.configure(text="Twitch 24/7: ○ OFF AIR", fg=C.COLOR_TEXT_DIM, font=W.font(9, False))
+            self.pill_stream.configure(highlightbackground=C.COLOR_BORDER)
         on = self.spoiler_on()
         W.set_button_colors(self.b_spoiler, C.COLOR_GOLD if on else C.COLOR_SURFACE_HOVER,
                             C.COLOR_BG if on else C.COLOR_TEXT_PRIMARY)
@@ -232,11 +263,12 @@ class RiftScoutApp:
             self.state["status"][payload["source"]] = payload
             self.bump("status")
         elif kind == "catalog":
-            self.state["catalog"] = payload
-            self.watchlist.set_catalog(payload)
-            if self.settings.attach_team_names(lambda code: (payload.find_team(code) or {}).get("name")):
-                self.bump("prefs")
-            self.bump("catalog")
+            if self.state.get("catalog") != payload:
+                self.state["catalog"] = payload
+                self.watchlist.set_catalog(payload)
+                if self.settings.attach_team_names(lambda code: (payload.find_team(code) or {}).get("name")):
+                    self.bump("prefs")
+                self.bump("catalog")
         elif kind == "update":
             self.state["update"] = payload
             self.state["update_checked"] = True
@@ -249,12 +281,18 @@ class RiftScoutApp:
         elif kind == "update_error":
             self.state["update_progress"] = ""
             self.bump("update_progress")
-            messagebox.showerror("RiftScout update", payload, parent=self.root)
+            messagebox.showerror("RiftWatch update", payload, parent=self.root)
         elif kind == "refresh_done":
             self.b_refresh.configure(text="⟳ Refresh")
+        elif kind == "stream_online":
+            if self.state.get("stream_online") != payload:
+                self.state["stream_online"] = payload
+                self.bump("stream")
         elif kind in ("schedule", "live", "livestats", "stream"):
-            self.state[kind] = payload or ([] if kind != "livestats" else {})
-            self.bump(kind)
+            new_val = payload or ([] if kind != "livestats" else {})
+            if self.state.get(kind) != new_val:
+                self.state[kind] = new_val
+                self.bump(kind)
 
     def _render_active(self) -> None:
         v = self.views[self.active]
@@ -359,7 +397,15 @@ class RiftScoutApp:
             messagebox.showwarning("RiftWatch", "That link couldn't be opened.", parent=self.root)
 
     def watch(self, match: Dict[str, Any]) -> None:
-        self.open_url(match.get("stream_url") or "https://lolesports.com/en-US/live")
+        url = (match.get("stream_url") or "").strip()
+        if not url:
+            league = match.get("league_name") or match.get("league_slug") or "LoL Esports"
+            t1 = match.get("team1_name") or match.get("team1_code") or ""
+            t2 = match.get("team2_name") or match.get("team2_code") or ""
+            query = f"LoL Esports {league} {t1} vs {t2}".strip()
+            import urllib.parse
+            url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"
+        self.open_url(url)
 
     def refresh(self) -> None:
         self.b_refresh.configure(text="⟳ Refreshing…")
@@ -462,6 +508,7 @@ class RiftScoutApp:
 
 # ==================================================================== entry
 def _setup_logging() -> None:
+    import logging.handlers
     handler = logging.handlers.RotatingFileHandler(C.LOG_PATH, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger()

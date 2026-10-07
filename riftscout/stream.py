@@ -109,3 +109,21 @@ class StreamScheduleReader:
 
     def cached(self) -> List[Dict[str, Any]]:
         return db.get_stream_events(self.db_path)
+
+
+def is_stream_online(channel: str = C.TWITCH_CHANNEL) -> Optional[bool]:
+    """Check if the 24/7 Twitch channel is currently broadcasting live.
+    Returns True if live, False if offline, or None if the check could not be completed."""
+    try:
+        url = f"https://decapi.me/twitch/uptime/{channel}"
+        txt = net.fetch_text(url, timeout=5.0)
+        if not txt:
+            return None
+        t = txt.strip().lower()
+        if "is offline" in t:
+            return False
+        if "error" in t or "not found" in t:
+            return None
+        return True
+    except Exception:
+        return None

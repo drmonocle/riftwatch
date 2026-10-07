@@ -33,17 +33,13 @@ def main():
 
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel
 
-A dedicated, lightweight Windows desktop tracker and sentinel for League of Legends pro esports and the 24/7 Twitch rebroadcast channel.
-
-### ✨ What's New
-* **First-Run Onboarding Setup Wizard:** 1-click setup dialog to follow your favorite regions, pro teams, and star players on first launch.
-* **Regions & Tournaments:** Dedicated Regions tab to follow entire competitive ecosystems (International, Korea, China, Europe, North America, APAC, Brazil).
-* **System Tray Sentinel:** Runs quietly in the notification area with close-to-tray minimization, spoiler mode toggle, and schedule refresh.
-* **Team Crest Logos:** Crisp logos across player cards, starting lineups, and 24/7 Twitch rebroadcast cards.
-* **Live In-Game Stats:** Gold lead tracking, kill scoreboards, towers, dragons, barons, inhibitors, and starting champions.
-* **Twitch 24/7 Rebroadcast Sync:** Integrated live playout schedule and S-Tier Banger highlights.
-* **1-Click Verified Self-Updater:** Automatically checks GitHub Releases and verifies SHA-256 checksums before swapping binaries.
-* **Monocle Productions LLC Branding:** Portal and Ko-fi support integration.
+### 🐛 Bug Fixes & Refinements in {version}
+* **Screen Flashing & Canvas Stuttering Fixed:** Eliminated destructive widget clearing and intermediate canvas repaints across the Schedule and Watchlist views. Filter buttons and mode selectors now persist across updates.
+* **Direct Watch Live Search (DCGI & Co-Streams):** Demacia Cup Global Invitational and regional matches without static stream URLs now dynamically open targeted live broadcast searches instead of generic landing pages.
+* **Onboarding Setup Wizard Trigger:** Fixed settings migration logic so the initial setup wizard reliably triggers on fresh installations, allowing users to select their favorite regions, teams, and players.
+* **Header Capsule Separation:** Added visual capsule containers and a sleek Hextech border divider between the Live Match indicator and the Twitch 24/7 Rebroadcast badge.
+* **Twitch 24/7 Channel Offline Detection:** Added real-time channel uptime checks to distinguish between active scheduled matches, off-air intervals, and offline Twitch broadcasts.
+* **Zero-Redundant Rendering:** Background polling skips UI tree updates when state payloads remain identical.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`
