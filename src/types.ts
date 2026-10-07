@@ -1,0 +1,103 @@
+export interface Team {
+  id?: string;
+  code: string;
+  name: string;
+  image?: string;
+  league?: string;
+}
+
+export interface Player {
+  id?: string;
+  summonerName: string;
+  role: string;
+  teamCode: string;
+}
+
+export interface Game {
+  number: number;
+  id: string;
+  state: "unstarted" | "inProgress" | "completed";
+  blueTeamId?: string;
+  redTeamId?: string;
+}
+
+export interface Match {
+  matchId: string;
+  leagueName: string;
+  leagueSlug: string;
+  blockName: string;
+  startTimeUtc: string;
+  state: "unstarted" | "inProgress" | "completed";
+  bestOf: number;
+  winner?: string;
+  streamUrl?: string;
+  team1Code: string;
+  team1Name: string;
+  team1Image?: string;
+  team1Score: number;
+  team2Code: string;
+  team2Name: string;
+  team2Image?: string;
+  team2Score: number;
+  games: Game[];
+  blueTeamId?: string;
+  redTeamId?: string;
+}
+
+export interface LiveStats {
+  matchId: string;
+  blue: {
+    teamId?: string;
+    gold: number;
+    kills: number;
+    towers?: number;
+    dragons?: number;
+    barons?: number;
+  };
+  red: {
+    teamId?: string;
+    gold: number;
+    kills: number;
+    towers?: number;
+    dragons?: number;
+    barons?: number;
+  };
+}
+
+export interface StreamEvent {
+  id: string | number;
+  type: string;
+  name?: string;
+  event: string;
+  season: string;
+  stage?: string;
+  team1?: string;
+  team2?: string;
+  score?: string;
+  rawTime: string;
+  utcIso: string;
+  isBanger?: boolean;
+}
+
+export interface NewsItem {
+  id: string;
+  title: string;
+  source: string;
+  date: string;
+  summary: string;
+  tag: string;
+  url: string;
+}
+
+export interface AppSettings {
+  spoilerMode: boolean;
+  tickerMode: "docked" | "detached" | "hidden";
+  tickerTopmost: boolean;
+  defaultTab: "live" | "schedule" | "stream" | "watchlist" | "news" | "settings";
+  notifyKickoff: boolean;
+  notifyPregame: boolean;
+  notifyStream: boolean;
+  followedTeams: string[];
+  followedPlayers: string[];
+  followedLeagues: string[];
+}
