@@ -6,12 +6,39 @@ interface ScheduleViewProps {
   schedule: Match[];
   settings: AppSettings;
   onOpenUrl: (url: string) => void;
+  onUpdateSettings?: (s: Partial<AppSettings>) => void;
 }
 
-export const ScheduleView: React.FC<ScheduleViewProps> = ({ schedule, settings, onOpenUrl }) => {
-  const [filterRange, setFilterRange] = useState<"today" | "upcoming" | "results">("today");
+export const ScheduleView: React.FC<ScheduleViewProps> = ({
+  schedule,
+  settings,
+  onOpenUrl,
+  onUpdateSettings,
+}) => {
+  const [filterRange, setFilterRange] = useState<"today" | "upcoming" | "results">(() => {
+    const today = new Date().toDateString();
+    const hasTodayMatches = schedule.some((m) => {
+      if (!m.startTimeUtc) return false;
+      return new Date(m.startTimeUtc).toDateString() === today;
+    });
+    return hasTodayMatches ? "today" : "upcoming";
+  });
   const [followedOnly, setFollowedOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [revealedMatchIds, setRevealedMatchIds] = useState<Record<string, boolean>>({});
+
+  const toggleReveal = (matchId: string) => {
+    setRevealedMatchIds((prev) => ({ ...prev, [matchId]: !prev[matchId] }));
+  };
+
+  const toggleTeamFollow = (code: string) => {
+    if (!onUpdateSettings || !code) return;
+    const isFollowed = settings.followedTeams.includes(code);
+    const next = isFollowed
+      ? settings.followedTeams.filter((t) => t !== code)
+      : [...settings.followedTeams, code];
+    onUpdateSettings({ followedTeams: next });
+  };
 
   const now = new Date();
   const todayStr = now.toDateString();
@@ -109,6 +136,11 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ schedule, settings, 
               ? new Date(m.startTimeUtc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
               : "--:--";
 
+            const isT1Followed = settings.followedTeams.includes(m.team1Code);
+            const isT2Followed = settings.followedTeams.includes(m.team2Code);
+            const isRevealed = !!revealedMatchIds[m.matchId];
+            const showScore = m.state === "completed" && (!settings.spoilerMode || isRevealed);
+
             return (
               <div
                 key={m.matchId}
@@ -122,24 +154,72 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ schedule, settings, 
 
                 {/* Teams & Score */}
                 <div className="flex items-center justify-center gap-4 flex-1">
-                  <div className="flex items-center gap-2 w-32 justify-end text-right">
+                  {/* Team 1 */}
+                  <div className="flex items-center gap-1.5 w-36 justify-end text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTeamFollow(m.team1Code);
+                      }}
+                      className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
+                        isT1Followed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                      }`}
+                      title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${isT1Followed ? "fill-[#c8aa6e]" : ""}`} />
+                    </button>
                     <span className="text-xs font-bold text-[#f0e6d2]">{m.team1Code}</span>
                     {m.team1Image && <img src={m.team1Image} alt="" className="w-5 h-5 object-contain" />}
                   </div>
 
-                  <div className="font-mono font-bold text-xs px-2 text-[#7e8e9f]">
-                    {m.state === "completed" && !settings.spoilerMode ? (
-                      <span className="text-[#f0e6d2]">
-                        {m.team1Score} : {m.team2Score}
-                      </span>
+                  {/* Score / VS Center with Per-Match Reveal */}
+                  <div className="font-mono font-bold text-xs px-2 flex items-center justify-center min-w-[70px]">
+                    {showScore ? (
+                      <div
+                        onClick={() => settings.spoilerMode && toggleReveal(m.matchId)}
+                        className={`text-xs ${
+                          settings.spoilerMode
+                            ? "cursor-pointer hover:text-[#c8aa6e] bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]"
+                            : ""
+                        }`}
+                        title={settings.spoilerMode ? "Click to re-hide score" : undefined}
+                      >
+                        <span className="text-[#f0e6d2]">
+                          {m.team1Score} : {m.team2Score}
+                        </span>
+                      </div>
+                    ) : m.state === "completed" && settings.spoilerMode ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleReveal(m.matchId)}
+                        className="text-[11px] px-2 py-0.5 rounded bg-[#091428] border border-[#1e282d] text-[#7e8e9f] hover:text-[#c8aa6e] hover:border-[#c8aa6e]/60 transition-colors cursor-pointer"
+                        title="Click to reveal final score"
+                      >
+                        Reveal
+                      </button>
                     ) : (
-                      <span>VS</span>
+                      <span className="text-[#7e8e9f]">VS</span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 w-32 justify-start text-left">
+                  {/* Team 2 */}
+                  <div className="flex items-center gap-1.5 w-36 justify-start text-left">
                     {m.team2Image && <img src={m.team2Image} alt="" className="w-5 h-5 object-contain" />}
                     <span className="text-xs font-bold text-[#f0e6d2]">{m.team2Code}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTeamFollow(m.team2Code);
+                      }}
+                      className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
+                        isT2Followed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                      }`}
+                      title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${isT2Followed ? "fill-[#c8aa6e]" : ""}`} />
+                    </button>
                   </div>
                 </div>
 

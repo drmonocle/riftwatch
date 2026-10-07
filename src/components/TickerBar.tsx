@@ -138,6 +138,13 @@ export const TickerBar: React.FC<TickerBarProps> = ({
       data-tauri-drag-region
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onDoubleClick={() => {
+        if (isDetached) {
+          import("@tauri-apps/api/core")
+            .then(({ invoke }) => invoke("show_main").catch(() => {}))
+            .catch(() => {});
+        }
+      }}
       className={`select-none flex items-center justify-between text-xs px-3 py-1 transition-colors ${
         isDetached
           ? "bg-[#080c14] border border-[#c8aa6e]/60 shadow-2xl h-[38px] w-full"

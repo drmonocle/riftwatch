@@ -159,6 +159,50 @@ export default function App() {
     }
   }, []);
 
+  // Desktop keyboard shortcuts (F5, Ctrl+R, Ctrl+1..6, Ctrl+S, Ctrl+D)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing in an input
+      if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+
+      if (e.key === "F5" || (e.ctrlKey && e.key.toLowerCase() === "r")) {
+        e.preventDefault();
+        refreshData(true);
+      } else if (e.ctrlKey && e.key === "1") {
+        e.preventDefault();
+        setActiveTab("live");
+      } else if (e.ctrlKey && e.key === "2") {
+        e.preventDefault();
+        setActiveTab("schedule");
+      } else if (e.ctrlKey && e.key === "3") {
+        e.preventDefault();
+        setActiveTab("stream");
+      } else if (e.ctrlKey && e.key === "4") {
+        e.preventDefault();
+        setActiveTab("watchlist");
+      } else if (e.ctrlKey && e.key === "5") {
+        e.preventDefault();
+        setActiveTab("news");
+      } else if (e.ctrlKey && e.key === "6") {
+        e.preventDefault();
+        setActiveTab("settings");
+      } else if (e.ctrlKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        handleUpdateSettings({ spoilerMode: !settingsRef.current.spoilerMode });
+      } else if (e.ctrlKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        handleUpdateSettings({
+          tickerMode: settingsRef.current.tickerMode === "detached" ? "docked" : "detached",
+        });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleUpdateSettings, refreshData]);
+
   // The HUD window only needs to poll while it is actually the active ticker.
   const pollingActive = !IS_HUD_WINDOW || settings.tickerMode === "detached";
 
@@ -402,10 +446,16 @@ export default function App() {
             settings={settings}
             onOpenUrl={handleOpenUrl}
             onSelectTab={setActiveTab}
+            onUpdateSettings={handleUpdateSettings}
           />
         )}
         {activeTab === "schedule" && (
-          <ScheduleView schedule={schedule} settings={settings} onOpenUrl={handleOpenUrl} />
+          <ScheduleView
+            schedule={schedule}
+            settings={settings}
+            onOpenUrl={handleOpenUrl}
+            onUpdateSettings={handleUpdateSettings}
+          />
         )}
         {activeTab === "stream" && (
           <StreamView

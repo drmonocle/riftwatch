@@ -12,6 +12,8 @@ src-tauri/target/
 src-tauri/gen/schemas/
 .xwin-cache/
 release/
+*.exe
+*.zip
 
 # Python & Legacy
 __pycache__/

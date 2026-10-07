@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Match, AppSettings } from "../../types";
-import { Tv, ExternalLink, Calendar, Clock, ChevronRight } from "lucide-react";
+import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star } from "lucide-react";
 
 interface LiveViewProps {
   matches: Match[];
@@ -8,6 +8,7 @@ interface LiveViewProps {
   settings: AppSettings;
   onOpenUrl: (url: string) => void;
   onSelectTab: (tab: any) => void;
+  onUpdateSettings?: (s: Partial<AppSettings>) => void;
 }
 
 // Live ticking countdown hook
@@ -98,7 +99,23 @@ export const LiveView: React.FC<LiveViewProps> = ({
   settings,
   onOpenUrl,
   onSelectTab,
+  onUpdateSettings,
 }) => {
+  const [revealedMatchIds, setRevealedMatchIds] = useState<Record<string, boolean>>({});
+
+  const toggleReveal = (matchId: string) => {
+    setRevealedMatchIds((prev) => ({ ...prev, [matchId]: !prev[matchId] }));
+  };
+
+  const toggleTeamFollow = (code: string) => {
+    if (!onUpdateSettings || !code) return;
+    const isFollowed = settings.followedTeams.includes(code);
+    const next = isFollowed
+      ? settings.followedTeams.filter((t) => t !== code)
+      : [...settings.followedTeams, code];
+    onUpdateSettings({ followedTeams: next });
+  };
+
   const now = Date.now();
   const unstarted = schedule
     .filter((m) => {
@@ -156,7 +173,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
           </h2>
           {settings.spoilerMode && (
             <span className="text-[10px] text-[#c8aa6e] bg-[#c8aa6e]/10 border border-[#c8aa6e]/30 px-2 py-0.5 rounded">
-              SPOILER MODE ACTIVE
+              SPOILER MODE ACTIVE · CLICK SCORE TO REVEAL
             </span>
           )}
         </div>
@@ -165,6 +182,8 @@ export const LiveView: React.FC<LiveViewProps> = ({
           {matches.map((m) => {
             const isT1Followed = settings.followedTeams.includes(m.team1Code);
             const isT2Followed = settings.followedTeams.includes(m.team2Code);
+            const isRevealed = !!revealedMatchIds[m.matchId];
+            const showScore = !settings.spoilerMode || isRevealed;
 
             return (
               <div
@@ -188,7 +207,22 @@ export const LiveView: React.FC<LiveViewProps> = ({
                   {/* Team 1 */}
                   <div className="col-span-2 flex items-center justify-end gap-3 text-right">
                     <div>
-                      <div className="font-bold text-base text-[#f0e6d2]">{m.team1Name}</div>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTeamFollow(m.team1Code);
+                          }}
+                          className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
+                            isT1Followed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                          }`}
+                          title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${isT1Followed ? "fill-[#c8aa6e]" : ""}`} />
+                        </button>
+                        <span className="font-bold text-base text-[#f0e6d2]">{m.team1Name}</span>
+                      </div>
                       <div className="text-[11px] text-[#7e8e9f] font-mono">{m.team1Code}</div>
                     </div>
                     {m.team1Image ? (
@@ -200,18 +234,39 @@ export const LiveView: React.FC<LiveViewProps> = ({
                     )}
                   </div>
 
-                  {/* Score Center */}
-                  <div className="col-span-1 text-center font-bold font-mono">
-                    {settings.spoilerMode ? (
-                      <div className="text-xs text-[#7e8e9f] bg-[#091428] py-1 px-2 rounded border border-[#1e282d]">
-                        VS
+                  {/* Score Center (Interactive with Per-Match Reveal) */}
+                  <div className="col-span-1 text-center font-bold font-mono flex flex-col items-center justify-center">
+                    {showScore ? (
+                      <div
+                        onClick={() => settings.spoilerMode && toggleReveal(m.matchId)}
+                        className={`text-2xl text-[#f0e6d2] ${
+                          settings.spoilerMode ? "cursor-pointer group flex flex-col items-center" : ""
+                        }`}
+                        title={settings.spoilerMode ? "Click to re-hide score" : undefined}
+                      >
+                        <div>
+                          <span className="text-[#0ac8b9]">{m.team1Score}</span>
+                          <span className="text-[#7e8e9f] mx-2">:</span>
+                          <span className="text-[#e84057]">{m.team2Score}</span>
+                        </div>
+                        {settings.spoilerMode && (
+                          <span className="text-[9px] text-[#7e8e9f] opacity-70 group-hover:opacity-100 font-sans tracking-tight">
+                            Revealed (hide)
+                          </span>
+                        )}
                       </div>
                     ) : (
-                      <div className="text-2xl text-[#f0e6d2]">
-                        <span className="text-[#0ac8b9]">{m.team1Score}</span>
-                        <span className="text-[#7e8e9f] mx-2">:</span>
-                        <span className="text-[#e84057]">{m.team2Score}</span>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleReveal(m.matchId)}
+                        className="text-xs text-[#7e8e9f] bg-[#091428] hover:bg-[#121e2d] hover:text-[#c8aa6e] py-1 px-2.5 rounded border border-[#1e282d] hover:border-[#c8aa6e]/50 transition-all cursor-pointer flex flex-col items-center gap-0.5 group"
+                        title="Click to reveal live score for this match"
+                      >
+                        <span className="font-bold">VS</span>
+                        <span className="text-[9px] text-[#7e8e9f] group-hover:text-[#c8aa6e]">
+                          Reveal
+                        </span>
+                      </button>
                     )}
                   </div>
 
@@ -225,7 +280,22 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       </div>
                     )}
                     <div>
-                      <div className="font-bold text-base text-[#f0e6d2]">{m.team2Name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-base text-[#f0e6d2]">{m.team2Name}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTeamFollow(m.team2Code);
+                          }}
+                          className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
+                            isT2Followed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                          }`}
+                          title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${isT2Followed ? "fill-[#c8aa6e]" : ""}`} />
+                        </button>
+                      </div>
                       <div className="text-[11px] text-[#7e8e9f] font-mono">{m.team2Code}</div>
                     </div>
                   </div>
@@ -306,8 +376,35 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       {nextMatch.team1Code.slice(0, 3)}
                     </div>
                   )}
-                  <div className="font-bold text-base sm:text-lg text-[#f0e6d2] truncate w-full">
-                    {nextMatch.team1Name}
+                  <div className="flex items-center justify-center gap-1.5 w-full">
+                    <span className="font-bold text-base sm:text-lg text-[#f0e6d2] truncate">
+                      {nextMatch.team1Name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTeamFollow(nextMatch!.team1Code);
+                      }}
+                      className={`p-1 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
+                        settings.followedTeams.includes(nextMatch.team1Code)
+                          ? "text-[#c8aa6e]"
+                          : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                      }`}
+                      title={
+                        settings.followedTeams.includes(nextMatch.team1Code)
+                          ? `Unfollow ${nextMatch.team1Code}`
+                          : `Follow ${nextMatch.team1Code}`
+                      }
+                    >
+                      <Star
+                        className={`w-3.5 h-3.5 ${
+                          settings.followedTeams.includes(nextMatch.team1Code)
+                            ? "fill-[#c8aa6e]"
+                            : ""
+                        }`}
+                      />
+                    </button>
                   </div>
                   <div className="text-xs text-[#7e8e9f] font-mono">{nextMatch.team1Code}</div>
                 </div>
@@ -332,8 +429,35 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       {nextMatch.team2Code.slice(0, 3)}
                     </div>
                   )}
-                  <div className="font-bold text-base sm:text-lg text-[#f0e6d2] truncate w-full">
-                    {nextMatch.team2Name}
+                  <div className="flex items-center justify-center gap-1.5 w-full">
+                    <span className="font-bold text-base sm:text-lg text-[#f0e6d2] truncate">
+                      {nextMatch.team2Name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTeamFollow(nextMatch!.team2Code);
+                      }}
+                      className={`p-1 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
+                        settings.followedTeams.includes(nextMatch.team2Code)
+                          ? "text-[#c8aa6e]"
+                          : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                      }`}
+                      title={
+                        settings.followedTeams.includes(nextMatch.team2Code)
+                          ? `Unfollow ${nextMatch.team2Code}`
+                          : `Follow ${nextMatch.team2Code}`
+                      }
+                    >
+                      <Star
+                        className={`w-3.5 h-3.5 ${
+                          settings.followedTeams.includes(nextMatch.team2Code)
+                            ? "fill-[#c8aa6e]"
+                            : ""
+                        }`}
+                      />
+                    </button>
                   </div>
                   <div className="text-xs text-[#7e8e9f] font-mono">{nextMatch.team2Code}</div>
                 </div>
@@ -374,9 +498,53 @@ export const LiveView: React.FC<LiveViewProps> = ({
                   <span className="font-bold text-[#0ac8b9] text-[11px] w-20 truncate">
                     {m.leagueName}
                   </span>
-                  <span className="text-[#f0e6d2] font-semibold">
-                    {m.team1Name} vs {m.team2Name}
-                  </span>
+                  <div className="flex items-center gap-1 text-[#f0e6d2] font-semibold">
+                    <span>{m.team1Name}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTeamFollow(m.team1Code);
+                      }}
+                      className={`p-0.5 rounded hover:bg-[#1e282d] ${
+                        settings.followedTeams.includes(m.team1Code) ? "text-[#c8aa6e]" : "text-[#7e8e9f]"
+                      }`}
+                      title={
+                        settings.followedTeams.includes(m.team1Code)
+                          ? `Unfollow ${m.team1Code}`
+                          : `Follow ${m.team1Code}`
+                      }
+                    >
+                      <Star
+                        className={`w-3 h-3 ${
+                          settings.followedTeams.includes(m.team1Code) ? "fill-[#c8aa6e]" : ""
+                        }`}
+                      />
+                    </button>
+                    <span className="text-[#7e8e9f] mx-1">vs</span>
+                    <span>{m.team2Name}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTeamFollow(m.team2Code);
+                      }}
+                      className={`p-0.5 rounded hover:bg-[#1e282d] ${
+                        settings.followedTeams.includes(m.team2Code) ? "text-[#c8aa6e]" : "text-[#7e8e9f]"
+                      }`}
+                      title={
+                        settings.followedTeams.includes(m.team2Code)
+                          ? `Unfollow ${m.team2Code}`
+                          : `Follow ${m.team2Code}`
+                      }
+                    >
+                      <Star
+                        className={`w-3 h-3 ${
+                          settings.followedTeams.includes(m.team2Code) ? "fill-[#c8aa6e]" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
                   <span className="text-[#7e8e9f] text-[11px]">Bo{m.bestOf}</span>
                 </div>
                 <div className="text-[#7e8e9f] font-mono text-[11px]">
