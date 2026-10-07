@@ -45,6 +45,25 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn open_external_url(url: String) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let _ = std::process::Command::new("cmd")
+            .args(["/c", "start", "", &url])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -55,7 +74,8 @@ pub fn run() {
             set_ticker_topmost,
             start_window_drag,
             show_main,
-            quit_app
+            quit_app,
+            open_external_url
         ])
         .setup(|app| {
             let show_i = MenuItem::with_id(app, "show", "Open RiftWatch", true, None::<&str>)?;
@@ -63,8 +83,14 @@ pub fn run() {
             let quit_i = MenuItem::with_id(app, "quit", "Quit RiftWatch", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &hide_i, &quit_i])?;
 
+            let tray_icon = match tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png")) {
+                Ok(img) => Some(img),
+                Err(_) => app.default_window_icon().cloned(),
+            };
+
             let mut builder = TrayIconBuilder::new()
                 .menu(&menu)
+                .tooltip("RiftWatch - LoL Esports Companion")
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
@@ -106,8 +132,8 @@ pub fn run() {
                     }
                 });
 
-            if let Some(icon) = app.default_window_icon() {
-                builder = builder.icon(icon.clone());
+            if let Some(icon) = tray_icon {
+                builder = builder.icon(icon);
             }
 
             let _ = builder.build(app)?;

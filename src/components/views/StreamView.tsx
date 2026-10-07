@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { StreamEvent, AppSettings } from "../../types";
-import { Radio, Play, ExternalLink, Flame, Trophy } from "lucide-react";
+import { Radio, Play, ExternalLink, Flame, Trophy, Clock } from "lucide-react";
 
 interface StreamViewProps {
   events: StreamEvent[];
@@ -9,9 +9,34 @@ interface StreamViewProps {
 }
 
 export const StreamView: React.FC<StreamViewProps> = ({ events, settings, onOpenUrl }) => {
-  const currentEvent = events[0];
-  const upcomingEvents = events.slice(1, 20);
-  const nextBanger = events.find((e) => e.isBanger);
+  const [, setTick] = useState(0);
+
+  // Re-render every 30s to keep relative countdowns fresh
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const now = Date.now();
+  const pastEvents = events.filter((e) => e.utcIso && new Date(e.utcIso).getTime() <= now);
+  const currentEvent = pastEvents.length > 0 ? pastEvents[pastEvents.length - 1] : events[0];
+
+  const upcomingEvents = events.filter((e) => e.utcIso && new Date(e.utcIso).getTime() > now);
+  const displayUpcoming = upcomingEvents.length > 0 ? upcomingEvents.slice(0, 30) : events.slice(1, 31);
+  const nextBanger = upcomingEvents.find((e) => e.isBanger) || events.find((e) => e.isBanger);
+
+  const formatRelativeTime = (utcIso?: string, rawTime?: string): string => {
+    if (!utcIso) return rawTime || "Upcoming";
+    const diffMs = new Date(utcIso).getTime() - Date.now();
+    if (diffMs <= 0) return "Airing Now";
+    const totalSec = Math.floor(diffMs / 1000);
+    const hours = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) return `in ${days}d ${hours % 24}h`;
+    if (hours > 0) return `in ${hours}h ${mins}m`;
+    return `in ${Math.max(1, mins)}m`;
+  };
 
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto overflow-y-auto h-full select-none">
@@ -35,7 +60,9 @@ export const StreamView: React.FC<StreamViewProps> = ({ events, settings, onOpen
 
         {/* Title */}
         <h1 className="text-xl font-bold text-[#f0e6d2] mt-1 mb-1">
-          {currentEvent ? `${currentEvent.event} ${currentEvent.season}: ${currentEvent.stage || "Replay"}` : "League Rebroadcast"}
+          {currentEvent
+            ? `${currentEvent.event} ${currentEvent.season}: ${currentEvent.stage || "Broadcast"}`
+            : "Continuous Tournament Marathon"}
         </h1>
         <p className="text-xs text-[#7e8e9f] mb-4">
           {currentEvent?.team1 && currentEvent?.team2
@@ -44,16 +71,16 @@ export const StreamView: React.FC<StreamViewProps> = ({ events, settings, onOpen
         </p>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => onOpenUrl("https://twitch.tv/lolcontinuous")}
+            onClick={() => onOpenUrl("https://www.twitch.tv/LoLWorldChampionship")}
             className="flex items-center gap-2 px-4 py-2 rounded bg-[#9146ff] hover:bg-[#a970ff] text-white font-bold text-xs transition-colors shadow"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
             <span>Watch on Twitch</span>
           </button>
           <button
-            onClick={() => onOpenUrl("https://youtube.com/@LoLWorldChampionships/live")}
+            onClick={() => onOpenUrl("https://www.youtube.com/@LoLWorldChampionships/live")}
             className="flex items-center gap-2 px-4 py-2 rounded bg-[#cc0000] hover:bg-[#e60000] text-white font-bold text-xs transition-colors shadow"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
@@ -83,23 +110,32 @@ export const StreamView: React.FC<StreamViewProps> = ({ events, settings, onOpen
               </div>
             </div>
           </div>
-          <span className="text-xs text-[#7e8e9f] font-mono">{nextBanger.rawTime || "In rotation"}</span>
+          <span className="text-xs text-[#0ac8b9] font-mono flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {formatRelativeTime(nextBanger.utcIso, nextBanger.rawTime)}
+          </span>
         </div>
       )}
 
       {/* Upcoming Rebroadcasts List */}
       <div>
-        <h3 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider mb-2">
-          Upcoming Marathon Schedule ({upcomingEvents.length})
-        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider">
+            Upcoming Marathon Schedule ({upcomingEvents.length > 0 ? upcomingEvents.length : displayUpcoming.length})
+          </h3>
+          <span className="text-[10px] text-[#7e8e9f]">Next 30 broadcast matches</span>
+        </div>
+
         <div className="space-y-1.5">
-          {upcomingEvents.map((e, idx) => (
+          {displayUpcoming.map((e, idx) => (
             <div
               key={idx}
-              className="flex items-center justify-between bg-[#0a1420] border border-[#1e282d] hover:border-[#0ac8b9] px-4 py-2 rounded text-xs transition-colors"
+              className="flex items-center justify-between bg-[#0a1420] border border-[#1e282d] hover:border-[#0ac8b9] px-4 py-2.5 rounded text-xs transition-colors"
             >
               <div className="flex items-center gap-3">
-                <span className="font-mono text-[#0ac8b9] text-[11px] w-20">{e.rawTime || "Upcoming"}</span>
+                <span className="font-mono text-[#0ac8b9] font-semibold text-[11px] w-24">
+                  {formatRelativeTime(e.utcIso, e.rawTime)}
+                </span>
                 <span className="font-semibold text-[#f0e6d2]">
                   {e.event} {e.season} {e.stage ? `· ${e.stage}` : ""}
                 </span>
@@ -109,11 +145,16 @@ export const StreamView: React.FC<StreamViewProps> = ({ events, settings, onOpen
                   </span>
                 )}
               </div>
-              {e.isBanger && (
-                <span className="text-[10px] font-bold text-[#ff4655] bg-[#ff4655]/10 px-1.5 py-0.5 rounded">
-                  BANGER
+              <div className="flex items-center gap-2">
+                {e.isBanger && (
+                  <span className="text-[10px] font-bold text-[#ff4655] bg-[#ff4655]/10 px-1.5 py-0.5 rounded">
+                    BANGER
+                  </span>
+                )}
+                <span className="text-[10px] text-[#536675] font-mono hidden md:inline">
+                  {e.utcIso ? new Date(e.utcIso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}
                 </span>
-              )}
+              </div>
             </div>
           ))}
         </div>

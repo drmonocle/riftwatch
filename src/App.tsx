@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { AppSettings, Match, StreamEvent } from "./types";
-import { loadSettings, saveSettings, fetchLiveMatches, fetchSchedule, fetchStreamSchedule } from "./api";
+import { AppSettings, Match, StreamEvent, CatalogData } from "./types";
+import {
+  loadSettings,
+  saveSettings,
+  fetchLiveMatches,
+  fetchSchedule,
+  fetchStreamSchedule,
+  loadCatalog,
+  fetchLiveCatalog,
+} from "./api";
 import { Header } from "./components/Header";
 import { Navigation, TabKey } from "./components/Navigation";
 import { TickerBar } from "./components/TickerBar";
@@ -13,6 +21,7 @@ import { SettingsView } from "./components/views/SettingsView";
 
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
+  const [catalog, setCatalog] = useState<CatalogData>(loadCatalog());
 
   // Determine initial tab: on first launch, open directly to Watchlist so users configure their teams
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
@@ -103,8 +112,40 @@ export default function App() {
     }
   }, [settings.tickerTopmost]);
 
+  // Auto-refresh catalog in background if older than 24 hours
+  useEffect(() => {
+    const age = Date.now() - (catalog.updatedAt || 0);
+    if (age > 24 * 60 * 60 * 1000) {
+      fetchLiveCatalog()
+        .then((updated) => setCatalog(updated))
+        .catch(() => {});
+    }
+  }, []);
+
+  const handleRefreshCatalog = async () => {
+    setIsRefreshing(true);
+    try {
+      const updated = await fetchLiveCatalog();
+      setCatalog(updated);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleOpenUrl = (url: string) => {
-    window.open(url, "_blank");
+    try {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => {
+          invoke("open_external_url", { url }).catch(() => {
+            window.open(url, "_blank");
+          });
+        })
+        .catch(() => {
+          window.open(url, "_blank");
+        });
+    } catch {
+      window.open(url, "_blank");
+    }
   };
 
   // If running in detached HUD mode (query parameter ?mode=detached)
@@ -136,6 +177,7 @@ export default function App() {
         onRefresh={refreshData}
         isRefreshing={isRefreshing}
         onSelectTab={setActiveTab}
+        onOpenUrl={handleOpenUrl}
       />
 
       {/* Tab Navigation */}
@@ -172,14 +214,22 @@ export default function App() {
           <StreamView events={streamEvents} settings={settings} onOpenUrl={handleOpenUrl} />
         )}
         {activeTab === "watchlist" && (
-          <WatchlistView settings={settings} onUpdateSettings={handleUpdateSettings} />
+          <WatchlistView
+            settings={settings}
+            catalog={catalog}
+            onUpdateSettings={handleUpdateSettings}
+            onRefreshCatalog={handleRefreshCatalog}
+            isRefreshingCatalog={isRefreshing}
+          />
         )}
         {activeTab === "news" && <NewsView onOpenUrl={handleOpenUrl} />}
         {activeTab === "settings" && (
           <SettingsView
             settings={settings}
+            catalog={catalog}
             onUpdateSettings={handleUpdateSettings}
             onOpenUrl={handleOpenUrl}
+            onRefreshCatalog={handleRefreshCatalog}
           />
         )}
       </main>

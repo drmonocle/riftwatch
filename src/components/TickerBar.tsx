@@ -87,16 +87,20 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 
   // 2. 24/7 continuous stream
   if (streamEvents.length > 0) {
-    const cur = streamEvents[0];
-    items.push({
-      id: `stream-${cur.id}`,
-      badge: "📺 24/7 STREAM",
-      badgeBg: "bg-[#0ac8b9]",
-      badgeFg: "text-[#091428]",
-      headline: `24/7 Marathon: ${cur.event} ${cur.season}`,
-      details: cur.stage ? `${cur.stage} · Airing on Twitch & YouTube` : "Airing on Twitch & YouTube",
-      targetTab: "stream",
-    });
+    const now = Date.now();
+    const past = streamEvents.filter((e) => e.utcIso && new Date(e.utcIso).getTime() <= now);
+    const cur = past.length > 0 ? past[past.length - 1] : streamEvents[0];
+    if (cur) {
+      items.push({
+        id: `stream-${cur.id}`,
+        badge: "📺 24/7 STREAM",
+        badgeBg: "bg-[#0ac8b9]",
+        badgeFg: "text-[#091428]",
+        headline: `24/7 Marathon: ${cur.event} ${cur.season}`,
+        details: cur.stage ? `${cur.stage} · Airing on Twitch & YouTube` : "Airing on Twitch & YouTube",
+        targetTab: "stream",
+      });
+    }
   }
 
   // 3. Upcoming matches
@@ -133,6 +137,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 
   return (
     <div
+      data-tauri-drag-region
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={`select-none flex items-center justify-between text-xs px-3 py-1 transition-colors ${
@@ -144,6 +149,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
       {/* Detached Drag Grip */}
       {isDetached && (
         <div
+          data-tauri-drag-region
           onMouseDown={handleStartDrag}
           className="cursor-move flex items-center justify-center text-[#c8aa6e] hover:text-white mr-2 text-sm select-none px-1.5 py-0.5 rounded hover:bg-[#1e282d] transition-colors"
           title="Click and drag to reposition floating HUD"

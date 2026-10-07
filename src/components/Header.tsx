@@ -10,6 +10,7 @@ interface HeaderProps {
   onRefresh: () => void;
   isRefreshing: boolean;
   onSelectTab: (tab: any) => void;
+  onOpenUrl: (url: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   isRefreshing,
   onSelectTab,
+  onOpenUrl,
 }) => {
   const hasLive = liveMatches.length > 0;
   const firstLive = hasLive ? liveMatches[0] : null;
@@ -30,7 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-4">
         <div className="flex items-baseline gap-1.5 cursor-pointer" onClick={() => onSelectTab("live")}>
           <span className="text-[#c8aa6e] font-bold text-lg tracking-wider">RIFTWATCH</span>
-          <span className="text-[#a09b8c] text-[10px]">v0.3.0</span>
+          <span className="text-[#a09b8c] text-[10px]">v0.3.2</span>
         </div>
 
         {/* Pro Matches Pill */}
@@ -79,16 +81,14 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         {/* Support Ko-Fi */}
-        <a
-          href="https://ko-fi.com/monocleproductions"
-          target="_blank"
-          rel="noreferrer"
+        <button
+          onClick={() => onOpenUrl("https://ko-fi.com/monocle")}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[#720e9e] hover:bg-[#8c19bd] text-white transition-colors"
           title="Support RiftWatch development on Ko-fi"
         >
           <Heart className="w-3.5 h-3.5 fill-current" />
           <span>Support</span>
-        </a>
+        </button>
 
         {/* Refresh Button */}
         <button

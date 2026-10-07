@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AppSettings } from "../../types";
+import { AppSettings, CatalogData } from "../../types";
 import {
   Monitor,
   Bell,
@@ -13,20 +13,27 @@ import {
   Check,
   Globe,
   Radio,
+  Database,
 } from "lucide-react";
 
 interface SettingsViewProps {
   settings: AppSettings;
+  catalog?: CatalogData;
   onUpdateSettings: (s: Partial<AppSettings>) => void;
   onOpenUrl: (url: string) => void;
+  onRefreshCatalog?: () => Promise<void>;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
+  catalog,
   onUpdateSettings,
   onOpenUrl,
+  onRefreshCatalog,
 }) => {
   const [cacheCleared, setCacheCleared] = useState(false);
+  const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
 
   const handleClearCache = () => {
     localStorage.removeItem("riftwatch_settings");
@@ -384,10 +391,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           ))}
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {onRefreshCatalog && (
+            <button
+              onClick={async () => {
+                setIsSyncingCatalog(true);
+                try {
+                  await onRefreshCatalog();
+                  setSyncSuccess(true);
+                  setTimeout(() => setSyncSuccess(false), 2500);
+                } catch {
+                } finally {
+                  setIsSyncingCatalog(false);
+                }
+              }}
+              disabled={isSyncingCatalog}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#0a1420] border border-[#1e282d] hover:border-[#0ac8b9] text-[#f0e6d2] hover:text-[#0ac8b9] transition-colors text-xs font-semibold"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCatalog ? "animate-spin text-[#0ac8b9]" : ""}`} />
+              <span>
+                {isSyncingCatalog
+                  ? "Syncing Global Teams & Rosters…"
+                  : syncSuccess
+                  ? "Catalog Updated!"
+                  : `Sync Directory (${catalog?.teams.length || 778} Teams, ${catalog?.players.length || 4634} Players)`}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={handleClearCache}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#0a1420] border border-[#1e282d] hover:border-[#e84057] text-[#7e8e9f] hover:text-[#e84057] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#0a1420] border border-[#1e282d] hover:border-[#e84057] text-[#7e8e9f] hover:text-[#e84057] transition-colors text-xs"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>{cacheCleared ? "Cache Cleared!" : "Clear Cache"}</span>
@@ -418,7 +452,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Footer */}
       <footer className="pt-2 text-[11px] text-[#7e8e9f] space-y-1">
         <div className="flex items-center justify-between">
-          <div>RiftWatch Desktop v0.3.1 · Rust & Webview2 · MIT License</div>
+          <div>RiftWatch Desktop v0.3.2 · Rust & Webview2 · MIT License</div>
           <button
             onClick={() => onOpenUrl("https://github.com/drmonocle/riftwatch")}
             className="hover:text-[#c8aa6e] underline"

@@ -1,27 +1,46 @@
-import React, { useState } from "react";
-import { AppSettings, PlayerEntry } from "../../types";
-import {
-  MAJOR_REGIONS,
-  DEFAULT_FOLLOWED_REGIONS,
-  POPULAR_TEAMS,
-  POPULAR_PLAYERS,
-  GLOBAL_LEAGUES,
-} from "../../api";
-import { Search, Star, Check, Plus, X, Globe, User, Shield, Trophy } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { AppSettings, CatalogData, CatalogTeam, PlayerEntry, League } from "../../types";
+import { MAJOR_REGIONS, DEFAULT_FOLLOWED_REGIONS, POPULAR_PLAYERS } from "../../api";
+import { Search, Check, Plus, X, Globe, User, Shield, Trophy, RefreshCw } from "lucide-react";
 
 interface WatchlistViewProps {
   settings: AppSettings;
+  catalog: CatalogData;
   onUpdateSettings: (s: Partial<AppSettings>) => void;
+  onRefreshCatalog?: () => Promise<void>;
+  isRefreshingCatalog?: boolean;
 }
 
 type WatchlistSubTab = "teams" | "players" | "regions" | "leagues";
 
-export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdateSettings }) => {
+const MAJOR_LEAGUES_PRIORITY = [
+  "LCK",
+  "LPL",
+  "LEC",
+  "LCS",
+  "WORLDS",
+  "MSI",
+  "FIRST STAND",
+  "LCP",
+  "CBLOL",
+  "EMEA MASTERS",
+  "NACL",
+  "LDL",
+  "LCK CHALLENGERS",
+];
+
+export const WatchlistView: React.FC<WatchlistViewProps> = ({
+  settings,
+  catalog,
+  onUpdateSettings,
+  onRefreshCatalog,
+  isRefreshingCatalog = false,
+}) => {
   const [tab, setTab] = useState<WatchlistSubTab>("teams");
   const [search, setSearch] = useState("");
-  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+  const [expandedTeamSlug, setExpandedTeamSlug] = useState<string | null>(null);
 
-  // Toggle handlers (fast in-place updates)
+  // Toggle handlers (instant in-place updates)
   const toggleTeam = (code: string) => {
     const isFollowed = settings.followedTeams.includes(code);
     const next = isFollowed
@@ -69,46 +88,97 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
     onUpdateSettings({ followedLeagues: merged });
   };
 
-  // Filtered queries
   const q = search.trim().toLowerCase();
 
-  const filteredTeams = POPULAR_TEAMS.filter((t) => {
-    if (!q) return true;
-    return t.code.toLowerCase().includes(q) || t.name.toLowerCase().includes(q) || t.league.toLowerCase().includes(q);
-  });
+  // Filtered TEAMS: searches across all catalog.teams (~778 teams)
+  const filteredTeams = useMemo(() => {
+    const all = catalog.teams || [];
+    if (!q) {
+      // Prioritize teams from major Tier-1 leagues
+      const major = all.filter((t) =>
+        MAJOR_LEAGUES_PRIORITY.some((ml) => t.league.toUpperCase().includes(ml))
+      );
+      // Return top 50 major teams by default
+      return major.length > 0 ? major.slice(0, 50) : all.slice(0, 50);
+    }
+    return all
+      .filter(
+        (t) =>
+          t.code.toLowerCase().includes(q) ||
+          t.name.toLowerCase().includes(q) ||
+          t.league.toLowerCase().includes(q) ||
+          t.region.toLowerCase().includes(q)
+      )
+      .slice(0, 100);
+  }, [catalog.teams, q]);
 
-  const filteredPlayers = POPULAR_PLAYERS.filter((p) => {
-    if (!q) return true;
-    return (
-      p.name.toLowerCase().includes(q) ||
-      p.teamCode.toLowerCase().includes(q) ||
-      p.teamName.toLowerCase().includes(q) ||
-      p.role.toLowerCase().includes(q) ||
-      (p.realName && p.realName.toLowerCase().includes(q))
-    );
-  });
+  // Filtered PLAYERS: searches across all catalog.players (~4,634 players)
+  const filteredPlayers = useMemo(() => {
+    const all = catalog.players || [];
+    if (!q) {
+      // Show followed players first, then famous popular players
+      const followed = all.filter((p) => settings.followedPlayers.includes(p.name));
+      const popularNames = POPULAR_PLAYERS.map((p) => p.name.toLowerCase());
+      const popular = all.filter((p) => popularNames.includes(p.name.toLowerCase()));
+      const combined = [...followed, ...popular.filter((p) => !settings.followedPlayers.includes(p.name))];
+      return combined.length > 0 ? combined.slice(0, 40) : all.slice(0, 40);
+    }
+    return all
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.teamCode.toLowerCase().includes(q) ||
+          p.teamName.toLowerCase().includes(q) ||
+          p.role.toLowerCase().includes(q) ||
+          (p.realName && p.realName.toLowerCase().includes(q))
+      )
+      .slice(0, 100);
+  }, [catalog.players, settings.followedPlayers, q]);
 
-  const filteredRegions = MAJOR_REGIONS.filter((r) => {
-    if (!q) return true;
-    return (
-      r.name.toLowerCase().includes(q) ||
-      r.code.toLowerCase().includes(q) ||
-      r.leagues.some((l) => l.toLowerCase().includes(q))
+  // Filtered REGIONS
+  const filteredRegions = useMemo(() => {
+    if (!q) return MAJOR_REGIONS;
+    return MAJOR_REGIONS.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.code.toLowerCase().includes(q) ||
+        r.leagues.some((l) => l.toLowerCase().includes(q))
     );
-  });
+  }, [q]);
 
-  const filteredLeagues = GLOBAL_LEAGUES.filter((l) => {
-    if (!q) return true;
-    return (
-      l.name.toLowerCase().includes(q) ||
-      l.slug.toLowerCase().includes(q) ||
-      l.region.toLowerCase().includes(q)
+  // Filtered LEAGUES: searches across all catalog.leagues (~51 leagues)
+  const filteredLeagues = useMemo(() => {
+    const all = catalog.leagues || [];
+    if (!q) {
+      // International first, then sorted by region
+      return [...all].sort((a, b) => {
+        const aInt = a.region?.toUpperCase() === "INTERNATIONAL" ? 0 : 1;
+        const bInt = b.region?.toUpperCase() === "INTERNATIONAL" ? 0 : 1;
+        if (aInt !== bInt) return aInt - bInt;
+        return a.name.localeCompare(b.name);
+      });
+    }
+    return all.filter(
+      (l) =>
+        l.name.toLowerCase().includes(q) ||
+        l.slug.toLowerCase().includes(q) ||
+        l.region.toLowerCase().includes(q)
     );
-  });
+  }, [catalog.leagues, q]);
+
+  // Search input placeholder per tab
+  const searchPlaceholder =
+    tab === "teams"
+      ? `Search all ${catalog.teams.length || 778} active teams…`
+      : tab === "players"
+      ? `Search all ${catalog.players.length || 4634} registered pro players…`
+      : tab === "regions"
+      ? "Search regions…"
+      : `Search all ${catalog.leagues.length || 51} Riot leagues…`;
 
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto overflow-y-auto h-full select-none text-xs">
-      {/* Following Summary Header */}
+      {/* Active Watchlist Summary */}
       <div className="p-3 rounded-lg bg-[#0a1420] border border-[#1e282d] space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -120,6 +190,18 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
               {settings.followedRegions.length} regions · {settings.followedLeagues.length} leagues
             </span>
           </div>
+
+          {onRefreshCatalog && (
+            <button
+              onClick={onRefreshCatalog}
+              disabled={isRefreshingCatalog}
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#091428] border border-[#1e282d] text-[10px] text-[#7e8e9f] hover:text-[#0ac8b9] transition-colors"
+              title="Check Riot API for roster transfers, trades, and new leagues"
+            >
+              <RefreshCw className={`w-3 h-3 ${isRefreshingCatalog ? "animate-spin text-[#0ac8b9]" : ""}`} />
+              <span>{isRefreshingCatalog ? "Syncing Directory…" : "Check Roster Updates"}</span>
+            </button>
+          )}
         </div>
 
         {/* Quick-remove chips */}
@@ -164,7 +246,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
         </div>
       </div>
 
-      {/* Sub-tab Navigation & Search Bar */}
+      {/* Sub-tab Navigation & Search */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#1e282d]">
         <div className="flex items-center gap-1 bg-[#0a0e17] p-1 rounded-lg border border-[#1e282d]">
           <button
@@ -208,12 +290,12 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
           </button>
         </div>
 
-        {/* Search input */}
-        <div className="relative w-full sm:w-64">
+        {/* Dynamic Search Input */}
+        <div className="relative w-full sm:w-72">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#7e8e9f]" />
           <input
             type="text"
-            placeholder={`Search ${tab}…`}
+            placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-[#0a1420] border border-[#1e282d] rounded-lg pl-8 pr-3 py-1 text-xs text-[#f0e6d2] focus:outline-none focus:border-[#c8aa6e]"
@@ -224,19 +306,25 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
       {/* 1. TEAMS SUB-TAB */}
       {tab === "teams" && (
         <div className="space-y-3">
-          <div className="text-[11px] text-[#7e8e9f]">
-            Follow pro teams to prioritize their matches on the Live tab, get kickoff notifications, and surface in ticker alerts.
+          <div className="flex items-center justify-between text-[11px] text-[#7e8e9f]">
+            <span>
+              {!q
+                ? `Showing major pro teams (${filteredTeams.length} of ${catalog.teams.length}) · type above to search all teams`
+                : `Found ${filteredTeams.length} teams matching "${q}"`}
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {filteredTeams.map((team) => {
               const isFollowed = settings.followedTeams.includes(team.code);
-              const isExpanded = expandedTeam === team.code;
-              const roster = POPULAR_PLAYERS.filter((p) => p.teamCode === team.code);
+              const isExpanded = expandedTeamSlug === team.slug;
+              const roster = (catalog.players || []).filter(
+                (p) => p.teamSlug === team.slug || p.teamCode === team.code
+              );
 
               return (
                 <div
-                  key={team.code}
+                  key={team.slug}
                   className={`rounded-lg border p-3 transition-all ${
                     isFollowed
                       ? "bg-[#0a1420] border-[#c8aa6e] text-[#f0e6d2]"
@@ -245,22 +333,34 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-[#0a0e17] border border-[#1e282d] flex items-center justify-center font-bold font-mono text-xs text-[#c8aa6e]">
-                        {team.code}
-                      </div>
+                      {team.image ? (
+                        <img
+                          src={team.image}
+                          alt={team.code}
+                          className="w-9 h-9 object-contain rounded bg-[#0a0e17] p-0.5"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-lg bg-[#0a0e17] border border-[#1e282d] flex items-center justify-center font-bold font-mono text-xs text-[#c8aa6e]">
+                          {team.code.slice(0, 3)}
+                        </div>
+                      )}
                       <div>
                         <div className="font-bold text-xs text-[#f0e6d2]">{team.name}</div>
-                        <div className="text-[11px] text-[#7e8e9f]">{team.league}</div>
+                        <div className="text-[11px] text-[#7e8e9f]">
+                          {team.league ? `${team.league} · ` : ""}
+                          {team.code}
+                        </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                       {roster.length > 0 && (
                         <button
-                          onClick={() => setExpandedTeam(isExpanded ? null : team.code)}
+                          onClick={() => setExpandedTeamSlug(isExpanded ? null : team.slug)}
                           className="px-2 py-1 rounded bg-[#091428] border border-[#1e282d] text-[10px] text-[#7e8e9f] hover:text-[#f0e6d2]"
                         >
-                          {isExpanded ? "▲ Roster" : "▼ Roster"}
+                          {isExpanded ? `▲ Roster (${roster.length})` : `▼ Roster (${roster.length})`}
                         </button>
                       )}
 
@@ -278,29 +378,34 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
                     </div>
                   </div>
 
-                  {/* Expanded Roster Preview */}
+                  {/* Expanded Registered Roster */}
                   {isExpanded && roster.length > 0 && (
                     <div className="mt-2.5 pt-2.5 border-t border-[#1e282d] space-y-1">
                       <div className="text-[10px] text-[#7e8e9f] uppercase tracking-wider mb-1">
-                        Active Roster
+                        Active Registered Roster ({roster.length} players)
                       </div>
-                      {roster.map((p) => (
-                        <div key={p.name} className="flex items-center justify-between text-[11px] py-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono px-1 rounded bg-[#0a0e17] text-[#0ac8b9] w-12 text-center">
-                              {p.role}
-                            </span>
-                            <span className="text-[#f0e6d2] font-semibold">{p.name}</span>
-                            {p.realName && <span className="text-[#7e8e9f]">({p.realName})</span>}
+                      {roster.map((p) => {
+                        const isPlayerFollowed = settings.followedPlayers.includes(p.name);
+                        return (
+                          <div key={`${p.teamCode}-${p.name}`} className="flex items-center justify-between text-[11px] py-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono px-1 rounded bg-[#0a0e17] text-[#0ac8b9] w-12 text-center">
+                                {p.role}
+                              </span>
+                              <span className="text-[#f0e6d2] font-semibold">{p.name}</span>
+                              {p.realName && <span className="text-[#7e8e9f]">({p.realName})</span>}
+                            </div>
+                            <button
+                              onClick={() => togglePlayer(p.name)}
+                              className={`text-[10px] font-semibold ${
+                                isPlayerFollowed ? "text-[#0ac8b9]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                              }`}
+                            >
+                              {isPlayerFollowed ? "★ Following" : "☆ Follow"}
+                            </button>
                           </div>
-                          <button
-                            onClick={() => togglePlayer(p.name)}
-                            className="text-[10px] text-[#c8aa6e] hover:underline"
-                          >
-                            {settings.followedPlayers.includes(p.name) ? "★ Following" : "☆ Follow"}
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -313,8 +418,12 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
       {/* 2. PLAYERS SUB-TAB */}
       {tab === "players" && (
         <div className="space-y-3">
-          <div className="text-[11px] text-[#7e8e9f]">
-            Follow individual pro players (Faker, Chovy, Caps, etc.) to trigger alerts whenever they take the stage.
+          <div className="flex items-center justify-between text-[11px] text-[#7e8e9f]">
+            <span>
+              {!q
+                ? `Showing top pro players (${filteredPlayers.length} of ${catalog.players.length}) · type above to search all registered pros`
+                : `Found ${filteredPlayers.length} players matching "${q}"`}
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -323,7 +432,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
 
               return (
                 <div
-                  key={player.name}
+                  key={`${player.teamCode}-${player.name}`}
                   onClick={() => togglePlayer(player.name)}
                   className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
                     isFollowed
@@ -376,7 +485,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-[11px] text-[#7e8e9f]">
-              Follow competitive ecosystems to track all tournaments and league games in those regions. All 7 regions default selected.
+              Follow competitive ecosystems to track all tournaments and league games in those regions. All 7 major regions are enabled by default.
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -444,7 +553,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-[11px] text-[#7e8e9f]">
-              Matches from followed leagues appear in filtered schedule and live displays.
+              Tracking all {catalog.leagues.length || 51} global Riot leagues. Followed leagues appear in filtered schedules and live notifications.
             </div>
             <button
               onClick={followInternationalEvents}
@@ -469,12 +578,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({ settings, onUpdate
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-[#0a0e17] border border-[#1e282d] flex items-center justify-center font-bold text-xs text-[#0ac8b9]">
-                      <Trophy className="w-4 h-4" />
-                    </div>
+                    {league.image ? (
+                      <img
+                        src={league.image}
+                        alt={league.name}
+                        className="w-8 h-8 object-contain rounded bg-[#0a0e17] p-0.5"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-[#0a0e17] border border-[#1e282d] flex items-center justify-center font-bold text-xs text-[#0ac8b9]">
+                        <Trophy className="w-4 h-4" />
+                      </div>
+                    )}
                     <div>
                       <div className="font-semibold text-xs text-[#f0e6d2]">{league.name}</div>
-                      <div className="text-[10px] text-[#7e8e9f] uppercase">{league.region}</div>
+                      <div className="text-[10px] text-[#7e8e9f] uppercase">{league.region || "Global"}</div>
                     </div>
                   </div>
 

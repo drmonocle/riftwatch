@@ -109,7 +109,25 @@ export interface PlayerEntry {
   role: string;
   teamCode: string;
   teamName: string;
+  teamSlug?: string;
   realName?: string;
+  image?: string;
+}
+
+export interface CatalogTeam {
+  slug: string;
+  code: string;
+  name: string;
+  league: string;
+  region: string;
+  image?: string;
+}
+
+export interface CatalogData {
+  teams: CatalogTeam[];
+  players: PlayerEntry[];
+  leagues: League[];
+  updatedAt: number;
 }
 
 export interface AppSettings {
