@@ -399,9 +399,9 @@ class RiftScoutApp:
         url = (match.get("stream_url") or "").strip()
         if not url:
             league = match.get("league_name") or match.get("league_slug") or "LoL Esports"
-            t1 = match.get("team1_name") or match.get("team1_code") or ""
-            t2 = match.get("team2_name") or match.get("team2_code") or ""
-            query = f"LoL Esports {league} {t1} vs {t2}".strip()
+            t1 = match.get("team1_code") or match.get("team1_name") or ""
+            t2 = match.get("team2_code") or match.get("team2_name") or ""
+            query = f"{league} {t1} vs {t2} live".strip()
             import urllib.parse
             url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"
         self.open_url(url)

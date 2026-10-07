@@ -84,13 +84,26 @@ def _team(t: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _stream_url(streams: List[Dict[str, Any]]) -> str:
-    """Prefer an English Twitch/YouTube stream, then any Twitch/YouTube stream."""
+    """Prefer an English Twitch/YouTube stream, then any Twitch/YouTube stream, then any official provider stream."""
     def url(s):
-        p, param = s.get("provider"), s.get("parameter", "")
-        if p == "twitch" and param:
+        p = (s.get("provider") or "").lower().strip()
+        param = (s.get("parameter") or "").strip()
+        if not param:
+            return ""
+        if p == "twitch":
             return f"https://www.twitch.tv/{param}"
-        if p == "youtube" and param:
+        if p == "youtube":
             return f"https://www.youtube.com/watch?v={param}"
+        if p in ("afreecatv", "afreeca", "soop"):
+            return f"https://play.sooplive.co.kr/{param}"
+        if p == "bilibili":
+            return f"https://live.bilibili.com/{param}"
+        if p == "huya":
+            return f"https://www.huya.com/{param}"
+        if p == "chzzk":
+            return f"https://chzzk.naver.com/live/{param}"
+        if p == "trovo":
+            return f"https://trovo.live/s/{param}"
         return ""
     english = [s for s in streams if (s.get("locale") or "").startswith("en")]
     for s in english + list(streams):

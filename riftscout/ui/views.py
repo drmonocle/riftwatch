@@ -295,10 +295,10 @@ class LiveView(View):
         bottom = tk.Frame(c, bg=C.COLOR_SURFACE)
         bottom.pack(fill="x", padx=px(14), pady=(px(4), px(12)))
         cards.reason_chips(bottom, reasons).pack(side="left")
-        button(bottom, "▶ Watch live", lambda: a.watch(m), bg=C.COLOR_LIVE, fg="white",
+        button(bottom, "▶ Watch live", lambda m=m: a.watch(m), bg=C.COLOR_LIVE, fg="white",
                hover_bg="#ff5b70").pack(side="right")
         if hidden:
-            button(bottom, "Reveal scores", lambda: a.reveal(m["match_id"]), size=8, bold=False,
+            button(bottom, "Reveal scores", lambda mid=m["match_id"]: a.reveal(mid), size=8, bold=False,
                    fg=C.COLOR_TEXT_MUTED).pack(side="right", padx=px(8))
 
     def _stats_panel(self, parent, m, st, hidden: bool, binding: Optional[_LiveCardBinding] = None) -> None:

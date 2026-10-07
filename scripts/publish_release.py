@@ -34,13 +34,11 @@ def main():
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel & 24/7 Stream Companion
 
 ### ✨ What's New & Refined in {version}
-* **Instant Lightweight Schedule Range Switching (Zero Mouse Drag):**
-  * **Decoupled Mouse Input Queue:** Schedule filter clicks (Upcoming, Today, Results) now update button highlight state instantaneously (< 0.1ms tactile feedback) and decouple view rendering via `after(1, self.render)`, releasing the Windows mouse capture lock immediately. Mouse click latency dropped from 221ms to 0.58ms (380x improvement).
-  * **Deferred Widget Destruction in ScrollFrame:** Switched `ScrollFrame.keep_scroll()` to non-blocking idle destruction (`after_idle(_safe_destroy, old_body)`), eradicating the synchronous 115ms Tcl/Tk GDI deallocation stall.
-  * **Eliminated Blocking Layout Recalculation:** Removed synchronous `new_body.update_idletasks()` inside the double-buffered scrollframe swap, letting Windows and Tk layout items naturally on the idle queue with zero thread stalls and zero white flashes.
-  * **Streamlined Lightweight Card Architecture:** Flattened match row frames in `cards.py` from nested frames (`outer_card` + `c`) to single highlight-bordered surface frames, reducing container allocations and hierarchy depth.
-  * **Direct Cached Logo Label Construction:** In `cards.logo()`, labels with cached team icons are now initialized with `image=photo` directly in the constructor, eliminating 50+ redundant `.configure()` roundtrips per render.
-  * **Decoupled Watchlist Modebar:** Switching between Teams, Players, Regions, and Leagues on the Watchlist tab now updates buttons immediately and renders via `after(1, ...)` for seamless, snappy navigation.
+* **Comprehensive Live Information Audit & Official Stream Routing:**
+  * **International Streaming Provider Ingestion:** Expanded `_stream_url()` to recognize and parse official broadcast providers from Riot's live match feeds: **SOOP / AfreecaTV** (`play.sooplive.co.kr`), **Bilibili** (`live.bilibili.com`), **Huya** (`huya.com`), **Chzzk** (`chzzk.naver.com`), and **Trovo**.
+  * **DCGI / Global Invitational Stream Resolution:** The live Demacia Cup Global Invitational (DCGI) match between Shopify Rebellion and FlyQuest now resolves directly to its official Korean live broadcast (`https://play.sooplive.co.kr/aflol`) rather than an empty stream URL.
+  * **Accurate Fallback Search Routing:** When stream links are absent, the YouTube search fallback now constructs a targeted query (`{league} {team1} vs {team2} live`) ensuring precise search results for all tournaments (e.g. `DCGI SR vs FLY live`).
+  * **Guaranteed Closure Safety in LiveView:** Bound `▶ Watch live` and `Reveal scores` button lambdas to explicit default values (`m=m`, `mid=m['match_id']`), preventing closure reference leaks across multi-match broadcasts.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`
