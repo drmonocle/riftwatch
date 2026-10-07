@@ -277,7 +277,14 @@ fn is_another_instance_running() -> bool {
                 .encode_wide()
                 .chain(std::iter::once(0))
                 .collect();
-            let hwnd = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
+            let mut hwnd = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
+            if hwnd.is_null() {
+                let win_title2: Vec<u16> = OsStr::new("RiftWatch - LoL Esports Companion")
+                    .encode_wide()
+                    .chain(std::iter::once(0))
+                    .collect();
+                hwnd = unsafe { FindWindowW(std::ptr::null(), win_title2.as_ptr()) };
+            }
             if !hwnd.is_null() {
                 unsafe {
                     ShowWindow(hwnd, SW_RESTORE);
