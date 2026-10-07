@@ -70,3 +70,79 @@ export function nextUpcomingMatches(
   const rest = future.filter((m) => !mineIds.has(m.matchId)).slice(0, limit - mine.length);
   return [...mine, ...rest].sort((a, b) => ts(a.startTimeUtc) - ts(b.startTimeUtc));
 }
+
+export interface BroadcastStream {
+  name: string;
+  url: string;
+  icon: "twitch" | "youtube" | "riot" | "soop" | "bilibili" | "generic";
+  badge?: string;
+}
+
+/**
+ * Returns the official broadcast destinations for a given league slug,
+ * including Riot's direct live stream URL if available.
+ */
+export function getLeagueBroadcastStreams(
+  leagueSlug?: string,
+  riotStreamUrl?: string
+): BroadcastStream[] {
+  const streams: BroadcastStream[] = [];
+
+  // If Riot's live API provided a direct active stream link, prioritize it
+  if (riotStreamUrl && riotStreamUrl.trim()) {
+    streams.push({
+      name: "Watch Live",
+      url: riotStreamUrl.trim(),
+      icon: "riot",
+      badge: "LIVE FEED",
+    });
+  }
+
+  const slug = (leagueSlug || "").toLowerCase();
+  if (slug.includes("lck")) {
+    streams.push(
+      { name: "LCK Twitch", url: "https://www.twitch.tv/lck", icon: "twitch" },
+      { name: "LCK YouTube", url: "https://www.youtube.com/@LCKglobal/live", icon: "youtube" },
+      { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
+    );
+  } else if (slug.includes("lpl")) {
+    streams.push(
+      { name: "LPL Twitch", url: "https://www.twitch.tv/lpl", icon: "twitch" },
+      { name: "LPL YouTube", url: "https://www.youtube.com/@LPL/live", icon: "youtube" },
+      { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
+    );
+  } else if (slug.includes("lec")) {
+    streams.push(
+      { name: "LEC Twitch", url: "https://www.twitch.tv/lec", icon: "twitch" },
+      { name: "LEC YouTube", url: "https://www.youtube.com/@LEC/live", icon: "youtube" },
+      { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
+    );
+  } else if (slug.includes("lcs")) {
+    streams.push(
+      { name: "LCS Twitch", url: "https://www.twitch.tv/lcs", icon: "twitch" },
+      { name: "LCS YouTube", url: "https://www.youtube.com/@LCS/live", icon: "youtube" },
+      { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
+    );
+  } else if (slug.includes("lcp") || slug.includes("pacific") || slug.includes("pcs")) {
+    streams.push(
+      { name: "LCP Twitch", url: "https://www.twitch.tv/lolesportspacific", icon: "twitch" },
+      { name: "LCP YouTube", url: "https://www.youtube.com/@lolesportspacific/live", icon: "youtube" },
+      { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
+    );
+  } else if (slug.includes("cblol") || slug.includes("brazil")) {
+    streams.push(
+      { name: "CBLOL Twitch", url: "https://www.twitch.tv/cblol", icon: "twitch" },
+      { name: "CBLOL YouTube", url: "https://www.youtube.com/@CBLOLoficial/live", icon: "youtube" },
+      { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
+    );
+  } else {
+    // International tournaments (Worlds, MSI, First Stand) & general default
+    streams.push(
+      { name: "Riot Twitch", url: "https://www.twitch.tv/riotgames", icon: "twitch" },
+      { name: "LoL YouTube", url: "https://www.youtube.com/@lolesports/live", icon: "youtube" },
+      { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
+    );
+  }
+
+  return streams;
+}

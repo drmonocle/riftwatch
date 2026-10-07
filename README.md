@@ -14,7 +14,7 @@ A fast, lightweight Windows desktop app for League of Legends esports. Check liv
 Download the latest version from [**GitHub Releases**](https://github.com/drmonocle/riftwatch/releases):
 
 * 🚀 [**Download RiftWatch.exe**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch.exe) (Portable, ~3.7 MB)
-* 📦 [**Download RiftWatch.zip**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch-v0.3.5-windows-x64.zip) (~1.8 MB)
+* 📦 [**Download RiftWatch.zip**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch-v0.3.6-windows-x64.zip) (~1.8 MB)
 
 > **No installer needed.** Just download and run. It runs on Windows 10 and 11 and uses almost no RAM (~35 MB).
 
@@ -50,6 +50,22 @@ Download the latest version from [**GitHub Releases**](https://github.com/drmono
 * Follow your favorite **Players** (Faker, Chovy, Caps, etc.).
 * Pick which **Regions** and **Leagues** you care about (LCK, LPL, LEC, LCS, Worlds, MSI, etc.). All major regions are turned on by default.
 * Filter schedules so you only see matches for the teams you follow.
+
+### 📅 1-Click Add to Calendar
+* Click the calendar icon next to any upcoming match to export it directly to your calendar!
+* Full support for:
+  - 🌐 **Google Calendar** (opens direct pre-filled web event)
+  - 🍏 **Apple Calendar & Outlook Desktop** (instant `.ics` file download)
+  - 📧 **Outlook.com / Microsoft 365** (opens Outlook web event composer)
+  - 🟣 **Yahoo Calendar** (opens Yahoo event composer)
+* Automatically calculates match durations based on format (Bo1 = 1 hr, Bo3 = 2.5 hrs, Bo5 = 4 hrs).
+
+### 📺 Broadcast Channels & Riot Live Streams
+* Next to the next match you follow, instantly jump to official broadcast streams:
+  - **Twitch** official channels (LCK, LPL, LEC, LCS, RiotGames)
+  - **YouTube Live** official channels (@LCKglobal, @lolesports, etc.)
+  - **LoLEsports.com** official viewer portal with rewards & drops
+  - When matches are in progress, Riot's direct live feed stream URL is automatically provided.
 
 ### 📅 Full Schedule & Results
 * See what's coming up today, this week, or check past results.

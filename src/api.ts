@@ -387,6 +387,7 @@ function scheduleEventsToMatches(rawEvents: any[]): Match[] {
       startTimeUtc: ev.startTime || "",
       state: m.state || (ev.state === "completed" ? "completed" : "unstarted"),
       bestOf: m.strategy?.count || 3,
+      streamUrl: buildStreamUrl(ev.streams),
       team1Code: t1.code || t1.name || "TBD",
       team1Name: t1.name || "TBD",
       team1Image: t1.image,

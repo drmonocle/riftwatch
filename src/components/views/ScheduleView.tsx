@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Match, AppSettings } from "../../types";
 import { Search, Calendar, Star } from "lucide-react";
+import { AddToCalendarMenu } from "../AddToCalendarMenu";
 
 interface ScheduleViewProps {
   schedule: Match[];
@@ -88,7 +89,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               className={`px-3 py-1 text-xs font-semibold rounded transition-all capitalize ${
                 filterRange === r
                   ? "bg-[#c8aa6e] text-[#091428]"
-                  : "text-[#7e8e9f] hover:text-[#f0e6d2] hover:bg-[#121e2d]"
+                  : "text-[#9bb3c9] hover:text-[#f0e6d2] hover:bg-[#121e2d]"
               }`}
             >
               {r}
@@ -103,7 +104,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors ${
               followedOnly
                 ? "bg-[#c8aa6e]/20 border-[#c8aa6e] text-[#c8aa6e]"
-                : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] hover:text-[#f0e6d2]"
+                : "bg-[#0a1420] border-[#1e282d] text-[#9bb3c9] hover:text-[#f0e6d2]"
             }`}
             title="Filter by your followed teams and leagues"
           >
@@ -112,7 +113,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           </button>
 
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#7e8e9f]" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#9bb3c9]" />
             <input
               type="text"
               placeholder="Search team or league…"
@@ -126,7 +127,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
       {/* Match Rows */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 text-[#7e8e9f] text-xs">
+        <div className="text-center py-16 text-[#9bb3c9] text-xs">
           No scheduled matches match your active filters. Try switching tabs or turning off "Followed only".
         </div>
       ) : (
@@ -144,12 +145,15 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             return (
               <div
                 key={m.matchId}
-                className="flex items-center justify-between bg-[#0a1420] border border-[#1e282d] hover:border-[#c8aa6e] px-4 py-2.5 rounded transition-all"
+                className="flex items-center justify-between bg-[#0a1420] border border-[#1e282d] hover:border-[#c8aa6e]/80 px-4 py-2.5 rounded transition-all"
               >
-                {/* Time & League */}
-                <div className="flex items-center gap-3 w-36">
-                  <span className="font-mono text-xs text-[#0ac8b9] font-bold">{timeStr}</span>
-                  <span className="text-[11px] text-[#7e8e9f] truncate">{m.leagueName}</span>
+                {/* Time, Calendar & League */}
+                <div className="flex items-center gap-2 w-44">
+                  <span className="font-mono text-xs text-[#0ac8b9] font-bold shrink-0">{timeStr}</span>
+                  {m.state !== "completed" && (
+                    <AddToCalendarMenu match={m} onOpenUrl={onOpenUrl} compact={true} />
+                  )}
+                  <span className="text-[11px] text-[#9bb3c9] truncate font-medium">{m.leagueName}</span>
                 </div>
 
                 {/* Teams & Score */}
@@ -163,7 +167,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                         toggleTeamFollow(m.team1Code);
                       }}
                       className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
-                        isT1Followed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                        isT1Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                       }`}
                       title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
                     >
@@ -193,13 +197,13 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleReveal(m.matchId)}
-                        className="text-[11px] px-2 py-0.5 rounded bg-[#091428] border border-[#1e282d] text-[#7e8e9f] hover:text-[#c8aa6e] hover:border-[#c8aa6e]/60 transition-colors cursor-pointer"
+                        className="text-[11px] px-2 py-0.5 rounded bg-[#091428] border border-[#1e282d] text-[#9bb3c9] hover:text-[#c8aa6e] hover:border-[#c8aa6e]/60 transition-colors cursor-pointer"
                         title="Click to reveal final score"
                       >
                         Reveal
                       </button>
                     ) : (
-                      <span className="text-[#7e8e9f]">VS</span>
+                      <span className="text-[#9bb3c9] font-medium">VS</span>
                     )}
                   </div>
 
@@ -214,7 +218,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                         toggleTeamFollow(m.team2Code);
                       }}
                       className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
-                        isT2Followed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                        isT2Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                       }`}
                       title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
                     >
@@ -225,11 +229,11 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
                 {/* Status / Best Of */}
                 <div className="flex items-center gap-2 w-28 justify-end">
-                  <span className="text-[10px] text-[#7e8e9f] bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]">
+                  <span className="text-[10px] text-[#9bb3c9] bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d] font-medium">
                     Bo{m.bestOf}
                   </span>
                   {m.state === "completed" ? (
-                    <span className="text-[10px] text-[#7e8e9f] font-semibold">FINAL</span>
+                    <span className="text-[10px] text-[#9bb3c9] font-semibold">FINAL</span>
                   ) : (
                     <span className="text-[10px] text-[#c8aa6e] font-semibold">UPCOMING</span>
                   )}

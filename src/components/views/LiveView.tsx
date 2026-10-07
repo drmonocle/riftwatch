@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Match, AppSettings } from "../../types";
 import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star } from "lucide-react";
+import { AddToCalendarMenu } from "../AddToCalendarMenu";
+import { getLeagueBroadcastStreams } from "../../helpers";
 
 interface LiveViewProps {
   matches: Match[];
@@ -195,7 +197,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                 }`}
               >
                 {/* Card Header: League & Best-of */}
-                <div className="flex items-center justify-between text-xs text-[#7e8e9f] mb-3">
+                <div className="flex items-center justify-between text-xs text-[#9bb3c9] mb-3 font-medium">
                   <span className="font-bold text-[#0ac8b9]">{m.leagueName}</span>
                   <span className="font-medium bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]">
                     Best of {m.bestOf}
@@ -215,7 +217,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                             toggleTeamFollow(m.team1Code);
                           }}
                           className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
-                            isT1Followed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                            isT1Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                           }`}
                           title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
                         >
@@ -223,7 +225,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                         </button>
                         <span className="font-bold text-base text-[#f0e6d2]">{m.team1Name}</span>
                       </div>
-                      <div className="text-[11px] text-[#7e8e9f] font-mono">{m.team1Code}</div>
+                      <div className="text-[11px] text-[#9bb3c9] font-mono font-medium">{m.team1Code}</div>
                     </div>
                     {m.team1Image ? (
                       <img src={m.team1Image} alt={m.team1Code} className="w-10 h-10 object-contain rounded" />
@@ -246,11 +248,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       >
                         <div>
                           <span className="text-[#0ac8b9]">{m.team1Score}</span>
-                          <span className="text-[#7e8e9f] mx-2">:</span>
+                          <span className="text-[#9bb3c9] mx-2">:</span>
                           <span className="text-[#e84057]">{m.team2Score}</span>
                         </div>
                         {settings.spoilerMode && (
-                          <span className="text-[9px] text-[#7e8e9f] opacity-70 group-hover:opacity-100 font-sans tracking-tight">
+                          <span className="text-[9px] text-[#9bb3c9] opacity-80 group-hover:opacity-100 font-sans tracking-tight">
                             Revealed (hide)
                           </span>
                         )}
@@ -259,11 +261,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleReveal(m.matchId)}
-                        className="text-xs text-[#7e8e9f] bg-[#091428] hover:bg-[#121e2d] hover:text-[#c8aa6e] py-1 px-2.5 rounded border border-[#1e282d] hover:border-[#c8aa6e]/50 transition-all cursor-pointer flex flex-col items-center gap-0.5 group"
+                        className="text-xs text-[#9bb3c9] bg-[#091428] hover:bg-[#121e2d] hover:text-[#c8aa6e] py-1 px-2.5 rounded border border-[#1e282d] hover:border-[#c8aa6e]/50 transition-all cursor-pointer flex flex-col items-center gap-0.5 group"
                         title="Click to reveal live score for this match"
                       >
                         <span className="font-bold">VS</span>
-                        <span className="text-[9px] text-[#7e8e9f] group-hover:text-[#c8aa6e]">
+                        <span className="text-[9px] text-[#9bb3c9] group-hover:text-[#c8aa6e]">
                           Reveal
                         </span>
                       </button>
@@ -289,14 +291,14 @@ export const LiveView: React.FC<LiveViewProps> = ({
                             toggleTeamFollow(m.team2Code);
                           }}
                           className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
-                            isT2Followed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                            isT2Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                           }`}
                           title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
                         >
                           <Star className={`w-3.5 h-3.5 ${isT2Followed ? "fill-[#c8aa6e]" : ""}`} />
                         </button>
                       </div>
-                      <div className="text-[11px] text-[#7e8e9f] font-mono">{m.team2Code}</div>
+                      <div className="text-[11px] text-[#9bb3c9] font-mono font-medium">{m.team2Code}</div>
                     </div>
                   </div>
                 </div>
@@ -342,7 +344,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
             <span className="font-bold text-[#c8aa6e] uppercase tracking-wider">
               {nextTag}
             </span>
-            <span className="text-[#7e8e9f]">
+            <span className="text-[#9bb3c9] font-medium">
               {nextMatch.leagueName} {nextMatch.blockName ? `· ${nextMatch.blockName}` : ""}
             </span>
           </div>
@@ -353,7 +355,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
 
             <div className="relative z-10 flex flex-col items-center text-center">
               {/* League & Format Badge */}
-              <div className="flex items-center gap-2 text-xs text-[#7e8e9f] mb-4">
+              <div className="flex items-center gap-2 text-xs text-[#9bb3c9] mb-4 font-medium">
                 <span className="font-semibold text-[#0ac8b9]">{nextMatch.leagueName}</span>
                 <span>·</span>
                 <span className="font-mono bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]">
@@ -389,7 +391,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       className={`p-1 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
                         settings.followedTeams.includes(nextMatch.team1Code)
                           ? "text-[#c8aa6e]"
-                          : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                          : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                       }`}
                       title={
                         settings.followedTeams.includes(nextMatch.team1Code)
@@ -406,12 +408,12 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       />
                     </button>
                   </div>
-                  <div className="text-xs text-[#7e8e9f] font-mono">{nextMatch.team1Code}</div>
+                  <div className="text-xs text-[#9bb3c9] font-mono font-medium">{nextMatch.team1Code}</div>
                 </div>
 
                 {/* VS Center */}
                 <div className="flex flex-col items-center">
-                  <span className="text-xs font-bold text-[#7e8e9f] bg-[#091428] border border-[#1e282d] px-2.5 py-1 rounded-full uppercase tracking-widest font-mono">
+                  <span className="text-xs font-bold text-[#9bb3c9] bg-[#091428] border border-[#1e282d] px-2.5 py-1 rounded-full uppercase tracking-widest font-mono">
                     VS
                   </span>
                 </div>
@@ -442,7 +444,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       className={`p-1 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
                         settings.followedTeams.includes(nextMatch.team2Code)
                           ? "text-[#c8aa6e]"
-                          : "text-[#7e8e9f] hover:text-[#c8aa6e]"
+                          : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                       }`}
                       title={
                         settings.followedTeams.includes(nextMatch.team2Code)
@@ -459,7 +461,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       />
                     </button>
                   </div>
-                  <div className="text-xs text-[#7e8e9f] font-mono">{nextMatch.team2Code}</div>
+                  <div className="text-xs text-[#9bb3c9] font-mono font-medium">{nextMatch.team2Code}</div>
                 </div>
               </div>
 
@@ -468,16 +470,72 @@ export const LiveView: React.FC<LiveViewProps> = ({
                 <div className="text-xl sm:text-2xl font-extrabold text-[#0ac8b9] font-mono tracking-tight animate-pulse">
                   {countdown.formatted || "Calculating…"}
                 </div>
-                <div className="text-xs text-[#7e8e9f] mt-1 flex items-center gap-1.5">
+                <div className="text-xs text-[#9bb3c9] mt-1 flex items-center gap-1.5 font-medium">
                   <Calendar className="w-3.5 h-3.5 text-[#c8aa6e]" />
                   <span>{formatMatchTime(nextMatch.startTimeUtc)}</span>
                 </div>
+
+                {/* Calendar Integration Button */}
+                <div className="mt-3.5 flex items-center justify-center">
+                  <AddToCalendarMenu match={nextMatch} onOpenUrl={onOpenUrl} />
+                </div>
+
+                {/* Official League Broadcast Stream Channels */}
+                {(() => {
+                  const streams = getLeagueBroadcastStreams(nextMatch.leagueSlug, nextMatch.streamUrl);
+                  return (
+                    <div className="mt-4 w-full pt-3 border-t border-[#1e282d]/60">
+                      <div className="text-[10px] font-bold text-[#c8aa6e] uppercase tracking-wider mb-2 flex items-center justify-center gap-1.5">
+                        <Tv className="w-3 h-3 text-[#c8aa6e]" />
+                        <span>Broadcast & Live Stream Channels</span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        {streams.map((s, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => onOpenUrl(s.url)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+                              s.badge === "LIVE FEED"
+                                ? "bg-[#e84057] hover:bg-[#e84057]/90 text-white animate-pulse"
+                                : s.icon === "twitch"
+                                ? "bg-[#9146ff]/20 hover:bg-[#9146ff]/35 border border-[#9146ff]/60 text-[#d8b4fe]"
+                                : s.icon === "youtube"
+                                ? "bg-[#ff0000]/15 hover:bg-[#ff0000]/30 border border-[#ff0000]/50 text-[#fca5a5]"
+                                : "bg-[#091428] hover:bg-[#121e2d] border border-[#0ac8b9]/60 text-[#0ac8b9]"
+                            }`}
+                            title={`Open ${s.name} (${s.url})`}
+                          >
+                            {s.icon === "twitch" && (
+                              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+                              </svg>
+                            )}
+                            {s.icon === "youtube" && (
+                              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                              </svg>
+                            )}
+                            {s.icon === "riot" && !s.badge && (
+                              <Tv className="w-3.5 h-3.5 text-[#0ac8b9]" />
+                            )}
+                            {s.badge && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                            )}
+                            <span>{s.name}</span>
+                            <ExternalLink className="w-3 h-3 opacity-70" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
         </section>
       ) : (
-        <div className="text-center py-8 text-[#7e8e9f] text-xs">
+        <div className="text-center py-8 text-[#9bb3c9] text-xs">
           No upcoming matches found in current schedule window.
         </div>
       )}
@@ -485,14 +543,14 @@ export const LiveView: React.FC<LiveViewProps> = ({
       {/* Coming Up Next (followed upcoming matches) */}
       {comingUp.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-xs font-bold text-[#7e8e9f] uppercase tracking-wider">
+          <h3 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider">
             Coming Up Next
           </h3>
           <div className="grid gap-2">
             {comingUp.map((m) => (
               <div
                 key={m.matchId}
-                className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d] hover:border-[#7e8e9f] transition-all text-xs"
+                className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d] hover:border-[#c8aa6e]/60 transition-all text-xs"
               >
                 <div className="flex items-center gap-3">
                   <span className="font-bold text-[#0ac8b9] text-[11px] w-20 truncate">
@@ -507,7 +565,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                         toggleTeamFollow(m.team1Code);
                       }}
                       className={`p-0.5 rounded hover:bg-[#1e282d] ${
-                        settings.followedTeams.includes(m.team1Code) ? "text-[#c8aa6e]" : "text-[#7e8e9f]"
+                        settings.followedTeams.includes(m.team1Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                       }`}
                       title={
                         settings.followedTeams.includes(m.team1Code)
@@ -521,7 +579,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                         }`}
                       />
                     </button>
-                    <span className="text-[#7e8e9f] mx-1">vs</span>
+                    <span className="text-[#9bb3c9] mx-1">vs</span>
                     <span>{m.team2Name}</span>
                     <button
                       type="button"
@@ -530,7 +588,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                         toggleTeamFollow(m.team2Code);
                       }}
                       className={`p-0.5 rounded hover:bg-[#1e282d] ${
-                        settings.followedTeams.includes(m.team2Code) ? "text-[#c8aa6e]" : "text-[#7e8e9f]"
+                        settings.followedTeams.includes(m.team2Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                       }`}
                       title={
                         settings.followedTeams.includes(m.team2Code)
@@ -545,10 +603,13 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       />
                     </button>
                   </div>
-                  <span className="text-[#7e8e9f] text-[11px]">Bo{m.bestOf}</span>
+                  <span className="text-[#9bb3c9] text-[11px] font-medium">Bo{m.bestOf}</span>
                 </div>
-                <div className="text-[#7e8e9f] font-mono text-[11px]">
-                  {formatMatchTime(m.startTimeUtc)}
+                <div className="flex items-center gap-2">
+                  <AddToCalendarMenu match={m} onOpenUrl={onOpenUrl} compact={true} />
+                  <div className="text-[#9bb3c9] font-mono text-[11px] font-medium">
+                    {formatMatchTime(m.startTimeUtc)}
+                  </div>
                 </div>
               </div>
             ))}
