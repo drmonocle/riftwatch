@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AppSettings, CatalogData } from "../../types";
+import { AppSettings, CatalogData, AppUpdateInfo } from "../../types";
 import {
   Monitor,
   Bell,
@@ -14,6 +14,8 @@ import {
   Globe,
   Radio,
   Database,
+  Sparkles,
+  Download,
 } from "lucide-react";
 import { APP_VERSION } from "../../version";
 import { DEFAULT_FOLLOWED_REGIONS, DEFAULT_FOLLOWED_LEAGUES } from "../../api";
@@ -24,6 +26,9 @@ interface SettingsViewProps {
   onUpdateSettings: (s: Partial<AppSettings>) => void;
   onOpenUrl: (url: string) => void;
   onRefreshCatalog?: () => Promise<void>;
+  updateInfo?: AppUpdateInfo | null;
+  onCheckForUpdate?: () => Promise<void>;
+  isCheckingUpdate?: boolean;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -32,10 +37,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateSettings,
   onOpenUrl,
   onRefreshCatalog,
+  updateInfo,
+  onCheckForUpdate,
+  isCheckingUpdate = false,
 }) => {
   const [cacheCleared, setCacheCleared] = useState(false);
   const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+
+  const handleInstallUpdate = async () => {
+    if (!updateInfo?.downloadUrl) return;
+    setIsInstallingUpdate(true);
+    setInstallError(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("apply_app_update", { downloadUrl: updateInfo.downloadUrl });
+    } catch (err: any) {
+      setIsInstallingUpdate(false);
+      setInstallError(typeof err === "string" ? err : err?.message || "Failed to download update.");
+    }
+  };
 
   const handleClearCache = () => {
     localStorage.removeItem("riftwatch_settings");
@@ -58,6 +81,132 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="p-4 space-y-6 max-w-4xl mx-auto overflow-y-auto h-full select-none text-xs">
+      {/* 0. App Version & Software Updates */}
+      <section className="space-y-3">
+        <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#0ac8b9]" />
+            Software Updates
+          </span>
+          <span className="text-[11px] font-mono text-[#7e8e9f]">Current: v{APP_VERSION}</span>
+        </h2>
+
+        <div
+          className={`p-4 rounded-lg border transition-all ${
+            updateInfo?.hasUpdate
+              ? "bg-[#0c1626] border-[#0ac8b9] shadow-lg shadow-[#0ac8b9]/10"
+              : "bg-[#0a1420] border-[#1e282d]"
+          }`}
+        >
+          {updateInfo?.hasUpdate ? (
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#0ac8b9] text-[#091428] uppercase tracking-wider animate-pulse">
+                      Update Available
+                    </span>
+                    <span className="font-bold text-sm text-[#f0e6d2]">
+                      RiftWatch v{updateInfo.latestVersion}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#c8aa6e] mt-1 font-medium">
+                    {updateInfo.releaseName || `Release v${updateInfo.latestVersion}`}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleInstallUpdate}
+                    disabled={isInstallingUpdate}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-[#0ac8b9] hover:bg-[#0ac8b9]/80 text-[#091428] font-bold text-xs transition-colors shadow disabled:opacity-60"
+                  >
+                    {isInstallingUpdate ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Updating…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Update & Restart Now</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => onOpenUrl(updateInfo.releaseUrl)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#091428] hover:bg-[#121e2d] border border-[#1e282d] hover:border-[#c8aa6e] text-[#f0e6d2] font-semibold text-xs transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-[#7e8e9f]" />
+                    <span>Notes</span>
+                  </button>
+                </div>
+              </div>
+
+              {isInstallingUpdate && (
+                <div className="p-2.5 rounded bg-[#091428] border border-[#0ac8b9]/40 text-[#0ac8b9] text-xs flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                  <span>Downloading latest release binary and replacing executable… RiftWatch will reopen automatically.</span>
+                </div>
+              )}
+
+              {installError && (
+                <div className="p-2.5 rounded bg-[#1e131d] border border-[#e84057]/40 text-[#e84057] text-xs flex items-center justify-between gap-2">
+                  <span>{installError}</span>
+                  <button
+                    onClick={() => onOpenUrl(updateInfo.releaseUrl)}
+                    className="underline text-[11px] hover:text-white"
+                  >
+                    Download manually
+                  </button>
+                </div>
+              )}
+
+              {updateInfo.releaseNotes && (
+                <div className="p-3 rounded bg-[#091428] border border-[#1e282d] text-[11px] text-[#7e8e9f] max-h-24 overflow-y-auto whitespace-pre-line font-mono">
+                  {updateInfo.releaseNotes}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-[#0ac8b9]" />
+                  <span className="font-semibold text-[#f0e6d2] text-xs">
+                    RiftWatch is up to date (v{APP_VERSION})
+                  </span>
+                </div>
+                <div className="text-[11px] text-[#7e8e9f] mt-0.5 ml-6">
+                  You are running the latest version with native single-instance mutex and hotkeys.
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onCheckForUpdate?.()}
+                  disabled={isCheckingUpdate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#091428] hover:bg-[#121e2d] border border-[#1e282d] hover:border-[#c8aa6e] text-[#f0e6d2] font-semibold text-xs transition-colors disabled:opacity-50"
+                  title="Check GitHub Releases for new updates"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? "animate-spin text-[#c8aa6e]" : ""}`} />
+                  <span>{isCheckingUpdate ? "Checking…" : "Check for Updates"}</span>
+                </button>
+
+                <button
+                  onClick={() => onOpenUrl("https://github.com/drmonocle/riftwatch/releases")}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#091428] hover:bg-[#121e2d] border border-[#1e282d] text-[#7e8e9f] hover:text-[#f0e6d2] text-xs transition-colors"
+                  title="View all releases on GitHub"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>All Releases</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
       {/* 1. Display & Live Ticker Bar */}
       <section className="space-y-3">
         <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center gap-1.5">

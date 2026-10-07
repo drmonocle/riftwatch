@@ -147,3 +147,13 @@ export interface AppSettings {
   followedRegions: string[];
 }
 
+export interface AppUpdateInfo {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseName: string;
+  releaseNotes: string;
+  releaseUrl: string;
+  downloadUrl: string;
+  publishedAt: string;
+}

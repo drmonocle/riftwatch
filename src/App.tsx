@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AppSettings, Match, StreamEvent, CatalogData } from "./types";
+import { AppSettings, Match, StreamEvent, CatalogData, AppUpdateInfo } from "./types";
 import {
   loadSettings,
   saveSettings,
@@ -9,8 +9,10 @@ import {
   loadCachedCatalog,
   loadBundledCatalog,
   fetchLiveCatalog,
+  checkForAppUpdate,
   EMPTY_CATALOG,
 } from "./api";
+import { APP_VERSION } from "./version";
 import { Header } from "./components/Header";
 import { Navigation, TabKey } from "./components/Navigation";
 import { TickerBar } from "./components/TickerBar";
@@ -60,6 +62,8 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [syncFailed, setSyncFailed] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   // Sync settings across windows (main window and detached HUD window)
   useEffect(() => {
@@ -202,6 +206,34 @@ export default function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleUpdateSettings, refreshData]);
+
+  // Software update check
+  const handleCheckForUpdate = useCallback(async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const info = await checkForAppUpdate(APP_VERSION);
+      setUpdateInfo(info);
+      if (info?.hasUpdate && settings.notifyKickoff) {
+        import("@tauri-apps/api/core").then(({ invoke }) => {
+          invoke("send_notification", {
+            title: "⚡ RiftWatch Update Available",
+            body: `Version v${info.latestVersion} is now available! Click to update.`,
+          }).catch(() => {});
+        });
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, [settings.notifyKickoff]);
+
+  // Check for updates on startup (main window only, delayed 2.5s)
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    const timer = setTimeout(() => {
+      handleCheckForUpdate();
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [handleCheckForUpdate]);
 
   // The HUD window only needs to poll while it is actually the active ticker.
   const pollingActive = !IS_HUD_WINDOW || settings.tickerMode === "detached";
@@ -419,6 +451,7 @@ export default function App() {
         isRefreshing={isRefreshing}
         onSelectTab={setActiveTab}
         onOpenUrl={handleOpenUrl}
+        updateInfo={updateInfo}
       />
 
       {/* Tab Navigation */}
@@ -482,6 +515,9 @@ export default function App() {
             onUpdateSettings={handleUpdateSettings}
             onOpenUrl={handleOpenUrl}
             onRefreshCatalog={handleRefreshCatalog}
+            updateInfo={updateInfo}
+            onCheckForUpdate={handleCheckForUpdate}
+            isCheckingUpdate={isCheckingUpdate}
           />
         )}
       </main>

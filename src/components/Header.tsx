@@ -1,6 +1,6 @@
 import React from "react";
-import { AppSettings, Match, StreamEvent } from "../types";
-import { Radio, RefreshCw, Eye, EyeOff, Heart } from "lucide-react";
+import { AppSettings, Match, StreamEvent, AppUpdateInfo } from "../types";
+import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles } from "lucide-react";
 import { currentStreamEvent } from "../helpers";
 import { APP_VERSION } from "../version";
 
@@ -13,6 +13,7 @@ interface HeaderProps {
   isRefreshing: boolean;
   onSelectTab: (tab: any) => void;
   onOpenUrl: (url: string) => void;
+  updateInfo?: AppUpdateInfo | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   onSelectTab,
   onOpenUrl,
+  updateInfo,
 }) => {
   const hasLive = liveMatches.length > 0;
   const firstLive = hasLive ? liveMatches[0] : null;
@@ -37,6 +39,18 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-[#c8aa6e] font-bold text-lg tracking-wider">RIFTWATCH</span>
           <span className="text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
         </div>
+
+        {/* Update Notification Pill */}
+        {updateInfo?.hasUpdate && (
+          <button
+            onClick={() => onSelectTab("settings")}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#0ac8b9] text-[#091428] hover:bg-[#0ac8b9]/80 transition-all animate-pulse"
+            title={`New version v${updateInfo.latestVersion} available! Click to update.`}
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>Update v{updateInfo.latestVersion}</span>
+          </button>
+        )}
 
         {/* Pro Matches Pill */}
         <div

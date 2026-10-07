@@ -113,6 +113,108 @@ fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn apply_app_update(app: tauri::AppHandle, download_url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        use std::os::windows::process::CommandExt;
+
+        // Security check: Only allow downloads from official repository releases
+        if !download_url.starts_with("https://github.com/drmonocle/riftwatch/releases/") {
+            return Err("Invalid update source URL. Only official GitHub releases are allowed.".into());
+        }
+
+        let current_exe = std::env::current_exe().map_err(|e| format!("Failed to locate current executable: {}", e))?;
+        let pid = std::process::id();
+
+        let temp_dir = std::env::temp_dir();
+        let new_exe = temp_dir.join("RiftWatch_update.exe");
+
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        const DETACHED_PROCESS: u32 = 0x00000008;
+
+        // Download via Windows native curl.exe with -L for redirects
+        let curl_status = Command::new("curl.exe")
+            .args(["-L", "-s", "-S", "-f", "-o", new_exe.to_str().unwrap(), &download_url])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .map_err(|e| format!("Failed to run download helper: {}", e))?;
+
+        if !curl_status.success() {
+            return Err("Failed to download update binary. Check your network connection.".into());
+        }
+
+        if let Ok(meta) = std::fs::metadata(&new_exe) {
+            if meta.len() < 500_000 {
+                return Err("Downloaded update file is invalid or truncated.".into());
+            }
+        } else {
+            return Err("Downloaded update file not found on disk.".into());
+        }
+
+        let script_path = temp_dir.join("riftwatch_apply_update.cmd");
+        let current_exe_str = current_exe.to_str().unwrap();
+        let new_exe_str = new_exe.to_str().unwrap();
+
+        let script_content = format!(
+            "@echo off\r\n\
+setlocal\r\n\
+set \"OLD_PID={pid}\"\r\n\
+set \"TARGET={current_exe_str}\"\r\n\
+set \"SOURCE={new_exe_str}\"\r\n\
+\r\n\
+for /l %%i in (1,1,20) do (\r\n\
+    tasklist /fi \"PID eq %OLD_PID%\" 2>nul | findstr \"%OLD_PID%\" >nul\r\n\
+    if errorlevel 1 goto :SWAP\r\n\
+    timeout /t 1 /nobreak >nul\r\n\
+)\r\n\
+\r\n\
+:SWAP\r\n\
+powershell -NoProfile -Command \"Unblock-File -LiteralPath '%SOURCE%'\" 2>nul\r\n\
+\r\n\
+for /l %%i in (1,1,10) do (\r\n\
+    move /y \"%TARGET%\" \"%TARGET%.bak\" >nul 2>nul\r\n\
+    copy /y \"%SOURCE%\" \"%TARGET%\" >nul 2>nul\r\n\
+    if exist \"%TARGET%\" (\r\n\
+        del /f /q \"%TARGET%.bak\" >nul 2>nul\r\n\
+        del /f /q \"%SOURCE%\" >nul 2>nul\r\n\
+        goto :LAUNCH\r\n\
+    )\r\n\
+    timeout /t 1 /nobreak >nul\r\n\
+)\r\n\
+\r\n\
+if not exist \"%TARGET%\" if exist \"%TARGET%.bak\" move /y \"%TARGET%.bak\" \"%TARGET%\" >nul 2>nul\r\n\
+goto :DONE\r\n\
+\r\n\
+:LAUNCH\r\n\
+start \"\" \"%TARGET%\"\r\n\
+\r\n\
+:DONE\r\n\
+del /f /q \"%~f0\" >nul 2>nul\r\n\
+exit\r\n",
+            pid = pid,
+            current_exe_str = current_exe_str,
+            new_exe_str = new_exe_str
+        );
+
+        std::fs::write(&script_path, script_content).map_err(|e| format!("Failed to write update script: {}", e))?;
+
+        Command::new("cmd.exe")
+            .args(["/c", script_path.to_str().unwrap()])
+            .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+            .spawn()
+            .map_err(|e| format!("Failed to start update helper: {}", e))?;
+
+        app.exit(0);
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Auto-update is currently supported on Windows only.".into())
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn is_another_instance_running() -> bool {
     use std::ffi::OsStr;
@@ -178,7 +280,8 @@ pub fn run() {
             open_external_url,
             set_close_to_tray,
             send_notification,
-            set_autostart
+            set_autostart,
+            apply_app_update
         ])
         .setup(|app| {
             // Launched by "Start with Windows": stay quietly in the tray

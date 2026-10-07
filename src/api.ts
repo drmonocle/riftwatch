@@ -1,4 +1,4 @@
-import { Match, LiveStats, StreamEvent, AppSettings, NewsItem, Team, Region, League, PlayerEntry } from "./types";
+import { Match, LiveStats, StreamEvent, AppSettings, NewsItem, Team, Region, League, PlayerEntry, AppUpdateInfo } from "./types";
 
 const RIOT_API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z";
 const RIOT_BASE = "https://esports-api.lolesports.com/persisted/gw";
@@ -514,4 +514,62 @@ export async function fetchCuratedNews(): Promise<NewsItem[]> {
       url: "https://lolesports.com/news",
     },
   ];
+}
+
+/**
+ * Compare two semver-like strings (e.g., "0.3.5" vs "0.3.6").
+ * Returns 1 if v1 > v2, -1 if v1 < v2, and 0 if equal.
+ */
+export function compareSemver(v1: string, v2: string): number {
+  const p1 = v1.replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+  const p2 = v2.replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+  const maxLen = Math.max(p1.length, p2.length);
+  for (let i = 0; i < maxLen; i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
+/**
+ * Query GitHub Releases API for the latest published RiftWatch release.
+ * Returns metadata and direct download URL for the standalone .exe asset.
+ */
+export async function checkForAppUpdate(currentVersion: string): Promise<AppUpdateInfo | null> {
+  try {
+    const res = await fetch("https://api.github.com/repos/drmonocle/riftwatch/releases/latest", {
+      headers: {
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const latestTag = (data.tag_name || "").trim();
+    const cleanLatest = latestTag.replace(/^v/i, "");
+    const cleanCurrent = currentVersion.replace(/^v/i, "");
+
+    const hasUpdate = compareSemver(cleanLatest, cleanCurrent) > 0;
+    const exeAsset = (data.assets || []).find((a: any) =>
+      a.name?.toLowerCase().endsWith(".exe")
+    );
+    const downloadUrl =
+      exeAsset?.browser_download_url ||
+      `https://github.com/drmonocle/riftwatch/releases/download/${latestTag}/RiftWatch.exe`;
+
+    return {
+      hasUpdate,
+      currentVersion: cleanCurrent,
+      latestVersion: cleanLatest,
+      releaseName: data.name || latestTag,
+      releaseNotes: data.body || "",
+      releaseUrl: data.html_url || "https://github.com/drmonocle/riftwatch/releases",
+      downloadUrl,
+      publishedAt: data.published_at || "",
+    };
+  } catch (err) {
+    console.warn("Failed to check GitHub releases for updates:", err);
+    return null;
+  }
 }
