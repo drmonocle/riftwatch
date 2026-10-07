@@ -266,3 +266,225 @@ export function reconcileLiveAndSchedule(
 
   return { finalLive, finalSchedule: updatedSchedule };
 }
+
+export interface HeadToHeadStats {
+  team1Wins: number;
+  team2Wins: number;
+  totalMeetings: number;
+  totalMatches: number;
+  team1GameWins: number;
+  team2GameWins: number;
+  lastWinner?: string;
+  lastDate?: string;
+}
+
+export function computeHeadToHead(
+  team1Code: string,
+  team2Code: string,
+  schedule: Match[]
+): HeadToHeadStats | null {
+  const c1 = (team1Code || "").trim().toUpperCase();
+  const c2 = (team2Code || "").trim().toUpperCase();
+  if (!c1 || !c2 || c1 === c2 || c1 === "TBD" || c2 === "TBD") return null;
+
+  const pastMatches = schedule
+    .filter((m) => {
+      if (m.state !== "completed") return false;
+      const m1 = (m.team1Code || "").trim().toUpperCase();
+      const m2 = (m.team2Code || "").trim().toUpperCase();
+      return (m1 === c1 && m2 === c2) || (m1 === c2 && m2 === c1);
+    })
+    .sort((a, b) => new Date(b.startTimeUtc).getTime() - new Date(a.startTimeUtc).getTime());
+
+  if (pastMatches.length === 0) return null;
+
+  let team1Wins = 0;
+  let team2Wins = 0;
+  let team1GameWins = 0;
+  let team2GameWins = 0;
+
+  for (const m of pastMatches) {
+    const isC1Team1 = (m.team1Code || "").trim().toUpperCase() === c1;
+    const c1Score = isC1Team1 ? m.team1Score : m.team2Score;
+    const c2Score = isC1Team1 ? m.team2Score : m.team1Score;
+
+    team1GameWins += c1Score;
+    team2GameWins += c2Score;
+
+    if (c1Score > c2Score) team1Wins++;
+    else if (c2Score > c1Score) team2Wins++;
+  }
+
+  const last = pastMatches[0];
+  const isLastC1Team1 = (last.team1Code || "").trim().toUpperCase() === c1;
+  const lastC1Score = isLastC1Team1 ? last.team1Score : last.team2Score;
+  const lastC2Score = isLastC1Team1 ? last.team2Score : last.team1Score;
+  const lastWinner = lastC1Score > lastC2Score ? c1 : c2;
+
+  return {
+    team1Wins,
+    team2Wins,
+    totalMeetings: pastMatches.length,
+    totalMatches: pastMatches.length,
+    team1GameWins,
+    team2GameWins,
+    lastWinner,
+    lastDate: last.startTimeUtc,
+  };
+}
+
+export interface TeamStanding {
+  teamCode: string;
+  teamName: string;
+  teamImage?: string;
+  seriesWon: number;
+  seriesLost: number;
+  seriesPlayed: number;
+  gamesWon: number;
+  gamesLost: number;
+  gameDiff: number;
+  winRatePct: number;
+  streak: string;
+}
+
+export function computeLeagueStandings(
+  leagueSlug: string,
+  schedule: Match[]
+): TeamStanding[] {
+  const slug = (leagueSlug || "").toLowerCase();
+  const completed = schedule.filter(
+    (m) => m.state === "completed" && (!slug || m.leagueSlug?.toLowerCase() === slug)
+  );
+
+  const statsMap = new Map<
+    string,
+    {
+      code: string;
+      name: string;
+      image?: string;
+      sWon: number;
+      sLost: number;
+      gWon: number;
+      gLost: number;
+      results: boolean[];
+    }
+  >();
+
+  const getOrCreate = (code: string, name: string, image?: string) => {
+    const upper = code.toUpperCase();
+    if (!statsMap.has(upper)) {
+      statsMap.set(upper, {
+        code: upper,
+        name: name || upper,
+        image,
+        sWon: 0,
+        sLost: 0,
+        gWon: 0,
+        gLost: 0,
+        results: [],
+      });
+    }
+    const item = statsMap.get(upper)!;
+    if (!item.image && image) item.image = image;
+    return item;
+  };
+
+  const sorted = [...completed].sort(
+    (a, b) => new Date(a.startTimeUtc).getTime() - new Date(b.startTimeUtc).getTime()
+  );
+
+  for (const m of sorted) {
+    if (!m.team1Code || !m.team2Code || m.team1Code === "TBD" || m.team2Code === "TBD") continue;
+    const t1 = getOrCreate(m.team1Code, m.team1Name, m.team1Image);
+    const t2 = getOrCreate(m.team2Code, m.team2Name, m.team2Image);
+
+    t1.gWon += m.team1Score;
+    t1.gLost += m.team2Score;
+    t2.gWon += m.team2Score;
+    t2.gLost += m.team1Score;
+
+    if (m.team1Score > m.team2Score) {
+      t1.sWon++;
+      t2.sLost++;
+      t1.results.push(true);
+      t2.results.push(false);
+    } else if (m.team2Score > m.team1Score) {
+      t2.sWon++;
+      t1.sLost++;
+      t2.results.push(true);
+      t1.results.push(false);
+    }
+  }
+
+  const standings: TeamStanding[] = Array.from(statsMap.values()).map((s) => {
+    const sPlayed = s.sWon + s.sLost;
+    const winRate = sPlayed > 0 ? Math.round((s.sWon / sPlayed) * 100) : 0;
+
+    let streak = "-";
+    if (s.results.length > 0) {
+      const last = s.results[s.results.length - 1];
+      let count = 0;
+      for (let i = s.results.length - 1; i >= 0; i--) {
+        if (s.results[i] === last) count++;
+        else break;
+      }
+      streak = `${count}${last ? "W" : "L"}`;
+    }
+
+    return {
+      teamCode: s.code,
+      teamName: s.name,
+      teamImage: s.image,
+      seriesWon: s.sWon,
+      seriesLost: s.sLost,
+      seriesPlayed: sPlayed,
+      gamesWon: s.gWon,
+      gamesLost: s.gLost,
+      gameDiff: s.gWon - s.gLost,
+      winRatePct: winRate,
+      streak,
+    };
+  });
+
+  return standings.sort((a, b) => {
+    if (b.seriesWon !== a.seriesWon) return b.seriesWon - a.seriesWon;
+    if (b.gameDiff !== a.gameDiff) return b.gameDiff - a.gameDiff;
+    return b.gamesWon - a.gamesWon;
+  });
+}
+
+/**
+ * Procedurally synthesizes a crisp, elegant LoL-style hextech kickoff chime
+ * using the browser Web Audio API (0 KB disk asset overhead).
+ */
+export function playKickoffChime(): void {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6 (Hextech ascending fanfare)
+    const now = ctx.currentTime;
+
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+      gain.gain.setValueAtTime(0.001, now + idx * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + idx * 0.08 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + idx * 0.08);
+      osc.stop(now + idx * 0.08 + 0.4);
+    });
+  } catch (e) {
+    // Audio context unavailable or user blocked autoplay
+  }
+}
+
+

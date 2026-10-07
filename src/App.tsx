@@ -13,7 +13,7 @@ import {
   EMPTY_CATALOG,
 } from "./api";
 import { APP_VERSION } from "./version";
-import { reconcileLiveAndSchedule } from "./helpers";
+import { reconcileLiveAndSchedule, playKickoffChime } from "./helpers";
 import { Header } from "./components/Header";
 import { Navigation, TabKey } from "./components/Navigation";
 import { TickerBar } from "./components/TickerBar";
@@ -23,6 +23,7 @@ import { StreamView } from "./components/views/StreamView";
 import { WatchlistView } from "./components/views/WatchlistView";
 import { NewsView } from "./components/views/NewsView";
 import { SettingsView } from "./components/views/SettingsView";
+import { TeamRosterModal } from "./components/TeamRosterModal";
 
 // The floating HUD is the same app loaded with ?mode=detached in its own window.
 const IS_HUD_WINDOW = window.location.search.includes("mode=detached");
@@ -65,6 +66,7 @@ export default function App() {
   const [syncFailed, setSyncFailed] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState<{ code: string; name?: string } | null>(null);
 
   // Sync settings across windows (main window and detached HUD window)
   useEffect(() => {
@@ -80,6 +82,16 @@ export default function App() {
       window.removeEventListener("storage", handleSync);
     };
   }, []);
+
+  // Synchronize Compact Desktop mode window sizing
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        invoke("set_compact_mode", { compact: !!settings.compactMode }).catch(() => {});
+      })
+      .catch(() => {});
+  }, [settings.compactMode]);
 
   const handleUpdateSettings = useCallback((partial: Partial<AppSettings>) => {
     const updated = { ...settingsRef.current, ...partial };
@@ -324,7 +336,7 @@ export default function App() {
 
   useEffect(() => {
     if (IS_HUD_WINDOW) return;
-    if (!settings.notifyKickoff || liveMatches.length === 0) return;
+    if ((!settings.notifyKickoff && !settings.soundAlerts) || liveMatches.length === 0) return;
 
     const followed = new Set(settings.followedTeams.map((t) => t.toUpperCase()));
     for (const m of liveMatches) {
@@ -333,18 +345,23 @@ export default function App() {
           followed.has(m.team1Code.toUpperCase()) || followed.has(m.team2Code.toUpperCase());
         if (isFollowed) {
           notifiedKickoffs.current.add(m.matchId);
-          import("@tauri-apps/api/core")
-            .then(({ invoke }) => {
-              invoke("send_notification", {
-                title: `🔴 MATCH LIVE: ${m.team1Code} vs ${m.team2Code}`,
-                body: `${m.leagueName} match is now live! (Bo${m.bestOf})`,
-              }).catch(() => {});
-            })
-            .catch(() => {});
+          if (settings.soundAlerts) {
+            playKickoffChime();
+          }
+          if (settings.notifyKickoff) {
+            import("@tauri-apps/api/core")
+              .then(({ invoke }) => {
+                invoke("send_notification", {
+                  title: `🔴 MATCH LIVE: ${m.team1Code} vs ${m.team2Code}`,
+                  body: `${m.leagueName} match is now live! (Bo${m.bestOf})`,
+                }).catch(() => {});
+              })
+              .catch(() => {});
+          }
         }
       }
     }
-  }, [liveMatches, settings.notifyKickoff, settings.followedTeams]);
+  }, [liveMatches, settings.notifyKickoff, settings.soundAlerts, settings.followedTeams]);
 
   useEffect(() => {
     if (IS_HUD_WINDOW) return;
@@ -491,6 +508,7 @@ export default function App() {
             onOpenUrl={handleOpenUrl}
             onSelectTab={setActiveTab}
             onUpdateSettings={handleUpdateSettings}
+            onSelectTeam={(code, name) => setSelectedTeam({ code, name })}
           />
         )}
         {activeTab === "schedule" && (
@@ -500,6 +518,7 @@ export default function App() {
             catalog={catalog}
             onOpenUrl={handleOpenUrl}
             onUpdateSettings={handleUpdateSettings}
+            onSelectTeam={(code, name) => setSelectedTeam({ code, name })}
           />
         )}
         {activeTab === "stream" && (
@@ -533,6 +552,33 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Team Roster & Player Profiles Flyout Modal */}
+      {selectedTeam && (
+        <TeamRosterModal
+          teamCode={selectedTeam.code}
+          teamName={selectedTeam.name}
+          catalog={catalog}
+          schedule={schedule}
+          settings={settings}
+          onClose={() => setSelectedTeam(null)}
+          onToggleTeamFollow={(code) => {
+            const isFollowed = settings.followedTeams.includes(code);
+            const next = isFollowed
+              ? settings.followedTeams.filter((t) => t !== code)
+              : [...settings.followedTeams, code];
+            handleUpdateSettings({ followedTeams: next });
+          }}
+          onTogglePlayerFollow={(name) => {
+            const isFollowed = settings.followedPlayers.includes(name);
+            const next = isFollowed
+              ? settings.followedPlayers.filter((p) => p !== name)
+              : [...settings.followedPlayers, name];
+            handleUpdateSettings({ followedPlayers: next });
+          }}
+          onOpenUrl={handleOpenUrl}
+        />
+      )}
 
       {/* Minimal Status Footer */}
       <footer className="bg-[#0a0e17] border-t border-[#1e282d] px-4 py-1 flex items-center justify-between text-[11px] text-[#7e8e9f] select-none">

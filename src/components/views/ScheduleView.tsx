@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { Match, AppSettings, CatalogData } from "../../types";
-import { Search, Calendar, Star } from "lucide-react";
+import { Search, Calendar, Star, Trophy } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
-import { isMatchFollowed } from "../../helpers";
+import { isMatchFollowed, computeHeadToHead } from "../../helpers";
+import { StandingsView } from "./StandingsView";
 
 interface ScheduleViewProps {
   schedule: Match[];
@@ -10,6 +11,7 @@ interface ScheduleViewProps {
   catalog?: CatalogData;
   onOpenUrl: (url: string) => void;
   onUpdateSettings?: (s: Partial<AppSettings>) => void;
+  onSelectTeam?: (teamCode: string, teamName?: string) => void;
 }
 
 export const ScheduleView: React.FC<ScheduleViewProps> = ({
@@ -18,7 +20,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   catalog,
   onOpenUrl,
   onUpdateSettings,
+  onSelectTeam,
 }) => {
+  const [mainSubTab, setMainSubTab] = useState<"matches" | "standings">("matches");
   const [filterRange, setFilterRange] = useState<"today" | "upcoming" | "results">(() => {
     const today = new Date().toDateString();
     const hasTodayMatches = schedule.some((m) => {
@@ -77,171 +81,251 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto overflow-y-auto h-full select-none">
-      {/* Filters & Search Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#1e282d]">
-        {/* Range Buttons */}
-        <div className="flex items-center gap-1 bg-[#0a0e17] p-1 rounded border border-[#1e282d]">
-          {(["today", "upcoming", "results"] as const).map((r) => (
-            <button
-              key={r}
-              onClick={() => setFilterRange(r)}
-              className={`px-3 py-1 text-xs font-semibold rounded transition-all capitalize ${
-                filterRange === r
-                  ? "bg-[#c8aa6e] text-[#091428]"
-                  : "text-[#9bb3c9] hover:text-[#f0e6d2] hover:bg-[#121e2d]"
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-
-        {/* Search & Followed Toggle */}
-        <div className="flex items-center gap-2 flex-1 max-w-xs justify-end">
+      {/* Top Segmented Control: Schedule vs Standings */}
+      <div className="flex items-center justify-between pb-2 border-b border-[#1e282d]">
+        <div className="flex items-center gap-1.5 bg-[#0a0e17] p-1 rounded-lg border border-[#1e282d]">
           <button
-            onClick={() => setFollowedOnly(!followedOnly)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors ${
-              followedOnly
-                ? "bg-[#c8aa6e]/20 border-[#c8aa6e] text-[#c8aa6e]"
-                : "bg-[#0a1420] border-[#1e282d] text-[#9bb3c9] hover:text-[#f0e6d2]"
+            type="button"
+            onClick={() => setMainSubTab("matches")}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all ${
+              mainSubTab === "matches"
+                ? "bg-[#c8aa6e] text-[#091428] font-bold shadow"
+                : "text-[#9bb3c9] hover:text-[#f0e6d2] hover:bg-[#121e2d]"
             }`}
-            title="Filter by your followed teams and leagues"
           >
-            <Star className={`w-3.5 h-3.5 ${followedOnly ? "fill-current" : ""}`} />
-            <span>Followed only</span>
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Matches & Schedule</span>
           </button>
-
-          <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#9bb3c9]" />
-            <input
-              type="text"
-              placeholder="Search team or league…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#0a1420] border border-[#1e282d] rounded pl-8 pr-3 py-1 text-xs text-[#f0e6d2] focus:outline-none focus:border-[#c8aa6e]"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => setMainSubTab("standings")}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all ${
+              mainSubTab === "standings"
+                ? "bg-[#c8aa6e] text-[#091428] font-bold shadow"
+                : "text-[#9bb3c9] hover:text-[#f0e6d2] hover:bg-[#121e2d]"
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5" />
+            <span>League Standings</span>
+          </button>
         </div>
       </div>
 
-      {/* Match Rows */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16 text-[#9bb3c9] text-xs">
-          No scheduled matches match your active filters. Try switching tabs or turning off "Followed only".
-        </div>
+      {mainSubTab === "standings" ? (
+        <StandingsView
+          schedule={schedule}
+          settings={settings}
+          catalog={catalog}
+          onSelectTeam={(code, name) => onSelectTeam?.(code, name)}
+          onToggleTeamFollow={toggleTeamFollow}
+        />
       ) : (
-        <div className="space-y-2">
-          {filtered.map((m) => {
-            const timeStr = m.startTimeUtc
-              ? new Date(m.startTimeUtc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-              : "--:--";
+        <>
+          {/* Filters & Search Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#1e282d]">
+            {/* Range Buttons */}
+            <div className="flex items-center gap-1 bg-[#0a0e17] p-1 rounded border border-[#1e282d]">
+              {(["today", "upcoming", "results"] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setFilterRange(r)}
+                  className={`px-3 py-1 text-xs font-semibold rounded transition-all capitalize ${
+                    filterRange === r
+                      ? "bg-[#c8aa6e] text-[#091428]"
+                      : "text-[#9bb3c9] hover:text-[#f0e6d2] hover:bg-[#121e2d]"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
 
-            const isT1Followed = settings.followedTeams.includes(m.team1Code);
-            const isT2Followed = settings.followedTeams.includes(m.team2Code);
-            const isRevealed = !!revealedMatchIds[m.matchId];
-            const showScore = m.state === "completed" && (!settings.spoilerMode || isRevealed);
-
-            return (
-              <div
-                key={m.matchId}
-                className="flex items-center justify-between bg-[#0a1420] border border-[#1e282d] hover:border-[#c8aa6e]/80 px-4 py-2.5 rounded transition-all"
+            {/* Search & Followed Toggle */}
+            <div className="flex items-center gap-2 flex-1 max-w-xs justify-end">
+              <button
+                onClick={() => setFollowedOnly(!followedOnly)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors ${
+                  followedOnly
+                    ? "bg-[#c8aa6e]/20 border-[#c8aa6e] text-[#c8aa6e]"
+                    : "bg-[#0a1420] border-[#1e282d] text-[#9bb3c9] hover:text-[#f0e6d2]"
+                }`}
+                title="Filter by your followed teams and leagues"
               >
-                {/* Time, Calendar & League */}
-                <div className="flex items-center gap-2 w-44">
-                  <span className="font-mono text-xs text-[#0ac8b9] font-bold shrink-0">{timeStr}</span>
-                  {m.state !== "completed" && (
-                    <AddToCalendarMenu match={m} onOpenUrl={onOpenUrl} compact={true} />
-                  )}
-                  <span className="text-[11px] text-[#9bb3c9] truncate font-medium">{m.leagueName}</span>
-                </div>
+                <Star className={`w-3.5 h-3.5 ${followedOnly ? "fill-current" : ""}`} />
+                <span>Followed only</span>
+              </button>
 
-                {/* Teams & Score */}
-                <div className="flex items-center justify-center gap-4 flex-1">
-                  {/* Team 1 */}
-                  <div className="flex items-center gap-1.5 w-36 justify-end text-right">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleTeamFollow(m.team1Code);
-                      }}
-                      className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
-                        isT1Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
-                      }`}
-                      title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
-                    >
-                      <Star className={`w-3.5 h-3.5 ${isT1Followed ? "fill-[#c8aa6e]" : ""}`} />
-                    </button>
-                    <span className="text-xs font-bold text-[#f0e6d2]">{m.team1Code}</span>
-                    {m.team1Image && <img src={m.team1Image} alt="" className="w-5 h-5 object-contain" />}
-                  </div>
-
-                  {/* Score / VS Center with Per-Match Reveal */}
-                  <div className="font-mono font-bold text-xs px-2 flex items-center justify-center min-w-[70px]">
-                    {showScore ? (
-                      <div
-                        onClick={() => settings.spoilerMode && toggleReveal(m.matchId)}
-                        className={`text-xs ${
-                          settings.spoilerMode
-                            ? "cursor-pointer hover:text-[#c8aa6e] bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]"
-                            : ""
-                        }`}
-                        title={settings.spoilerMode ? "Click to re-hide score" : undefined}
-                      >
-                        <span className="text-[#f0e6d2]">
-                          {m.team1Score} : {m.team2Score}
-                        </span>
-                      </div>
-                    ) : m.state === "completed" && settings.spoilerMode ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleReveal(m.matchId)}
-                        className="text-[11px] px-2 py-0.5 rounded bg-[#091428] border border-[#1e282d] text-[#9bb3c9] hover:text-[#c8aa6e] hover:border-[#c8aa6e]/60 transition-colors cursor-pointer"
-                        title="Click to reveal final score"
-                      >
-                        Reveal
-                      </button>
-                    ) : (
-                      <span className="text-[#9bb3c9] font-medium">VS</span>
-                    )}
-                  </div>
-
-                  {/* Team 2 */}
-                  <div className="flex items-center gap-1.5 w-36 justify-start text-left">
-                    {m.team2Image && <img src={m.team2Image} alt="" className="w-5 h-5 object-contain" />}
-                    <span className="text-xs font-bold text-[#f0e6d2]">{m.team2Code}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleTeamFollow(m.team2Code);
-                      }}
-                      className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
-                        isT2Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
-                      }`}
-                      title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
-                    >
-                      <Star className={`w-3.5 h-3.5 ${isT2Followed ? "fill-[#c8aa6e]" : ""}`} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Status / Best Of */}
-                <div className="flex items-center gap-2 w-28 justify-end">
-                  <span className="text-[10px] text-[#9bb3c9] bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d] font-medium">
-                    Bo{m.bestOf}
-                  </span>
-                  {m.state === "completed" ? (
-                    <span className="text-[10px] text-[#9bb3c9] font-semibold">FINAL</span>
-                  ) : (
-                    <span className="text-[10px] text-[#c8aa6e] font-semibold">UPCOMING</span>
-                  )}
-                </div>
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#9bb3c9]" />
+                <input
+                  type="text"
+                  placeholder="Search team or league…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#0a1420] border border-[#1e282d] rounded pl-8 pr-3 py-1 text-xs text-[#f0e6d2] focus:outline-none focus:border-[#c8aa6e]"
+                />
               </div>
-            );
-          })}
-        </div>
+            </div>
+          </div>
+
+          {/* Match Rows */}
+          {filtered.length === 0 ? (
+            <div className="text-center py-16 text-[#9bb3c9] text-xs">
+              No scheduled matches match your active filters. Try switching tabs or turning off "Followed only".
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filtered.map((m) => {
+                const timeStr = m.startTimeUtc
+                  ? new Date(m.startTimeUtc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                  : "--:--";
+
+                const isT1Followed = settings.followedTeams.includes(m.team1Code);
+                const isT2Followed = settings.followedTeams.includes(m.team2Code);
+                const isRevealed = !!revealedMatchIds[m.matchId];
+                const showScore = m.state === "completed" && (!settings.spoilerMode || isRevealed);
+                const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule);
+
+                return (
+                  <div
+                    key={m.matchId}
+                    className="flex items-center justify-between bg-[#0a1420] border border-[#1e282d] hover:border-[#c8aa6e]/80 px-4 py-2.5 rounded-lg transition-all"
+                  >
+                    {/* Time, Calendar & League */}
+                    <div className="flex items-center gap-2 w-44">
+                      <span className="font-mono text-xs text-[#0ac8b9] font-bold shrink-0">{timeStr}</span>
+                      {m.state !== "completed" && (
+                        <AddToCalendarMenu match={m} onOpenUrl={onOpenUrl} compact={true} />
+                      )}
+                      <span className="text-[11px] text-[#9bb3c9] truncate font-medium">{m.leagueName}</span>
+                    </div>
+
+                    {/* Teams & Score */}
+                    <div className="flex items-center justify-center gap-3 sm:gap-4 flex-1">
+                      {/* Team 1 */}
+                      <div className="flex items-center gap-1.5 w-36 justify-end text-right">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTeamFollow(m.team1Code);
+                          }}
+                          className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
+                            isT1Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
+                          }`}
+                          title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${isT1Followed ? "fill-[#c8aa6e]" : ""}`} />
+                        </button>
+                        <span
+                          onClick={() => onSelectTeam?.(m.team1Code, m.team1Name)}
+                          className="text-xs font-bold text-[#f0e6d2] hover:text-[#c8aa6e] cursor-pointer transition-colors"
+                          title={`Click to view ${m.team1Name} roster`}
+                        >
+                          {m.team1Code}
+                        </span>
+                        {m.team1Image && (
+                          <img
+                            src={m.team1Image}
+                            alt=""
+                            className="w-5 h-5 object-contain cursor-pointer"
+                            onClick={() => onSelectTeam?.(m.team1Code, m.team1Name)}
+                          />
+                        )}
+                      </div>
+
+                      {/* Score / VS Center with Per-Match Reveal & H2H */}
+                      <div className="flex flex-col items-center justify-center min-w-[70px]">
+                        <div className="font-mono font-bold text-xs px-2 flex items-center justify-center">
+                          {showScore ? (
+                            <div
+                              onClick={() => settings.spoilerMode && toggleReveal(m.matchId)}
+                              className={`text-xs ${
+                                settings.spoilerMode
+                                  ? "cursor-pointer hover:text-[#c8aa6e] bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]"
+                                  : ""
+                              }`}
+                              title={settings.spoilerMode ? "Click to re-hide score" : undefined}
+                            >
+                              <span className="text-[#f0e6d2]">
+                                {m.team1Score} : {m.team2Score}
+                              </span>
+                            </div>
+                          ) : m.state === "completed" && settings.spoilerMode ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleReveal(m.matchId)}
+                              className="text-[11px] px-2 py-0.5 rounded bg-[#091428] border border-[#1e282d] text-[#9bb3c9] hover:text-[#c8aa6e] hover:border-[#c8aa6e]/60 transition-colors cursor-pointer"
+                              title="Click to reveal final score"
+                            >
+                              Reveal
+                            </button>
+                          ) : (
+                            <span className="text-[#9bb3c9] font-medium">VS</span>
+                          )}
+                        </div>
+                        {h2h && h2h.totalMeetings > 0 && (
+                          <span
+                            className="text-[9px] font-mono text-[#9bb3c9] mt-0.5"
+                            title={`Head-to-head record in recent results: ${m.team1Code} ${h2h.team1Wins}-${h2h.team2Wins} ${m.team2Code}`}
+                          >
+                            H2H {h2h.team1Wins}:{h2h.team2Wins}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Team 2 */}
+                      <div className="flex items-center gap-1.5 w-36 justify-start text-left">
+                        {m.team2Image && (
+                          <img
+                            src={m.team2Image}
+                            alt=""
+                            className="w-5 h-5 object-contain cursor-pointer"
+                            onClick={() => onSelectTeam?.(m.team2Code, m.team2Name)}
+                          />
+                        )}
+                        <span
+                          onClick={() => onSelectTeam?.(m.team2Code, m.team2Name)}
+                          className="text-xs font-bold text-[#f0e6d2] hover:text-[#c8aa6e] cursor-pointer transition-colors"
+                          title={`Click to view ${m.team2Name} roster`}
+                        >
+                          {m.team2Code}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTeamFollow(m.team2Code);
+                          }}
+                          className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
+                            isT2Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
+                          }`}
+                          title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${isT2Followed ? "fill-[#c8aa6e]" : ""}`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Status / Best Of */}
+                    <div className="flex items-center gap-2 w-28 justify-end">
+                      <span className="text-[10px] text-[#9bb3c9] bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d] font-medium">
+                        Bo{m.bestOf}
+                      </span>
+                      {m.state === "completed" ? (
+                        <span className="text-[10px] text-[#9bb3c9] font-semibold">FINAL</span>
+                      ) : (
+                        <span className="text-[10px] text-[#c8aa6e] font-semibold">UPCOMING</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 };
+

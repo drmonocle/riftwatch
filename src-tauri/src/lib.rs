@@ -43,6 +43,17 @@ fn show_main(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn set_compact_mode(app: tauri::AppHandle, compact: bool) {
+    if let Some(w) = app.get_webview_window("main") {
+        if compact {
+            let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 780.0, height: 500.0 }));
+        } else {
+            let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1040.0, height: 720.0 }));
+        }
+    }
+}
+
+#[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
@@ -310,6 +321,66 @@ fn is_another_instance_running() -> bool {
     false
 }
 
+#[cfg(target_os = "windows")]
+fn spawn_global_hotkey_listener(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        use std::os::raw::c_int;
+        extern "system" {
+            fn RegisterHotKey(hWnd: *mut std::ffi::c_void, id: c_int, fsModifiers: u32, vk: u32) -> i32;
+            fn UnregisterHotKey(hWnd: *mut std::ffi::c_void, id: c_int) -> i32;
+            fn GetMessageW(lpMsg: *mut Msg, hWnd: *mut std::ffi::c_void, wMsgFilterMin: u32, wMsgFilterMax: u32) -> i32;
+        }
+
+        #[repr(C)]
+        struct Point {
+            x: i32,
+            y: i32,
+        }
+
+        #[repr(C)]
+        struct Msg {
+            hwnd: *mut std::ffi::c_void,
+            message: u32,
+            wparam: usize,
+            lparam: isize,
+            time: u32,
+            pt: Point,
+        }
+
+        const MOD_ALT: u32 = 0x0001;
+        const MOD_SHIFT: u32 = 0x0004;
+        const MOD_NOREPEAT: u32 = 0x4000;
+        const VK_L: u32 = 0x4C;
+        const WM_HOTKEY: u32 = 0x0312;
+        const HOTKEY_ID: c_int = 0x71F7; // 'RIFT'
+
+        // Register Alt+Shift+L
+        let res = unsafe { RegisterHotKey(std::ptr::null_mut(), HOTKEY_ID, MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, VK_L) };
+        if res == 0 {
+            unsafe { RegisterHotKey(std::ptr::null_mut(), HOTKEY_ID, MOD_ALT | MOD_SHIFT, VK_L); }
+        }
+
+        let mut msg: Msg = unsafe { std::mem::zeroed() };
+        while unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) } > 0 {
+            if msg.message == WM_HOTKEY && msg.wparam == HOTKEY_ID as usize {
+                if let Some(w) = app.get_webview_window("main") {
+                    let is_vis = w.is_visible().unwrap_or(false);
+                    let is_foc = w.is_focused().unwrap_or(false);
+                    if is_vis && is_foc {
+                        let _ = w.hide();
+                    } else {
+                        let _ = w.show();
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                }
+            }
+        }
+
+        unsafe { UnregisterHotKey(std::ptr::null_mut(), HOTKEY_ID); }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "windows")]
@@ -326,6 +397,7 @@ pub fn run() {
             set_ticker_topmost,
             start_window_drag,
             show_main,
+            set_compact_mode,
             quit_app,
             open_external_url,
             set_close_to_tray,
@@ -334,6 +406,9 @@ pub fn run() {
             apply_app_update
         ])
         .setup(|app| {
+            #[cfg(target_os = "windows")]
+            spawn_global_hotkey_listener(app.handle().clone());
+
             // Launched by "Start with Windows": stay quietly in the tray
             if std::env::args().any(|a| a == "--minimized") {
                 if let Some(w) = app.get_webview_window("main") {

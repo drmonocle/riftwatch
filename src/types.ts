@@ -139,6 +139,8 @@ export interface AppSettings {
   notifyKickoff: boolean;
   notifyPregame: boolean;
   notifyStream: boolean;
+  soundAlerts?: boolean;
+  compactMode?: boolean;
   minimizeToTrayOnClose: boolean;
   startWithWindows: boolean;
   followedTeams: string[];

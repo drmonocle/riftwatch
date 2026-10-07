@@ -1,6 +1,6 @@
 import React from "react";
 import { AppSettings, Match, StreamEvent, AppUpdateInfo } from "../types";
-import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles } from "lucide-react";
+import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2 } from "lucide-react";
 import { currentStreamEvent, formatStreamHeaderTitle } from "../helpers";
 import { APP_VERSION } from "../version";
 
@@ -97,6 +97,20 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Quick Action Buttons */}
       <div className="flex items-center gap-2">
+        {/* Compact Mode Toggle */}
+        <button
+          onClick={() => onUpdateSettings({ compactMode: !settings.compactMode })}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+            settings.compactMode
+              ? "bg-[#0ac8b9] border-[#0ac8b9] text-[#091428]"
+              : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
+          }`}
+          title="Toggle Compact Mode (Alt+Shift+L summons/hides app anywhere)"
+        >
+          {settings.compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+          <span>{settings.compactMode ? "Expand" : "Compact"}</span>
+        </button>
+
         {/* Spoiler Mode Toggle */}
         <button
           onClick={() => onUpdateSettings({ spoilerMode: !settings.spoilerMode })}

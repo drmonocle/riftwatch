@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Match, AppSettings, CatalogData } from "../../types";
-import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star } from "lucide-react";
+import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star, Swords } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
-import { getLeagueBroadcastStreams, isMatchFollowed } from "../../helpers";
+import { getLeagueBroadcastStreams, isMatchFollowed, computeHeadToHead } from "../../helpers";
 
 interface LiveViewProps {
   matches: Match[];
@@ -12,6 +12,7 @@ interface LiveViewProps {
   onOpenUrl: (url: string) => void;
   onSelectTab: (tab: any) => void;
   onUpdateSettings?: (s: Partial<AppSettings>) => void;
+  onSelectTeam?: (teamCode: string, teamName?: string) => void;
 }
 
 // Live ticking countdown hook
@@ -104,6 +105,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
   onOpenUrl,
   onSelectTab,
   onUpdateSettings,
+  onSelectTeam,
 }) => {
   const [revealedMatchIds, setRevealedMatchIds] = useState<Record<string, boolean>>({});
 
@@ -224,14 +226,28 @@ export const LiveView: React.FC<LiveViewProps> = ({
                         >
                           <Star className={`w-3.5 h-3.5 ${isT1Followed ? "fill-[#c8aa6e]" : ""}`} />
                         </button>
-                        <span className="font-bold text-base text-[#f0e6d2]">{m.team1Name}</span>
+                        <span
+                          onClick={() => onSelectTeam?.(m.team1Code, m.team1Name)}
+                          className="font-bold text-base text-[#f0e6d2] hover:text-[#c8aa6e] cursor-pointer transition-colors"
+                          title={`View ${m.team1Name} roster`}
+                        >
+                          {m.team1Name}
+                        </span>
                       </div>
                       <div className="text-[11px] text-[#9bb3c9] font-mono font-medium">{m.team1Code}</div>
                     </div>
                     {m.team1Image ? (
-                      <img src={m.team1Image} alt={m.team1Code} className="w-10 h-10 object-contain rounded" />
+                      <img
+                        src={m.team1Image}
+                        alt={m.team1Code}
+                        className="w-10 h-10 object-contain rounded cursor-pointer"
+                        onClick={() => onSelectTeam?.(m.team1Code, m.team1Name)}
+                      />
                     ) : (
-                      <div className="w-10 h-10 bg-[#091428] rounded flex items-center justify-center font-bold text-xs text-[#c8aa6e]">
+                      <div
+                        onClick={() => onSelectTeam?.(m.team1Code, m.team1Name)}
+                        className="w-10 h-10 bg-[#091428] rounded flex items-center justify-center font-bold text-xs text-[#c8aa6e] cursor-pointer font-mono"
+                      >
                         {m.team1Code.slice(0, 3)}
                       </div>
                     )}
@@ -276,15 +292,29 @@ export const LiveView: React.FC<LiveViewProps> = ({
                   {/* Team 2 */}
                   <div className="col-span-2 flex items-center gap-3 text-left">
                     {m.team2Image ? (
-                      <img src={m.team2Image} alt={m.team2Code} className="w-10 h-10 object-contain rounded" />
+                      <img
+                        src={m.team2Image}
+                        alt={m.team2Code}
+                        className="w-10 h-10 object-contain rounded cursor-pointer"
+                        onClick={() => onSelectTeam?.(m.team2Code, m.team2Name)}
+                      />
                     ) : (
-                      <div className="w-10 h-10 bg-[#091428] rounded flex items-center justify-center font-bold text-xs text-[#c8aa6e]">
+                      <div
+                        onClick={() => onSelectTeam?.(m.team2Code, m.team2Name)}
+                        className="w-10 h-10 bg-[#091428] rounded flex items-center justify-center font-bold text-xs text-[#c8aa6e] cursor-pointer font-mono"
+                      >
                         {m.team2Code.slice(0, 3)}
                       </div>
                     )}
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-base text-[#f0e6d2]">{m.team2Name}</span>
+                        <span
+                          onClick={() => onSelectTeam?.(m.team2Code, m.team2Name)}
+                          className="font-bold text-base text-[#f0e6d2] hover:text-[#c8aa6e] cursor-pointer transition-colors"
+                          title={`View ${m.team2Name} roster`}
+                        >
+                          {m.team2Name}
+                        </span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -303,6 +333,32 @@ export const LiveView: React.FC<LiveViewProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Series Progression Game Tracker */}
+                {m.bestOf > 1 && (
+                  <div className="flex items-center justify-center gap-1.5 my-2 pt-2 border-t border-[#1e282d]/40">
+                    {Array.from({ length: m.bestOf }).map((_, idx) => {
+                      const gNum = idx + 1;
+                      const isPast = gNum <= m.team1Score + m.team2Score;
+                      const isCurrent = !isPast && m.team1Score + m.team2Score === idx;
+
+                      return (
+                        <span
+                          key={gNum}
+                          className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-all ${
+                            isCurrent
+                              ? "bg-[#e84057]/20 border-[#e84057] text-[#e84057] animate-pulse"
+                              : isPast
+                              ? "bg-[#091428] border-[#1e282d] text-[#0ac8b9]"
+                              : "bg-[#091428]/40 border-[#1e282d]/50 text-[#7e8e9f]"
+                          }`}
+                        >
+                          {isCurrent ? `● Game ${gNum} (Live)` : `Game ${gNum}`}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Action Footer */}
                 <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#1e282d]/60 text-xs">
@@ -372,15 +428,25 @@ export const LiveView: React.FC<LiveViewProps> = ({
                     <img
                       src={nextMatch.team1Image}
                       alt={nextMatch.team1Code}
-                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain mb-2 drop-shadow-md"
+                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain mb-2 drop-shadow-md cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => onSelectTeam?.(nextMatch!.team1Code, nextMatch!.team1Name)}
+                      title={`View ${nextMatch.team1Name} roster`}
                     />
                   ) : (
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#091428] border border-[#1e282d] flex items-center justify-center font-bold text-lg text-[#c8aa6e] mb-2 font-mono">
+                    <div
+                      onClick={() => onSelectTeam?.(nextMatch!.team1Code, nextMatch!.team1Name)}
+                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#091428] border border-[#1e282d] hover:border-[#c8aa6e] flex items-center justify-center font-bold text-lg text-[#c8aa6e] mb-2 font-mono cursor-pointer"
+                      title={`View ${nextMatch.team1Name} roster`}
+                    >
                       {nextMatch.team1Code.slice(0, 3)}
                     </div>
                   )}
                   <div className="flex items-center justify-center gap-1.5 w-full">
-                    <span className="font-bold text-base sm:text-lg text-[#f0e6d2] truncate">
+                    <span
+                      onClick={() => onSelectTeam?.(nextMatch!.team1Code, nextMatch!.team1Name)}
+                      className="font-bold text-base sm:text-lg text-[#f0e6d2] hover:text-[#c8aa6e] cursor-pointer truncate transition-colors"
+                      title={`View ${nextMatch.team1Name} roster`}
+                    >
                       {nextMatch.team1Name}
                     </span>
                     <button
@@ -409,7 +475,12 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       />
                     </button>
                   </div>
-                  <div className="text-xs text-[#9bb3c9] font-mono font-medium">{nextMatch.team1Code}</div>
+                  <div
+                    onClick={() => onSelectTeam?.(nextMatch!.team1Code, nextMatch!.team1Name)}
+                    className="text-xs text-[#9bb3c9] hover:text-[#0ac8b9] cursor-pointer font-mono font-medium"
+                  >
+                    {nextMatch.team1Code}
+                  </div>
                 </div>
 
                 {/* VS Center */}
@@ -425,15 +496,25 @@ export const LiveView: React.FC<LiveViewProps> = ({
                     <img
                       src={nextMatch.team2Image}
                       alt={nextMatch.team2Code}
-                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain mb-2 drop-shadow-md"
+                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain mb-2 drop-shadow-md cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => onSelectTeam?.(nextMatch!.team2Code, nextMatch!.team2Name)}
+                      title={`View ${nextMatch.team2Name} roster`}
                     />
                   ) : (
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#091428] border border-[#1e282d] flex items-center justify-center font-bold text-lg text-[#c8aa6e] mb-2 font-mono">
+                    <div
+                      onClick={() => onSelectTeam?.(nextMatch!.team2Code, nextMatch!.team2Name)}
+                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#091428] border border-[#1e282d] hover:border-[#c8aa6e] flex items-center justify-center font-bold text-lg text-[#c8aa6e] mb-2 font-mono cursor-pointer"
+                      title={`View ${nextMatch.team2Name} roster`}
+                    >
                       {nextMatch.team2Code.slice(0, 3)}
                     </div>
                   )}
                   <div className="flex items-center justify-center gap-1.5 w-full">
-                    <span className="font-bold text-base sm:text-lg text-[#f0e6d2] truncate">
+                    <span
+                      onClick={() => onSelectTeam?.(nextMatch!.team2Code, nextMatch!.team2Name)}
+                      className="font-bold text-base sm:text-lg text-[#f0e6d2] hover:text-[#c8aa6e] cursor-pointer truncate transition-colors"
+                      title={`View ${nextMatch.team2Name} roster`}
+                    >
                       {nextMatch.team2Name}
                     </span>
                     <button
@@ -462,9 +543,30 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       />
                     </button>
                   </div>
-                  <div className="text-xs text-[#9bb3c9] font-mono font-medium">{nextMatch.team2Code}</div>
+                  <div
+                    onClick={() => onSelectTeam?.(nextMatch!.team2Code, nextMatch!.team2Name)}
+                    className="text-xs text-[#9bb3c9] hover:text-[#0ac8b9] cursor-pointer font-mono font-medium"
+                  >
+                    {nextMatch.team2Code}
+                  </div>
                 </div>
               </div>
+
+              {/* Head-to-Head Record Banner */}
+              {(() => {
+                const h2h = computeHeadToHead(nextMatch.team1Code, nextMatch.team2Code, schedule);
+                if (h2h && h2h.totalMatches > 0) {
+                  return (
+                    <div className="flex items-center justify-center gap-2 mt-2 px-3 py-1 rounded-full bg-[#091428] border border-[#c8aa6e]/40 text-[#c8aa6e] text-xs font-medium">
+                      <Swords className="w-3.5 h-3.5 text-[#0ac8b9]" />
+                      <span>
+                        H2H Record: <strong className="text-[#f0e6d2]">{nextMatch.team1Code} {h2h.team1Wins} - {h2h.team2Wins} {nextMatch.team2Code}</strong> ({h2h.totalMatches} series, {h2h.team1GameWins}-{h2h.team2GameWins} games)
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Live Ticking Countdown */}
               <div className="mt-5 pt-4 border-t border-[#1e282d]/80 w-full flex flex-col items-center">
@@ -587,7 +689,13 @@ export const LiveView: React.FC<LiveViewProps> = ({
                         {m.leagueName}
                       </span>
                       <div className="flex items-center gap-1 text-[#f0e6d2] font-semibold">
-                        <span>{m.team1Name}</span>
+                        <span
+                          onClick={() => onSelectTeam?.(m.team1Code, m.team1Name)}
+                          className="hover:text-[#c8aa6e] cursor-pointer transition-colors"
+                          title={`View ${m.team1Name} roster`}
+                        >
+                          {m.team1Name}
+                        </span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -610,7 +718,13 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           />
                         </button>
                         <span className="text-[#9bb3c9] mx-1">vs</span>
-                        <span>{m.team2Name}</span>
+                        <span
+                          onClick={() => onSelectTeam?.(m.team2Code, m.team2Name)}
+                          className="hover:text-[#c8aa6e] cursor-pointer transition-colors"
+                          title={`View ${m.team2Name} roster`}
+                        >
+                          {m.team2Name}
+                        </span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -684,7 +798,13 @@ export const LiveView: React.FC<LiveViewProps> = ({
                     {m.leagueName}
                   </span>
                   <div className="flex items-center gap-1 text-[#f0e6d2] font-semibold">
-                    <span>{m.team1Name}</span>
+                    <span
+                      onClick={() => onSelectTeam?.(m.team1Code, m.team1Name)}
+                      className="hover:text-[#c8aa6e] cursor-pointer transition-colors"
+                      title={`View ${m.team1Name} roster`}
+                    >
+                      {m.team1Name}
+                    </span>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -707,7 +827,13 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       />
                     </button>
                     <span className="text-[#9bb3c9] mx-1">vs</span>
-                    <span>{m.team2Name}</span>
+                    <span
+                      onClick={() => onSelectTeam?.(m.team2Code, m.team2Name)}
+                      className="hover:text-[#c8aa6e] cursor-pointer transition-colors"
+                      title={`View ${m.team2Name} roster`}
+                    >
+                      {m.team2Name}
+                    </span>
                     <button
                       type="button"
                       onClick={(e) => {

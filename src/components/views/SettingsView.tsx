@@ -16,9 +16,12 @@ import {
   Database,
   Sparkles,
   Download,
+  Volume2,
+  Keyboard,
 } from "lucide-react";
 import { APP_VERSION } from "../../version";
 import { DEFAULT_FOLLOWED_REGIONS, DEFAULT_FOLLOWED_LEAGUES } from "../../api";
+import { playKickoffChime } from "../../helpers";
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -347,17 +350,49 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </section>
 
-      {/* 2. Desktop Notifications & Alerts */}
+      {/* 2. Desktop Notifications & Sound Alerts */}
       <section className="space-y-3">
         <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center gap-1.5">
           <Bell className="w-3.5 h-3.5 text-[#0ac8b9]" />
-          Desktop Notifications & Alerts
+          Desktop Notifications & Sound Alerts
         </h2>
 
         <div className="space-y-2">
+          {/* Kickoff Audio Chime */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-[#0a1420] border border-[#1e282d]">
+            <div>
+              <div className="font-semibold text-[#f0e6d2] flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 text-[#0ac8b9]" />
+                <span>Kickoff Hextech Audio Chime</span>
+              </div>
+              <div className="text-[11px] text-[#7e8e9f]">
+                Synthesize a rich LoL-style hextech harmonic chime when a followed match begins. (0 KB assets)
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => playKickoffChime()}
+                className="px-2.5 py-1 rounded bg-[#091428] hover:bg-[#121e2d] border border-[#1e282d] hover:border-[#c8aa6e] text-[#c8aa6e] font-semibold text-xs transition-colors flex items-center gap-1"
+                title="Play a test sample of the procedural hextech chime"
+              >
+                <Volume2 className="w-3 h-3" />
+                <span>Test Sound</span>
+              </button>
+              <button
+                onClick={() => onUpdateSettings({ soundAlerts: !settings.soundAlerts })}
+                className={`px-3 py-1 font-bold rounded text-xs transition-colors ${
+                  settings.soundAlerts ? "bg-[#0ac8b9] text-[#091428]" : "bg-[#1e282d] text-[#7e8e9f]"
+                }`}
+              >
+                {settings.soundAlerts ? "ON" : "OFF"}
+              </button>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d]">
             <div>
-              <div className="font-semibold text-[#f0e6d2]">Live Kickoff Alerts</div>
+              <div className="font-semibold text-[#f0e6d2]">Live Kickoff Desktop Alerts</div>
               <div className="text-[11px] text-[#7e8e9f]">
                 Display desktop notifications when followed teams or players begin a match.
               </div>
@@ -408,14 +443,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </section>
 
-      {/* 3. System Tray & Startup */}
+      {/* 3. System Tray, Ergonomics & Startup */}
       <section className="space-y-3">
         <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center gap-1.5">
           <Minimize2 className="w-3.5 h-3.5 text-[#0ac8b9]" />
-          System Tray & Startup
+          System Tray, Ergonomics & Hotkeys
         </h2>
 
         <div className="space-y-2">
+          {/* Global Summon Hotkey */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#0ac8b9]/40 shadow-sm">
+            <div>
+              <div className="font-semibold text-[#f0e6d2] flex items-center gap-1.5">
+                <Keyboard className="w-3.5 h-3.5 text-[#0ac8b9]" />
+                <span>Global Summon Hotkey</span>
+              </div>
+              <div className="text-[11px] text-[#7e8e9f]">
+                Summon or hide RiftWatch instantly from anywhere in Windows (even inside full-screen games or browser).
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded bg-[#091428] border border-[#0ac8b9]/60 text-[#0ac8b9] font-mono font-bold text-xs tracking-wider">
+              Alt + Shift + L
+            </span>
+          </div>
+
+          {/* Compact Mode */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d]">
+            <div>
+              <div className="font-semibold text-[#f0e6d2]">Compact Desktop Mode</div>
+              <div className="text-[11px] text-[#7e8e9f]">
+                Fit RiftWatch into a tight, distraction-free mini window for second monitors or split-screen gaming.
+              </div>
+            </div>
+            <button
+              onClick={() => onUpdateSettings({ compactMode: !settings.compactMode })}
+              className={`px-3 py-1 font-bold rounded text-xs transition-colors ${
+                settings.compactMode ? "bg-[#0ac8b9] text-[#091428]" : "bg-[#1e282d] text-[#7e8e9f]"
+              }`}
+            >
+              {settings.compactMode ? "ON" : "OFF"}
+            </button>
+          </div>
+
           <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d]">
             <div>
               <div className="font-semibold text-[#f0e6d2]">Close Button Minimizes to System Tray</div>

@@ -106,6 +106,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyKickoff: true,
   notifyPregame: true,
   notifyStream: true,
+  soundAlerts: false,
+  compactMode: false,
   minimizeToTrayOnClose: true,
   startWithWindows: false,
   followedTeams: ["T1", "GEN", "G2", "FLY", "BLG"],
