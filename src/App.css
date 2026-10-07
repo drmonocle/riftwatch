@@ -13,6 +13,10 @@
     --live: #e84057;
   }
 
+  html {
+    font-size: 17.5px; /* Scales all rem-based typography up 1 full size (12px -> 13.5px, 14px -> 15.5px, 16px -> 17.5px) */
+  }
+
   body {
     margin: 0;
     padding: 0;
@@ -25,6 +29,17 @@
     user-select: none;
     overflow: hidden;
   }
+}
+
+/* Bump arbitrary micro-font labels up 1 size for clear readability */
+.text-\[9px\] {
+  font-size: 11px !important;
+}
+.text-\[10px\] {
+  font-size: 12px !important;
+}
+.text-\[11px\] {
+  font-size: 13px !important;
 }
 
 /* Custom Hextech scrollbars */
