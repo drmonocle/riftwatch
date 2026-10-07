@@ -534,15 +534,27 @@ def _setup_logging() -> None:
     root.addHandler(handler)
 
 
-def _single_instance() -> bool:
+def _single_instance(timeout_sec: float = 3.0) -> bool:
     """Return False if another RiftWatch window is already running."""
     if sys.platform != "win32":
         return True
     try:
         import ctypes
+        import time
         kernel32 = ctypes.windll.kernel32
-        _single_instance.handle = kernel32.CreateMutexW(None, False, "Local\\RiftWatchSingleInstance")
-        return kernel32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
+        deadline = time.time() + timeout_sec
+        while True:
+            handle = kernel32.CreateMutexW(None, False, "Local\\RiftWatchSingleInstance")
+            err = kernel32.GetLastError()
+            if err != 183:  # ERROR_ALREADY_EXISTS
+                _single_instance.handle = handle
+                return True
+            if handle:
+                kernel32.CloseHandle(handle)
+            if time.time() >= deadline:
+                break
+            time.sleep(0.2)
+        return False
     except Exception:
         return True
 
@@ -560,6 +572,7 @@ def _release_single_instance() -> None:
 
 def run() -> None:
     _setup_logging()
+    log.info("Starting RiftWatch v%s...", __version__)
     if not _single_instance():
         log.info("Another instance is already running; exiting.")
         return
@@ -573,6 +586,11 @@ def run() -> None:
     W.apply_dark_titlebar(root)
     root.update_idletasks()
     root.deiconify()
+    try:
+        root.lift()
+        root.focus_force()
+    except Exception:
+        pass
     try:
         root.mainloop()
     finally:

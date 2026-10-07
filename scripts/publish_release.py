@@ -34,12 +34,15 @@ def main():
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel & 24/7 Stream Companion
 
 ### ✨ What's New & Refined in {version}
-* **Vector Rift Herald Emblem Branding (Taskbar & System Tray):**
-  * **Custom Vector Herald Artwork:** Replaced procedural geometry with the community-voted Vector Rift Herald emblem: sharp golden and purple horns curving upward, glowing purple eyes, and angular gold shield lines on a deep Hextech navy-purple rounded squircle badge.
-  * **Multi-Resolution Windows PE Icon:** Master `app.ico` packed with native Win32 icon mipmaps across 7 standard resolutions (`16x16`, `24x24`, `32x32`, `48x48`, `64x64`, `128x128`, `256x256`) for razor-sharp rendering in the Windows Taskbar, Alt-Tab switcher, File Explorer, and Desktop shortcuts.
-  * **Custom System Tray Icon:** Updated the background `pystray` system notification tray icon with the Vector Rift Herald branding, complete with subtle sharpening and contrast optimization at 64x64 and 32x32.
-  * **Dual Win32 / Tkinter Icon Binding:** Automatically applies native `iconbitmap` to the window HWND alongside multi-resolution `iconphoto` frames, guaranteeing crisp rendering across all DPI display scales.
-  * **Zero White Screen Flash & Immersive Dark Mode:** Fully preserved all v0.2.4 dark mode enhancements (`root.withdraw()` staging and `DWMWA_USE_IMMERSIVE_DARK_MODE`).
+* **Robust 1-Click Self-Updater & Process Relaunch Engine:**
+  * **Dedicated Parameterized Helper Script:** Replaced inline string-evaluated PowerShell commands with a robust, disk-persisted helper script (`%APPDATA%\\RiftWatch\\apply_update.ps1`). Completely eradicates PowerShell command quoting errors, unescaped path parentheses (e.g. `RiftWatch (1).exe`), and `-and` operator syntax failures.
+  * **Reliable Process Lifecycle Synchronization:** Helper now specifically tracks the exact parent PID, checks all process variants matching `*RiftWatch*` and `*RiftScout*`, and performs a safe two-step atomic swap with `.old` backup and automatic rollback protection.
+  * **Guaranteed Foreground Elevation on Relaunch:** Explicitly launches updated executables via `Start-Process -FilePath $CurrentExe -WindowStyle Normal` with 1-second process and file-handle clearance delay, plus runtime `root.lift()` and `root.focus_force()`.
+  * **Comprehensive Diagnostic Logging:** All update phases (process waiting, file replacement attempts, and process launch PIDs) are cleanly logged with timestamps to `%APPDATA%\\RiftWatch\\update.log`.
+* **Single-Instance Mutex Acquisition Hardening:**
+  * Added a 3-second mutex retry acquisition loop with immediate duplicate handle closure (`kernel32.CloseHandle(handle)`) upon `ERROR_ALREADY_EXISTS`. Prevents newly spawned binaries from exiting prematurely while a previous instance completes its shutdown sequence.
+* **Vector Rift Herald Branding:**
+  * High-resolution Vector Rift Herald icon across Windows Taskbar, System Notification Tray (`pystray`), Alt-Tab switcher, and Window Titlebar.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`

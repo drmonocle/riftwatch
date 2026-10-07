@@ -121,65 +121,118 @@ def launch_swap_and_restart(new_exe: Path) -> None:
     new_exe = Path(new_exe).resolve()
     pid = os.getpid()
 
-    def q(p: Path) -> str:  # PowerShell single-quoted literal
-        return "'" + str(p).replace("'", "''") + "'"
-
     log_file = C.APPDATA_DIR / "update.log"
+    script_path = C.APPDATA_DIR / "apply_update.ps1"
 
-    ps = (
-        "$ErrorActionPreference='Continue';"
-        f"$log={q(log_file)};"
-        "function Log($m){$t=(Get-Date).ToString('yyyy-MM-dd HH:mm:ss'); \"$t $m\" | Out-File -FilePath $log -Append -Encoding utf8};"
-        "Log '=== RiftWatch Update Helper Started ===';"
-        f"Log 'Current PID: {pid}';"
-        f"Log 'Target exe: {q(current_exe)}';"
-        f"Log 'New exe: {q(new_exe)}';"
-        f"Log 'Waiting for RiftWatch processes to exit...';"
-        f"$waited = 0;"
-        f"while ($waited -lt 25) {{"
-        f"    $procs = Get-Process -Name RiftWatch -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne $PID }};"
-        f"    if (-not $procs) {{ break }};"
-        f"    Start-Sleep -Milliseconds 500;"
-        f"    $waited += 0.5;"
-        f"}};"
-        f"$procs = Get-Process -Name RiftWatch -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne $PID }};"
-        f"if ($procs) {{ Log 'Force killing remaining RiftWatch processes...'; $procs | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 1000 }};"
-        f"$current = {q(current_exe)};"
-        f"$new = {q(new_exe)};"
-        f"$old = \"$current.old\";"
-        f"if (Test-Path -LiteralPath $old) {{ Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }};"
-        f"$replaced = $false;"
-        f"for ($i=1; $i -le 30 -and -not $replaced; $i++) {{"
-        f"    try {{"
-        f"        if (Test-Path -LiteralPath $current) {{"
-        f"            Move-Item -LiteralPath $current -Destination $old -Force -ErrorAction Stop;"
-        f"        }};"
-        f"        Move-Item -LiteralPath $new -Destination $current -Force -ErrorAction Stop;"
-        f"        $replaced = $true;"
-        f"        Log \"File swapped successfully on attempt $i\";"
-        f"    }} catch {{"
-        f"        Log \"Attempt $i failed: $($_.Exception.Message)\";"
-        f"        Start-Sleep -Milliseconds 500;"
-        f"    }};"
-        f"}};"
-        f"if (Test-Path -LiteralPath $old) {{ Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }};"
-        f"if ($replaced) {{"
-        f"    Log \"Launching updated executable: $current\";"
-        f"    Start-Sleep -Milliseconds 500;"
-        f"    $np = Start-Process -FilePath $current -WindowStyle Normal -PassThru;"
-        f"    Log \"Launched new process PID: $($np.Id)\";"
-        f"}} else {{"
-        f"    Log 'ERROR: Failed to swap executable after 30 attempts!';"
-        f"    if (Test-Path -LiteralPath $old -and -not (Test-Path -LiteralPath $current)) {{"
-        f"        Move-Item -LiteralPath $old -Destination $current -Force -ErrorAction SilentlyContinue;"
-        f"    }};"
-        f"}};"
-        f"Log '=== RiftWatch Update Helper Completed ===';"
-    )
+    ps_script = """param(
+    [Parameter(Mandatory=$true)][string]$CurrentExe,
+    [Parameter(Mandatory=$true)][string]$NewExe,
+    [Parameter(Mandatory=$true)][int]$OldPid,
+    [Parameter(Mandatory=$true)][string]$LogFile
+)
+
+$ErrorActionPreference = 'Continue'
+
+function Log($m) {
+    $t = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+    "$t $m" | Out-File -FilePath $LogFile -Append -Encoding utf8
+}
+
+Log "=== RiftWatch Update Helper Started ==="
+Log "Target Current Exe: $CurrentExe"
+Log "Source New Exe: $NewExe"
+Log "Old PID: $OldPid"
+
+# 1. Wait for old process to exit
+Log "Waiting for old PID $OldPid to exit..."
+try {
+    Wait-Process -Id $OldPid -Timeout 15 -ErrorAction SilentlyContinue
+} catch {
+    Log "Wait-Process error: $($_.Exception.Message)"
+}
+
+# 2. Ensure any lingering instances exit cleanly
+$waited = 0
+while ($waited -lt 15) {
+    $procs = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Id -ne $PID -and ($_.Id -eq $OldPid -or $_.Name -like "*RiftWatch*" -or $_.Name -like "*RiftScout*")
+    }
+    if (-not $procs) { break }
+    Start-Sleep -Milliseconds 500
+    $waited += 0.5
+}
+
+$procs = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.Id -ne $PID -and ($_.Id -eq $OldPid -or $_.Name -like "*RiftWatch*" -or $_.Name -like "*RiftScout*")
+}
+if ($procs) {
+    Log "Force-stopping lingering processes..."
+    $procs | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
+# 3. Two-step atomic file swap with retries
+$oldBackup = "$CurrentExe.old"
+if (Test-Path -LiteralPath $oldBackup) {
+    Remove-Item -LiteralPath $oldBackup -Force -ErrorAction SilentlyContinue
+}
+
+$replaced = $false
+for ($i = 1; $i -le 30; $i++) {
+    try {
+        if (Test-Path -LiteralPath $CurrentExe) {
+            Move-Item -LiteralPath $CurrentExe -Destination $oldBackup -Force -ErrorAction Stop
+        }
+        Move-Item -LiteralPath $NewExe -Destination $CurrentExe -Force -ErrorAction Stop
+        $replaced = $true
+        Log "File swapped successfully on attempt $i"
+        break
+    } catch {
+        Log "Attempt $i failed: $($_.Exception.Message)"
+        Start-Sleep -Milliseconds 500
+    }
+}
+
+if ($replaced) {
+    if (Test-Path -LiteralPath $oldBackup) {
+        Remove-Item -LiteralPath $oldBackup -Force -ErrorAction SilentlyContinue
+    }
+} else {
+    Log "ERROR: Failed to swap executable after 30 attempts!"
+    if ((Test-Path -LiteralPath $oldBackup) -and (-not (Test-Path -LiteralPath $CurrentExe))) {
+        Move-Item -LiteralPath $oldBackup -Destination $CurrentExe -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 4. Relaunch the updated executable in normal interactive desktop window state
+if ($replaced -and (Test-Path -LiteralPath $CurrentExe)) {
+    Log "Launching updated executable: $CurrentExe"
+    Start-Sleep -Seconds 1
+    $proc = Start-Process -FilePath $CurrentExe -WindowStyle Normal -PassThru
+    Log "Successfully launched new process PID: $($proc.Id)"
+}
+
+Log "=== RiftWatch Update Helper Completed ==="
+"""
+    try:
+        script_path.write_text(ps_script, encoding="utf-8")
+    except Exception as exc:
+        log.warning("Could not write apply_update.ps1 to disk: %s", exc)
+
     flags = 0
     if sys.platform == "win32":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen(
-        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", ps],
-        creationflags=flags, close_fds=True,
-    )
+
+    cmd = [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-WindowStyle", "Hidden",
+        "-File", str(script_path),
+        "-CurrentExe", str(current_exe),
+        "-NewExe", str(new_exe),
+        "-OldPid", str(pid),
+        "-LogFile", str(log_file),
+    ]
+
+    subprocess.Popen(cmd, creationflags=flags, close_fds=True)
