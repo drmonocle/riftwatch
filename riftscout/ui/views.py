@@ -236,10 +236,9 @@ class LiveView(View):
         a = self.app
         reasons = a.watchlist.reasons(m, st)
         strong = any(r.strong for r in reasons)
-        outer = tk.Frame(self.body, bg=C.COLOR_GOLD if strong else C.COLOR_BORDER)
-        outer.pack(fill="x", padx=px(18), pady=px(6))
-        c = tk.Frame(outer, bg=C.COLOR_SURFACE)
-        c.pack(fill="both", expand=True, padx=1, pady=1)
+        border = C.COLOR_GOLD if strong else C.COLOR_BORDER
+        c = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightbackground=border, highlightthickness=1)
+        c.pack(fill="x", padx=px(18), pady=px(6))
 
         hidden = cards.scores_hidden(a, m)
         blue_is_team1 = False
@@ -416,7 +415,7 @@ class ScheduleView(View):
         self._visible_count = 25
         if hasattr(self.app, "worker"):
             self.app.worker.request("schedule")
-        self.render()
+        self.after(1, self.render)
 
     def _update_filters(self) -> None:
         s = self.app.settings
@@ -461,11 +460,12 @@ class ScheduleView(View):
     def _set(self, key: str, value) -> None:
         self.app.settings.set(key, value)
         self._visible_count = 25
-        self.render()
+        self._update_filters()
+        self.after(1, self.render)
 
     def _show_more(self) -> None:
         self._visible_count += 25
-        self.render()
+        self.after(1, self.render)
 
     def filtered(self) -> List[Dict[str, Any]]:
         a, s = self.app, self.app.settings
@@ -697,8 +697,9 @@ class WatchlistView(View):
 
     def _set_mode(self, mode):
         self.mode, self.expanded = mode, None
+        self._update_modebar()
         self.scroll.to_top()
-        self.app.request_render(self)
+        self.after(1, lambda: self.app.request_render(self))
 
     def _build(self) -> None:
         self._update_modebar()

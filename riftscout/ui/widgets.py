@@ -170,6 +170,14 @@ class ScrollFrame(tk.Frame):
             return
         sf.canvas.yview_scroll(int(-event.delta / 120) * 3, "units")
 
+    @staticmethod
+    def _safe_destroy(widget: tk.Widget) -> None:
+        try:
+            if widget.winfo_exists():
+                widget.destroy()
+        except Exception:
+            pass
+
     def keep_scroll(self, rebuild: Callable[[], None]) -> None:
         """Rebuild contents smoothly using double-buffered frame swapping to prevent white flashes."""
         try:
@@ -186,7 +194,6 @@ class ScrollFrame(tk.Frame):
             self.body = old_body
             new_body.destroy()
             raise
-        new_body.update_idletasks()
         self.canvas.itemconfigure(self._win, window=new_body)
         new_body.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         w = self.canvas.winfo_width()
@@ -194,7 +201,7 @@ class ScrollFrame(tk.Frame):
             self.canvas.itemconfigure(self._win, width=w)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         self.canvas.yview_moveto(pos)
-        old_body.destroy()
+        self.after_idle(self._safe_destroy, old_body)
 
     def to_top(self) -> None:
         self.canvas.yview_moveto(0)

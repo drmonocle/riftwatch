@@ -245,6 +245,7 @@ def test_scrollframe_double_buffering(app):
 
     sf.keep_scroll(rebuild)
     assert rebuilt
+    app.root.update_idletasks()
     assert not old_body.winfo_exists()
 
 

@@ -14,16 +14,14 @@ SPOILER_MASK = "–"
 
 
 def logo(parent, app, url: str, size: int, text: str) -> tk.Label:
-    lbl = tk.Label(parent, bg=parent.cget("bg"), bd=0)
-
     def ready(photo):
         if lbl.winfo_exists():
             lbl.configure(image=photo)
             lbl.image = photo
 
     photo = app.images.get(url, px(size), on_ready=ready, fallback_text=text)
+    lbl = tk.Label(parent, bg=parent.cget("bg"), bd=0, image=photo) if photo is not None else tk.Label(parent, bg=parent.cget("bg"), bd=0)
     if photo is not None:
-        lbl.configure(image=photo)
         lbl.image = photo
     return lbl
 
@@ -87,9 +85,8 @@ def match_row(parent, app, match: Dict[str, Any], livestats=None) -> tk.Frame:
     """Compact schedule card: header line, teams + score, follow reasons."""
     reasons = app.watchlist.reasons(match, livestats)
     strong = any(r.strong for r in reasons)
-    outer_card = tk.Frame(parent, bg=C.COLOR_BORDER_FOCUS if strong else C.COLOR_BORDER)
-    c = tk.Frame(outer_card, bg=C.COLOR_SURFACE)
-    c.pack(fill="both", expand=True, padx=1, pady=1)
+    border = C.COLOR_BORDER_FOCUS if strong else C.COLOR_BORDER
+    c = tk.Frame(parent, bg=C.COLOR_SURFACE, highlightbackground=border, highlightthickness=1)
 
     top = tk.Frame(c, bg=C.COLOR_SURFACE)
     top.pack(fill="x", padx=px(12), pady=(px(8), 0))
@@ -142,4 +139,4 @@ def match_row(parent, app, match: Dict[str, Any], livestats=None) -> tk.Frame:
     if match.get("state") == "inProgress":
         button(bottom, "▶ Watch", lambda m=match: app.watch(m), size=8, bg=C.COLOR_LIVE, fg="white",
                hover_bg="#ff5b70", pady=1).pack(side="right", padx=px(6))
-    return outer_card
+    return c
