@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AppSettings, Match, StreamEvent } from "../types";
-import { ChevronLeft, ChevronRight, Pin, PinOff, ExternalLink, Minimize2, Maximize2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pin, PinOff, Minimize2, Maximize2, X } from "lucide-react";
 
 interface TickerBarProps {
   settings: AppSettings;
@@ -33,6 +33,40 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 }) => {
   const [index, setIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+
+  const handleStartDrag = (e: React.MouseEvent) => {
+    if (e.button === 0) {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke("start_window_drag"))
+        .catch(() => {});
+    }
+  };
+
+  const handleDock = () => {
+    onUpdateSettings({ tickerMode: "docked" });
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        invoke("hide_ticker").catch(() => {});
+        invoke("show_main").catch(() => {});
+      })
+      .catch(() => {});
+  };
+
+  const handleDetach = () => {
+    onUpdateSettings({ tickerMode: "detached" });
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke("show_ticker").catch(() => {}))
+      .catch(() => {});
+  };
+
+  const handleClose = () => {
+    onUpdateSettings({ tickerMode: "hidden" });
+    if (isDetached) {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke("hide_ticker").catch(() => {}))
+        .catch(() => {});
+    }
+  };
 
   // Compile items
   const items: TickerItem[] = [];
@@ -67,7 +101,9 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 
   // 3. Upcoming matches
   for (const m of upcomingMatches.slice(0, 3)) {
-    const relTime = m.startTimeUtc ? new Date(m.startTimeUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Soon";
+    const relTime = m.startTimeUtc
+      ? new Date(m.startTimeUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "Soon";
     items.push({
       id: `up-${m.matchId}`,
       badge: "⏰ UPCOMING",
@@ -82,11 +118,12 @@ export const TickerBar: React.FC<TickerBarProps> = ({
   // Auto rotation
   useEffect(() => {
     if (items.length <= 1 || isHovered) return;
+    const cycleMs = (settings.tickerCycleSec || 5) * 1000;
     const timer = setInterval(() => {
       setIndex((prev) => (prev + 1) % items.length);
-    }, 5500);
+    }, cycleMs);
     return () => clearInterval(timer);
-  }, [items.length, isHovered]);
+  }, [items.length, isHovered, settings.tickerCycleSec]);
 
   if (settings.tickerMode === "hidden" && !isDetached) {
     return null;
@@ -98,18 +135,18 @@ export const TickerBar: React.FC<TickerBarProps> = ({
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`select-none flex items-center justify-between text-xs px-3 py-1.5 transition-colors ${
+      className={`select-none flex items-center justify-between text-xs px-3 py-1 transition-colors ${
         isDetached
-          ? "bg-[#0a0e17]/95 backdrop-blur-md border border-[#c8aa6e] shadow-2xl h-8 rounded"
+          ? "bg-[#080c14] border border-[#c8aa6e]/60 shadow-2xl h-[38px] w-full"
           : "bg-[#080c14] border-b border-[#1e282d] h-8"
       }`}
     >
       {/* Detached Drag Grip */}
       {isDetached && (
         <div
-          data-tauri-drag-region
-          className="cursor-move text-[#7e8e9f] hover:text-[#c8aa6e] mr-2 text-[10px] select-none p-0.5"
-          title="Drag to reposition HUD"
+          onMouseDown={handleStartDrag}
+          className="cursor-move flex items-center justify-center text-[#c8aa6e] hover:text-white mr-2 text-sm select-none px-1.5 py-0.5 rounded hover:bg-[#1e282d] transition-colors"
+          title="Click and drag to reposition floating HUD"
         >
           ⠿
         </div>
@@ -117,13 +154,22 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 
       {/* Main Clickable Content */}
       <div
-        onClick={() => currentItem && onSelectTab(currentItem.targetTab)}
+        onClick={() => {
+          if (isDetached) {
+            import("@tauri-apps/api/core")
+              .then(({ invoke }) => invoke("show_main").catch(() => {}))
+              .catch(() => {});
+          }
+          if (currentItem) onSelectTab(currentItem.targetTab);
+        }}
         className="flex items-center gap-2.5 overflow-hidden flex-1 cursor-pointer"
         title="Click to jump to match"
       >
         {currentItem ? (
           <>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${currentItem.badgeBg} ${currentItem.badgeFg}`}>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${currentItem.badgeBg} ${currentItem.badgeFg}`}
+            >
               {currentItem.badge}
             </span>
             <span className="font-semibold text-[#f0e6d2] truncate">{currentItem.headline}</span>
@@ -161,7 +207,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
         {/* Detach / Dock Mode Button */}
         {!isDetached ? (
           <button
-            onClick={() => onUpdateSettings({ tickerMode: "detached" })}
+            onClick={handleDetach}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:text-[#0ac8b9] hover:bg-[#1e282d] text-[10px]"
             title="Detach to floating desktop HUD overlay"
           >
@@ -172,7 +218,13 @@ export const TickerBar: React.FC<TickerBarProps> = ({
           <>
             {/* Pin Always on Top Toggle */}
             <button
-              onClick={() => onUpdateSettings({ tickerTopmost: !settings.tickerTopmost })}
+              onClick={() => {
+                const nextTop = !settings.tickerTopmost;
+                onUpdateSettings({ tickerTopmost: nextTop });
+                import("@tauri-apps/api/core")
+                  .then(({ invoke }) => invoke("set_ticker_topmost", { topmost: nextTop }))
+                  .catch(() => {});
+              }}
               className={`p-1 rounded hover:bg-[#1e282d] ${
                 settings.tickerTopmost ? "text-[#c8aa6e]" : "text-[#7e8e9f]"
               }`}
@@ -180,8 +232,9 @@ export const TickerBar: React.FC<TickerBarProps> = ({
             >
               {settings.tickerTopmost ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
             </button>
+
             <button
-              onClick={() => onUpdateSettings({ tickerMode: "docked" })}
+              onClick={handleDock}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:text-[#c8aa6e] hover:bg-[#1e282d] text-[10px]"
               title="Dock back to main RiftWatch window"
             >
@@ -193,7 +246,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 
         {/* Close/Hide Button */}
         <button
-          onClick={() => onUpdateSettings({ tickerMode: "hidden" })}
+          onClick={handleClose}
           className="p-1 hover:text-[#e84057] rounded hover:bg-[#1e282d]"
           title="Hide ticker bar (can be restored in Settings)"
         >

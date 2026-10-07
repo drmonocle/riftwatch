@@ -89,15 +89,43 @@ export interface NewsItem {
   url: string;
 }
 
+export interface Region {
+  code: string;
+  name: string;
+  leagues: string[];
+  badge: string;
+}
+
+export interface League {
+  slug: string;
+  name: string;
+  region: string;
+  image?: string;
+  priority?: number;
+}
+
+export interface PlayerEntry {
+  name: string;
+  role: string;
+  teamCode: string;
+  teamName: string;
+  realName?: string;
+}
+
 export interface AppSettings {
   spoilerMode: boolean;
   tickerMode: "docked" | "detached" | "hidden";
   tickerTopmost: boolean;
+  tickerCycleSec: number;
   defaultTab: "live" | "schedule" | "stream" | "watchlist" | "news" | "settings";
   notifyKickoff: boolean;
   notifyPregame: boolean;
   notifyStream: boolean;
+  minimizeToTrayOnClose: boolean;
+  startWithWindows: boolean;
   followedTeams: string[];
   followedPlayers: string[];
   followedLeagues: string[];
+  followedRegions: string[];
 }
+
