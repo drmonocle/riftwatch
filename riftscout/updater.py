@@ -59,7 +59,7 @@ def check_for_updates(current: str = __version__) -> Optional[Dict[str, Any]]:
         "tag": tag,
         "html_url": release.get("html_url") or C.GITHUB_PROJECT_URL,
         "asset_url": (exe_asset or {}).get("browser_download_url"),
-        "asset_name": (exe_asset or {}).get("name") or "RiftScout.exe",
+        "asset_name": (exe_asset or {}).get("name") or "RiftWatch.exe",
         "sha_url": (sha_asset or {}).get("browser_download_url"),
         "body": release.get("body") or "",
         "published_at": release.get("published_at") or "",
@@ -88,7 +88,7 @@ def download_update(update_info: Dict[str, Any],
                     progress_callback: Optional[Callable[[int, int], None]] = None) -> Path:
     """Download and verify the release exe. Raises UpdateError on any problem."""
     url, sha_url = update_info.get("asset_url"), update_info.get("sha_url")
-    name = update_info.get("asset_name") or "RiftScout.exe"
+    name = update_info.get("asset_name") or "RiftWatch.exe"
     if not url:
         raise UpdateError("This release has no Windows executable attached.")
     if not sha_url:
@@ -99,7 +99,7 @@ def download_update(update_info: Dict[str, Any],
     if not expected:
         raise UpdateError(f"No checksum for {name} in the release's SHA256SUMS file.")
 
-    dest = C.UPDATES_DIR / f"RiftScout_{re.sub(r'[^0-9A-Za-z._-]', '', update_info.get('tag', 'new'))}.exe"
+    dest = C.UPDATES_DIR / f"RiftWatch_{re.sub(r'[^0-9A-Za-z._-]', '', update_info.get('tag', 'new'))}.exe"
     if not net.download_file(url, str(dest), progress_callback=progress_callback):
         raise UpdateError("Download failed. Check your connection and try again.")
     actual = calculate_sha256(dest)
