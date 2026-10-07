@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { Match, AppSettings } from "../../types";
+import { Match, AppSettings, CatalogData } from "../../types";
 import { Search, Calendar, Star } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
+import { isMatchFollowed } from "../../helpers";
 
 interface ScheduleViewProps {
   schedule: Match[];
   settings: AppSettings;
+  catalog?: CatalogData;
   onOpenUrl: (url: string) => void;
   onUpdateSettings?: (s: Partial<AppSettings>) => void;
 }
@@ -13,6 +15,7 @@ interface ScheduleViewProps {
 export const ScheduleView: React.FC<ScheduleViewProps> = ({
   schedule,
   settings,
+  catalog,
   onOpenUrl,
   onUpdateSettings,
 }) => {
@@ -59,11 +62,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
     // Followed only
     if (followedOnly) {
-      const isFollowed =
-        settings.followedTeams.includes(m.team1Code) ||
-        settings.followedTeams.includes(m.team2Code) ||
-        settings.followedLeagues.includes(m.leagueSlug);
-      if (!isFollowed) return false;
+      if (!isMatchFollowed(m, settings, catalog?.leagues)) return false;
     }
 
     // Search query

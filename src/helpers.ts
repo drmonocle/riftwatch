@@ -1,4 +1,4 @@
-import { Match, StreamEvent } from "./types";
+import { Match, StreamEvent, AppSettings, League } from "./types";
 
 /** If the schedule's latest started entry is older than this, the stream is treated as offline. */
 const MAX_AIRING_GAP_MS = 10 * 60 * 60 * 1000;
@@ -135,6 +135,13 @@ export function getLeagueBroadcastStreams(
       { name: "CBLOL YouTube", url: "https://www.youtube.com/@CBLOLoficial/live", icon: "youtube" },
       { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
     );
+  } else if (slug.includes("emea") || slug.includes("masters")) {
+    streams.push(
+      { name: "EMEA Twitch", url: "https://www.twitch.tv/emeamasters", icon: "twitch" },
+      { name: "OTP LoL (FR)", url: "https://www.twitch.tv/otplol_", icon: "twitch" },
+      { name: "Prime League (DE)", url: "https://www.twitch.tv/primeleague", icon: "twitch" },
+      { name: "LoLEsports", url: "https://lolesports.com", icon: "riot" }
+    );
   } else {
     // International tournaments (Worlds, MSI, First Stand) & general default
     streams.push(
@@ -145,4 +152,152 @@ export function getLeagueBroadcastStreams(
   }
 
   return streams;
+}
+
+/**
+ * Formats the header 24/7 Twitch stream title pill showing what stage, year, and match.
+ * If stream is offline or outside airing window, returns offline status.
+ */
+export function formatStreamHeaderTitle(e: StreamEvent | null): { title: string; isLive: boolean } {
+  if (!e) {
+    return { title: "Twitch 24/7: Offline", isLive: false };
+  }
+
+  // Extract 4-digit year from season (e.g. "S13 (2023)" -> "2023", "2024" -> "2024")
+  let year = "";
+  if (e.season) {
+    const m = e.season.match(/\b(20\d\d)\b/);
+    year = m ? m[1] : e.season;
+  }
+
+  const stage = e.stage || e.event || "";
+  const match = e.team1 && e.team2 ? `${e.team1} vs ${e.team2}` : e.name || "";
+
+  // Combine: "Twitch 24/7: [Year] [Stage] · [Match]" (e.g. "Twitch 24/7: 2023 Finals · WBG vs T1")
+  const details: string[] = [];
+  if (year && stage) {
+    details.push(`${year} ${stage}`);
+  } else if (year || stage) {
+    details.push(year || stage);
+  }
+
+  if (match) {
+    details.push(match);
+  }
+
+  if (details.length > 0) {
+    return { title: `Twitch 24/7: ${details.join(" · ")}`, isLive: true };
+  }
+
+  return { title: "Twitch 24/7: Airing Now", isLive: true };
+}
+
+/**
+ * Determines whether a match matches the user's watchlist:
+ * 1. Followed team (team1Code or team2Code in settings.followedTeams)
+ * 2. Followed league (leagueSlug or lowercase leagueName in settings.followedLeagues)
+ * 3. Followed region (if user follows the region associated with this league)
+ */
+export function isMatchFollowed(
+  m: Match,
+  settings: AppSettings,
+  leaguesCatalog?: League[]
+): boolean {
+  if (
+    settings.followedTeams.includes(m.team1Code) ||
+    settings.followedTeams.includes(m.team2Code)
+  ) {
+    return true;
+  }
+
+  const slug = (m.leagueSlug || "").toLowerCase();
+  const name = (m.leagueName || "").toLowerCase();
+
+  if (
+    settings.followedLeagues.some(
+      (l) => l.toLowerCase() === slug || l.toLowerCase() === name
+    )
+  ) {
+    return true;
+  }
+
+  // Region check against catalog
+  if (settings.followedRegions && settings.followedRegions.length > 0 && leaguesCatalog) {
+    const l = leaguesCatalog.find(
+      (item) => item.slug.toLowerCase() === slug || item.name.toLowerCase() === name
+    );
+    if (l?.region && settings.followedRegions.includes(l.region.toUpperCase())) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Reconciles Riot's live broadcast events (/getLive) with scheduled matches (/getSchedule).
+ * When Riot broadcasts a live show/stream (ev.type === "show") for a league (like EMEA Masters),
+ * this correlates uncompleted matches scheduled for that league today, marks them inProgress,
+ * attaches the active stream URL, and elevates them into liveMatches so users see real live match cards.
+ */
+export function reconcileLiveAndSchedule(
+  liveMatches: Match[],
+  scheduleMatches: Match[]
+): { finalLive: Match[]; finalSchedule: Match[] } {
+  const liveByLeague = new Map<string, Match>();
+  const liveById = new Map<string, Match>();
+
+  for (const lm of liveMatches) {
+    liveById.set(lm.matchId, lm);
+    if (lm.leagueSlug) {
+      liveByLeague.set(lm.leagueSlug.toLowerCase(), lm);
+    }
+  }
+
+  const now = Date.now();
+  const activeLive: Match[] = [...liveMatches];
+  const updatedSchedule: Match[] = [];
+
+  for (const sm of scheduleMatches) {
+    let updated = { ...sm };
+    const t = new Date(sm.startTimeUtc).getTime();
+    // within 6 hours of scheduled start time (e.g. today's tournament slate)
+    const isToday = !isNaN(t) && Math.abs(now - t) < 6 * 60 * 60 * 1000;
+
+    const liveLeague = sm.leagueSlug ? liveByLeague.get(sm.leagueSlug.toLowerCase()) : undefined;
+
+    if (sm.state === "inProgress") {
+      if (!liveById.has(sm.matchId)) {
+        activeLive.push(sm);
+        liveById.set(sm.matchId, sm);
+      }
+    } else if (liveLeague && sm.state !== "completed" && isToday) {
+      // League is currently broadcasting live, and this match is today's slate!
+      updated.state = "inProgress";
+      if (!updated.streamUrl && liveLeague.streamUrl) {
+        updated.streamUrl = liveLeague.streamUrl;
+      }
+      if (!liveById.has(sm.matchId)) {
+        activeLive.push(updated);
+        liveById.set(sm.matchId, updated);
+      }
+    }
+
+    updatedSchedule.push(updated);
+  }
+
+  // Filter out generic placeholder if specific matches were promoted for that league
+  const hasSpecificMatchForLeague = (slug: string) =>
+    activeLive.some(
+      (m) => m.leagueSlug?.toLowerCase() === slug.toLowerCase() && m.team1Code !== "LIVE"
+    );
+
+  const deduplicatedLive = activeLive.filter((m) => {
+    if (m.team1Code === "LIVE" && m.team2Code === "AIR" && m.leagueSlug) {
+      return !hasSpecificMatchForLeague(m.leagueSlug);
+    }
+    return true;
+  });
+
+  return { finalLive: deduplicatedLive, finalSchedule: updatedSchedule };
 }

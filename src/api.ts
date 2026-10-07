@@ -334,9 +334,35 @@ export async function fetchLiveMatches(): Promise<{ matches: Match[]; liveStats:
   const liveStats: Record<string, LiveStats> = {};
 
   for (const ev of rawEvents) {
-    if (ev.type !== "match") continue;
+    const isProgress = ev.state === "inProgress";
     const m = ev.match;
-    if (!m) continue;
+
+    if (!m && !isProgress) continue;
+
+    if (!m && isProgress) {
+      // Live broadcast / show without an embedded match object (e.g. EMEA Masters or international stream)
+      matches.push({
+        matchId: ev.id,
+        leagueName: ev.league?.name || "Live Pro Broadcast",
+        leagueSlug: ev.league?.slug || "",
+        blockName: ev.blockName || "Broadcast Live",
+        startTimeUtc: ev.startTime || new Date().toISOString(),
+        state: "inProgress",
+        bestOf: 1,
+        winner: undefined,
+        streamUrl: buildStreamUrl(ev.streams),
+        team1Code: "LIVE",
+        team1Name: ev.league?.name || "Live Broadcast",
+        team1Image: ev.league?.image,
+        team1Score: 0,
+        team2Code: "AIR",
+        team2Name: "Live on Air",
+        team2Image: ev.league?.image,
+        team2Score: 0,
+        games: [],
+      });
+      continue;
+    }
 
     const t1 = m.teams?.[0] || {};
     const t2 = m.teams?.[1] || {};

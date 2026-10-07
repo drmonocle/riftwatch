@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Match, AppSettings } from "../../types";
+import { Match, AppSettings, CatalogData } from "../../types";
 import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
-import { getLeagueBroadcastStreams } from "../../helpers";
+import { getLeagueBroadcastStreams, isMatchFollowed } from "../../helpers";
 
 interface LiveViewProps {
   matches: Match[];
   schedule: Match[];
   settings: AppSettings;
+  catalog?: CatalogData;
   onOpenUrl: (url: string) => void;
   onSelectTab: (tab: any) => void;
   onUpdateSettings?: (s: Partial<AppSettings>) => void;
@@ -99,6 +100,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
   matches,
   schedule,
   settings,
+  catalog,
   onOpenUrl,
   onSelectTab,
   onUpdateSettings,
@@ -123,30 +125,27 @@ export const LiveView: React.FC<LiveViewProps> = ({
     .filter((m) => {
       if (m.state === "completed") return false;
       const t = new Date(m.startTimeUtc).getTime();
-      return !isNaN(t) && t >= now - 45 * 60 * 1000;
+      // Keep upcoming matches, or any match scheduled within the last 4 hours that hasn't completed
+      return !isNaN(t) && t >= now - 4 * 60 * 60 * 1000;
     })
     .sort((a, b) => new Date(a.startTimeUtc).getTime() - new Date(b.startTimeUtc).getTime());
 
-  // 1. Followed team priority
-  let nextMatch: Match | undefined = unstarted.find(
-    (m) =>
-      settings.followedTeams.includes(m.team1Code) ||
-      settings.followedTeams.includes(m.team2Code)
-  );
+  // Matches that match user's watchlist (followed teams, followed leagues, or followed regions)
+  const isFollowed = (m: Match) => isMatchFollowed(m, settings, catalog?.leagues);
+
+  let nextMatch = unstarted.find(isFollowed);
   let nextTag = "Next match you follow";
 
-  // 2. Followed league priority
-  if (!nextMatch) {
-    nextMatch = unstarted.find(
-      (m) =>
-        settings.followedLeagues.includes(m.leagueSlug) ||
-        settings.followedLeagues.includes(m.leagueName.toLowerCase())
-    );
-    nextTag = "Next match in your leagues";
-  }
-
-  // 3. Earliest match overall
-  if (!nextMatch && unstarted.length > 0) {
+  if (nextMatch) {
+    const isTeam =
+      settings.followedTeams.includes(nextMatch.team1Code) ||
+      settings.followedTeams.includes(nextMatch.team2Code);
+    if (isTeam) {
+      nextTag = "Next match you follow";
+    } else {
+      nextTag = `Next in your leagues · ${nextMatch.leagueName}`;
+    }
+  } else if (unstarted.length > 0) {
     nextMatch = unstarted[0];
     nextTag = "Next pro match";
   }
@@ -156,12 +155,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
   // Subsequent upcoming matches (next 4)
   const comingUp = unstarted
     .filter((m) => m.matchId !== nextMatch?.matchId)
-    .filter(
-      (m) =>
-        settings.followedTeams.includes(m.team1Code) ||
-        settings.followedTeams.includes(m.team2Code) ||
-        settings.followedLeagues.includes(m.leagueSlug)
-    )
+    .filter(isFollowed)
     .slice(0, 4);
 
   // If pro matches are live right now

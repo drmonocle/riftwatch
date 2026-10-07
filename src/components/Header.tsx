@@ -1,7 +1,7 @@
 import React from "react";
 import { AppSettings, Match, StreamEvent, AppUpdateInfo } from "../types";
 import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles } from "lucide-react";
-import { currentStreamEvent } from "../helpers";
+import { currentStreamEvent, formatStreamHeaderTitle } from "../helpers";
 import { APP_VERSION } from "../version";
 
 interface HeaderProps {
@@ -29,7 +29,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const hasLive = liveMatches.length > 0;
   const firstLive = hasLive ? liveMatches[0] : null;
-  const streamLive = currentStreamEvent(streamEvents) !== null;
+  const currStream = currentStreamEvent(streamEvents);
+  const streamInfo = formatStreamHeaderTitle(currStream);
 
   return (
     <header className="bg-[#0a0e17] border-b border-[#c8aa6e] px-4 py-2 flex items-center justify-between select-none">
@@ -73,11 +74,24 @@ export const Header: React.FC<HeaderProps> = ({
         {/* 24/7 Twitch Stream Pill */}
         <div
           onClick={() => onSelectTab("stream")}
-          className="flex items-center gap-2 px-2.5 py-1 rounded text-xs cursor-pointer border bg-[#0a1420] border-[#1e282d] text-[#0ac8b9] hover:border-[#0ac8b9] transition-colors"
-          title="Click to view 24/7 Continuous Twitch Stream"
+          className={`flex items-center gap-2 px-2.5 py-1 rounded text-xs cursor-pointer border transition-colors max-w-sm ${
+            streamInfo.isLive
+              ? "bg-[#0a1420] border-[#0ac8b9]/60 text-[#0ac8b9] hover:border-[#0ac8b9] hover:bg-[#121e2d]"
+              : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] hover:border-[#7e8e9f]"
+          }`}
+          title={
+            streamInfo.isLive
+              ? `${streamInfo.title} · Click to view stream`
+              : "Twitch 24/7 Stream is currently offline"
+          }
         >
-          <Radio className="w-3.5 h-3.5 text-[#0ac8b9]" />
-          <span className="font-medium">{streamLive ? "Twitch 24/7: Airing Now" : "Twitch 24/7: Off Air"}</span>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              streamInfo.isLive ? "bg-[#0ac8b9] animate-pulse" : "bg-[#7e8e9f]"
+            }`}
+          />
+          <Radio className={`w-3.5 h-3.5 flex-shrink-0 ${streamInfo.isLive ? "text-[#0ac8b9]" : "text-[#7e8e9f]"}`} />
+          <span className="font-semibold truncate">{streamInfo.title}</span>
         </div>
       </div>
 

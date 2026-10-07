@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { AppSettings, CatalogData, CatalogTeam, PlayerEntry, League } from "../../types";
-import { MAJOR_REGIONS, DEFAULT_FOLLOWED_REGIONS, POPULAR_PLAYERS } from "../../api";
+import { MAJOR_REGIONS, DEFAULT_FOLLOWED_REGIONS, POPULAR_PLAYERS, GLOBAL_LEAGUES } from "../../api";
 import { Search, Check, Plus, X, Globe, User, Shield, Trophy, RefreshCw } from "lucide-react";
 
 interface WatchlistViewProps {
@@ -86,6 +86,17 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
     const majors = ["worlds", "msi", "first_stand"];
     const merged = Array.from(new Set([...settings.followedLeagues, ...majors]));
     onUpdateSettings({ followedLeagues: merged });
+  };
+
+  const followAllLeagues = () => {
+    const allSlugs = (catalog.leagues && catalog.leagues.length > 0)
+      ? catalog.leagues.map((l) => l.slug)
+      : GLOBAL_LEAGUES.map((l) => l.slug);
+    onUpdateSettings({ followedLeagues: Array.from(new Set(allSlugs)) });
+  };
+
+  const unfollowAllLeagues = () => {
+    onUpdateSettings({ followedLeagues: [] });
   };
 
   const q = search.trim().toLowerCase();
@@ -553,16 +564,30 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
       {/* 4. LEAGUES SUB-TAB */}
       {tab === "leagues" && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-[11px] text-[#7e8e9f]">
               Tracking all {catalog.leagues.length || 51} global Riot leagues. Followed leagues appear in filtered schedules and live notifications.
             </div>
-            <button
-              onClick={followInternationalEvents}
-              className="px-2.5 py-1 rounded bg-[#0a1420] border border-[#0ac8b9] text-[#0ac8b9] hover:bg-[#0ac8b9] hover:text-[#091428] font-semibold text-[11px] transition-colors"
-            >
-              ★ Follow International Events
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={followAllLeagues}
+                className="px-2.5 py-1 rounded bg-[#0a1420] border border-[#c8aa6e] text-[#c8aa6e] hover:bg-[#c8aa6e] hover:text-[#091428] font-semibold text-[11px] transition-colors"
+              >
+                Follow All ({catalog.leagues.length || 51})
+              </button>
+              <button
+                onClick={unfollowAllLeagues}
+                className="px-2.5 py-1 rounded bg-[#0a1420] border border-[#1e282d] text-[#7e8e9f] hover:text-[#e84057] font-semibold text-[11px] transition-colors"
+              >
+                Unfollow All
+              </button>
+              <button
+                onClick={followInternationalEvents}
+                className="px-2.5 py-1 rounded bg-[#0a1420] border border-[#0ac8b9] text-[#0ac8b9] hover:bg-[#0ac8b9] hover:text-[#091428] font-semibold text-[11px] transition-colors"
+              >
+                ★ International Events
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

@@ -13,6 +13,7 @@ import {
   EMPTY_CATALOG,
 } from "./api";
 import { APP_VERSION } from "./version";
+import { reconcileLiveAndSchedule } from "./helpers";
 import { Header } from "./components/Header";
 import { Navigation, TabKey } from "./components/Navigation";
 import { TickerBar } from "./components/TickerBar";
@@ -141,14 +142,23 @@ export default function App() {
         wantStream ? fetchStreamSchedule() : Promise.resolve(null),
       ]);
 
+      let nextLive = liveMatches;
+      let nextSched = schedule;
+
       if (live.status === "fulfilled") {
-        setLiveMatches(live.value.matches);
-        liveCount.current = live.value.matches.filter((m) => m.state === "inProgress").length;
+        nextLive = live.value.matches;
       }
       if (sched.status === "fulfilled" && sched.value) {
-        setSchedule(sched.value);
+        nextSched = sched.value;
         lastSchedule.current = now;
       }
+
+      // Correlate live broadcasts with scheduled matches to surface live tournament slates
+      const { finalLive, finalSchedule } = reconcileLiveAndSchedule(nextLive, nextSched);
+      setLiveMatches(finalLive);
+      setSchedule(finalSchedule);
+      liveCount.current = finalLive.filter((m) => m.state === "inProgress").length;
+
       if (stream.status === "fulfilled" && stream.value) {
         setStreamEvents(stream.value);
         lastStream.current = now;
@@ -477,6 +487,7 @@ export default function App() {
             matches={liveMatches}
             schedule={schedule}
             settings={settings}
+            catalog={catalog}
             onOpenUrl={handleOpenUrl}
             onSelectTab={setActiveTab}
             onUpdateSettings={handleUpdateSettings}
@@ -486,6 +497,7 @@ export default function App() {
           <ScheduleView
             schedule={schedule}
             settings={settings}
+            catalog={catalog}
             onOpenUrl={handleOpenUrl}
             onUpdateSettings={handleUpdateSettings}
           />
