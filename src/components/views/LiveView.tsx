@@ -99,8 +99,14 @@ export const LiveView: React.FC<LiveViewProps> = ({
   onOpenUrl,
   onSelectTab,
 }) => {
-  // If no live matches, find next upcoming match based on watchlist priority
-  const unstarted = schedule.filter((m) => m.state === "unstarted" || !m.state);
+  const now = Date.now();
+  const unstarted = schedule
+    .filter((m) => {
+      if (m.state === "completed") return false;
+      const t = new Date(m.startTimeUtc).getTime();
+      return !isNaN(t) && t >= now - 45 * 60 * 1000;
+    })
+    .sort((a, b) => new Date(a.startTimeUtc).getTime() - new Date(b.startTimeUtc).getTime());
 
   // 1. Followed team priority
   let nextMatch: Match | undefined = unstarted.find(

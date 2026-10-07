@@ -94,12 +94,14 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const filteredTeams = useMemo(() => {
     const all = catalog.teams || [];
     if (!q) {
+      const followed = all.filter((t) => settings.followedTeams.includes(t.code));
       // Prioritize teams from major Tier-1 leagues
-      const major = all.filter((t) =>
-        MAJOR_LEAGUES_PRIORITY.some((ml) => t.league.toUpperCase().includes(ml))
+      const major = all.filter(
+        (t) =>
+          !settings.followedTeams.includes(t.code) &&
+          MAJOR_LEAGUES_PRIORITY.some((ml) => t.league.toUpperCase().includes(ml))
       );
-      // Return top 50 major teams by default
-      return major.length > 0 ? major.slice(0, 50) : all.slice(0, 50);
+      return [...followed, ...major.slice(0, 50)];
     }
     return all
       .filter(
@@ -110,7 +112,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
           t.region.toLowerCase().includes(q)
       )
       .slice(0, 100);
-  }, [catalog.teams, q]);
+  }, [catalog.teams, settings.followedTeams, q]);
 
   // Filtered PLAYERS: searches across all catalog.players (~4,634 players)
   const filteredPlayers = useMemo(() => {

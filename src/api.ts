@@ -8,21 +8,21 @@ export const MAJOR_REGIONS: Region[] = [
   { code: "INTERNATIONAL", name: "International", leagues: ["Worlds", "MSI", "First Stand"], badge: "🌐" },
   { code: "KOREA", name: "Korea", leagues: ["LCK", "LCK Challengers"], badge: "🇰🇷" },
   { code: "CHINA", name: "China", leagues: ["LPL", "LDL"], badge: "🇨🇳" },
-  { code: "EUROPE", name: "Europe", leagues: ["LEC", "EMEA Masters"], badge: "🇪🇺" },
+  { code: "EMEA", name: "Europe, Middle East & Africa", leagues: ["LEC", "EMEA Masters"], badge: "🇪🇺" },
   { code: "NORTH AMERICA", name: "North America", leagues: ["LCS", "NACL"], badge: "🇺🇸" },
-  { code: "APAC", name: "Asia-Pacific", leagues: ["LCP", "PCS", "VCS"], badge: "🌏" },
+  { code: "PACIFIC", name: "Asia-Pacific", leagues: ["LCP"], badge: "🌏" },
   { code: "BRAZIL", name: "Brazil", leagues: ["CBLOL", "CBLOL Academy"], badge: "🇧🇷" },
+  { code: "JAPAN", name: "Japan", leagues: ["LJL"], badge: "🇯🇵" },
+  { code: "VIETNAM", name: "Vietnam", leagues: ["VCS"], badge: "🇻🇳" },
+  { code: "HONG KONG, MACAU, TAIWAN", name: "Hong Kong, Macau & Taiwan", leagues: ["PCS"], badge: "🇹🇼" },
+  { code: "LATIN AMERICA", name: "Latin America", leagues: ["LLA"], badge: "🌎" },
+  { code: "OCEANIA", name: "Oceania", leagues: ["Oceanic leagues"], badge: "🇦🇺" },
 ];
 
-export const DEFAULT_FOLLOWED_REGIONS = [
-  "INTERNATIONAL",
-  "KOREA",
-  "CHINA",
-  "EUROPE",
-  "NORTH AMERICA",
-  "APAC",
-  "BRAZIL",
-];
+export const DEFAULT_FOLLOWED_REGIONS = MAJOR_REGIONS.map((r) => r.code);
+
+// Older versions used these region codes; map them to the real ones.
+const LEGACY_REGION_CODES: Record<string, string> = { EUROPE: "EMEA", APAC: "PACIFIC" };
 
 export const DEFAULT_FOLLOWED_LEAGUES = [
   "worlds",
@@ -88,12 +88,12 @@ export const GLOBAL_LEAGUES: League[] = [
   { slug: "first_stand", name: "First Stand", region: "INTERNATIONAL", priority: 2 },
   { slug: "lck", name: "LCK (League of Legends Champions Korea)", region: "KOREA", priority: 3 },
   { slug: "lpl", name: "LPL (League of Legends Pro League)", region: "CHINA", priority: 4 },
-  { slug: "lec", name: "LEC (League of Legends EMEA Championship)", region: "EUROPE", priority: 5 },
+  { slug: "lec", name: "LEC (League of Legends EMEA Championship)", region: "EMEA", priority: 5 },
   { slug: "lcs", name: "LCS (League Championship Series)", region: "NORTH AMERICA", priority: 6 },
-  { slug: "lcp", name: "LCP (League of Legends Championship Pacific)", region: "APAC", priority: 7 },
+  { slug: "lcp", name: "LCP (League of Legends Championship Pacific)", region: "PACIFIC", priority: 7 },
   { slug: "cblol-brazil", name: "CBLOL (Campeonato Brasileiro)", region: "BRAZIL", priority: 8 },
   { slug: "demacia_cup", name: "Demacia Cup", region: "CHINA", priority: 9 },
-  { slug: "emea_masters", name: "EMEA Masters", region: "EUROPE", priority: 10 },
+  { slug: "emea_masters", name: "EMEA Masters", region: "EMEA", priority: 10 },
   { slug: "nacl", name: "NACL (North American Challengers)", region: "NORTH AMERICA", priority: 11 },
 ];
 
@@ -120,8 +120,14 @@ export function loadSettings(): AppSettings {
     if (raw) {
       const parsed = JSON.parse(raw);
       // Ensure all major regions are followed if not already configured
-      if (!parsed.followedRegions || parsed.followedRegions.length === 0) {
+      if (!Array.isArray(parsed.followedRegions) || parsed.followedRegions.length === 0) {
         parsed.followedRegions = [...DEFAULT_FOLLOWED_REGIONS];
+      } else {
+        // Map region codes saved by older versions (EUROPE, APAC) to the real ones.
+        const mapped: string[] = parsed.followedRegions.map((c: string) => LEGACY_REGION_CODES[c] || c);
+        const hadLegacy = mapped.some((c, i) => c !== parsed.followedRegions[i]);
+        // If the user never customised (old default list), follow every region now.
+        parsed.followedRegions = hadLegacy && mapped.length >= 7 ? [...DEFAULT_FOLLOWED_REGIONS] : Array.from(new Set(mapped));
       }
       return { ...DEFAULT_SETTINGS, ...parsed };
     }
@@ -143,10 +149,12 @@ export function saveSettings(settings: AppSettings): void {
 // -------------------------------------------------------------
 // Catalog Persistence & Live Synchronizer (Teams, Players, Leagues)
 // -------------------------------------------------------------
-import defaultCatalogJson from "./catalog_default.json";
 import { CatalogData, CatalogTeam } from "./types";
 
-export function loadCatalog(): CatalogData {
+export const EMPTY_CATALOG: CatalogData = { teams: [], players: [], leagues: [], updatedAt: 0 };
+
+/** Catalog saved from a previous live sync (null if none yet). */
+export function loadCachedCatalog(): CatalogData | null {
   try {
     const raw = localStorage.getItem("riftwatch_catalog");
     if (raw) {
@@ -158,7 +166,13 @@ export function loadCatalog(): CatalogData {
   } catch (e) {
     console.warn("Failed to read catalog from cache:", e);
   }
-  return defaultCatalogJson as unknown as CatalogData;
+  return null;
+}
+
+/** The catalog snapshot shipped inside the app. Loaded only when needed to keep startup light. */
+export async function loadBundledCatalog(): Promise<CatalogData> {
+  const mod = await import("./catalog_default.json");
+  return (mod.default ?? mod) as unknown as CatalogData;
 }
 
 export function saveCatalog(catalog: CatalogData): void {
@@ -170,20 +184,15 @@ export function saveCatalog(catalog: CatalogData): void {
   }
 }
 
-export async function fetchLiveCatalog(): Promise<CatalogData> {
+/**
+ * Pulls the latest teams, players and leagues from Riot.
+ * Returns null (and changes nothing) if the request fails or the result looks broken.
+ */
+export async function fetchLiveCatalog(current?: CatalogData): Promise<CatalogData | null> {
   try {
-    const [teamsRes, leaguesRes] = await Promise.all([
-      fetch(`${RIOT_BASE}/getTeams?hl=en-US`, { headers: { "x-api-key": RIOT_API_KEY } }),
-      fetch(`${RIOT_BASE}/getLeagues?hl=en-US`, { headers: { "x-api-key": RIOT_API_KEY } }),
-    ]);
-
-    if (!teamsRes.ok || !leaguesRes.ok) {
-      throw new Error(`Catalog fetch failed: teams ${teamsRes.status}, leagues ${leaguesRes.status}`);
-    }
-
     const [teamsData, leaguesData] = await Promise.all([
-      teamsRes.json(),
-      leaguesRes.json(),
+      fetchJson(`${RIOT_BASE}/getTeams?hl=en-US`, { headers: riotHeaders }, 30000),
+      fetchJson(`${RIOT_BASE}/getLeagues?hl=en-US`, { headers: riotHeaders }, 30000),
     ]);
 
     const rawTeams = teamsData?.data?.teams || [];
@@ -253,6 +262,13 @@ export async function fetchLiveCatalog(): Promise<CatalogData> {
       });
     }
 
+    // Sanity guard: a response far smaller than what we already have is almost certainly a glitch.
+    if (current && current.teams.length > 0 && cleanTeams.length < current.teams.length * 0.5) {
+      console.warn(`Live catalog looks incomplete (${cleanTeams.length} vs ${current.teams.length} teams); keeping current.`);
+      return null;
+    }
+    if (cleanTeams.length === 0 || cleanPlayers.length === 0 || cleanLeagues.length === 0) return null;
+
     const newCatalog: CatalogData = {
       teams: cleanTeams,
       players: cleanPlayers,
@@ -264,131 +280,171 @@ export async function fetchLiveCatalog(): Promise<CatalogData> {
     return newCatalog;
   } catch (err) {
     console.warn("fetchLiveCatalog failed, retaining current cache:", err);
-    return loadCatalog();
+    return null;
   }
 }
 
 
+
+async function fetchJson(url: string, init?: RequestInit, timeoutMs = 15000): Promise<any> {
+  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  return res.json();
+}
+
+const riotHeaders = { "x-api-key": RIOT_API_KEY };
+
+/**
+ * Turns Riot's stream entry (provider + channel/video id) into a real web link.
+ * Prefers English-language streams, like the original Python app did.
+ */
+export function buildStreamUrl(streams: any[] | undefined): string {
+  if (!streams || streams.length === 0) return "";
+  const pick =
+    streams.find((s) => String(s?.locale || "").toLowerCase().startsWith("en")) || streams[0];
+  const param = String(pick?.parameter || "").trim();
+  if (!param) return "";
+  if (/^https?:\/\//i.test(param)) return param;
+  const p = encodeURIComponent(param);
+  switch (String(pick?.provider || "").toLowerCase()) {
+    case "twitch":
+      return `https://www.twitch.tv/${p}`;
+    case "youtube":
+      return `https://www.youtube.com/watch?v=${p}`;
+    case "afreecatv":
+    case "afreeca":
+    case "soop":
+      return `https://play.sooplive.co.kr/${p}`;
+    case "bilibili":
+      return `https://live.bilibili.com/${p}`;
+    case "huya":
+      return `https://www.huya.com/${p}`;
+    case "chzzk":
+      return `https://chzzk.naver.com/live/${p}`;
+    default:
+      return "";
+  }
+}
 
 export async function fetchLiveMatches(): Promise<{ matches: Match[]; liveStats: Record<string, LiveStats> }> {
-  try {
-    const res = await fetch(`${RIOT_BASE}/getLive?hl=en-US`, {
-      headers: { "x-api-key": RIOT_API_KEY },
+  const data = await fetchJson(`${RIOT_BASE}/getLive?hl=en-US`, { headers: riotHeaders });
+  const rawEvents = data?.data?.schedule?.events || [];
+
+  const matches: Match[] = [];
+  const liveStats: Record<string, LiveStats> = {};
+
+  for (const ev of rawEvents) {
+    if (ev.type !== "match") continue;
+    const m = ev.match;
+    if (!m) continue;
+
+    const t1 = m.teams?.[0] || {};
+    const t2 = m.teams?.[1] || {};
+
+    matches.push({
+      matchId: m.id || ev.id,
+      leagueName: ev.league?.name || "League",
+      leagueSlug: ev.league?.slug || "",
+      blockName: ev.blockName || "",
+      startTimeUtc: ev.startTime || new Date().toISOString(),
+      state: m.state || "inProgress",
+      bestOf: m.strategy?.count || 3,
+      winner: (t1.result?.outcome === "win" ? t1.code : t2.result?.outcome === "win" ? t2.code : undefined),
+      streamUrl: buildStreamUrl(ev.streams),
+      team1Code: t1.code || t1.name || "TBD",
+      team1Name: t1.name || "TBD",
+      team1Image: t1.image,
+      team1Score: t1.result?.gameWins ?? 0,
+      team2Code: t2.code || t2.name || "TBD",
+      team2Name: t2.name || "TBD",
+      team2Image: t2.image,
+      team2Score: t2.result?.gameWins ?? 0,
+      games: (m.games || []).map((g: any) => ({
+        id: g.id,
+        number: g.number,
+        state: g.state,
+      })),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const rawEvents = data?.data?.schedule?.events || [];
-
-    const matches: Match[] = [];
-    const liveStats: Record<string, LiveStats> = {};
-
-    for (const ev of rawEvents) {
-      if (ev.type !== "match") continue;
-      const m = ev.match;
-      if (!m) continue;
-
-      const t1 = m.teams?.[0] || {};
-      const t2 = m.teams?.[1] || {};
-
-      const matchObj: Match = {
-        matchId: m.id || ev.id,
-        leagueName: ev.league?.name || "League",
-        leagueSlug: ev.league?.slug || "",
-        blockName: ev.blockName || "",
-        startTimeUtc: ev.startTime || new Date().toISOString(),
-        state: m.state || "inProgress",
-        bestOf: m.strategy?.count || 3,
-        winner: (t1.result?.outcome === "win" ? t1.code : t2.result?.outcome === "win" ? t2.code : undefined),
-        streamUrl: ev.streams?.[0]?.parameter || "",
-        team1Code: t1.code || t1.name || "TBD",
-        team1Name: t1.name || "TBD",
-        team1Image: t1.image,
-        team1Score: t1.result?.gameWins ?? 0,
-        team2Code: t2.code || t2.name || "TBD",
-        team2Name: t2.name || "TBD",
-        team2Image: t2.image,
-        team2Score: t2.result?.gameWins ?? 0,
-        games: (m.games || []).map((g: any) => ({
-          id: g.id,
-          number: g.number,
-          state: g.state,
-        })),
-      };
-      matches.push(matchObj);
-    }
-    return { matches, liveStats };
-  } catch (err) {
-    console.warn("fetchLiveMatches fallback:", err);
-    return { matches: [], liveStats: {} };
   }
+  return { matches, liveStats };
 }
 
-export async function fetchSchedule(): Promise<Match[]> {
-  try {
-    const res = await fetch(`${RIOT_BASE}/getSchedule?hl=en-US`, {
-      headers: { "x-api-key": RIOT_API_KEY },
+function scheduleEventsToMatches(rawEvents: any[]): Match[] {
+  const matches: Match[] = [];
+  for (const ev of rawEvents) {
+    if (ev.type !== "match") continue;
+    const m = ev.match;
+    if (!m) continue;
+
+    const t1 = m.teams?.[0] || {};
+    const t2 = m.teams?.[1] || {};
+
+    matches.push({
+      matchId: m.id || ev.id,
+      leagueName: ev.league?.name || "League",
+      leagueSlug: ev.league?.slug || "",
+      blockName: ev.blockName || "",
+      startTimeUtc: ev.startTime || "",
+      state: m.state || (ev.state === "completed" ? "completed" : "unstarted"),
+      bestOf: m.strategy?.count || 3,
+      team1Code: t1.code || t1.name || "TBD",
+      team1Name: t1.name || "TBD",
+      team1Image: t1.image,
+      team1Score: t1.result?.gameWins ?? 0,
+      team2Code: t2.code || t2.name || "TBD",
+      team2Name: t2.name || "TBD",
+      team2Image: t2.image,
+      team2Score: t2.result?.gameWins ?? 0,
+      games: [],
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const rawEvents = data?.data?.schedule?.events || [];
-
-    const matches: Match[] = [];
-    for (const ev of rawEvents) {
-      if (ev.type !== "match") continue;
-      const m = ev.match;
-      if (!m) continue;
-
-      const t1 = m.teams?.[0] || {};
-      const t2 = m.teams?.[1] || {};
-
-      matches.push({
-        matchId: m.id || ev.id,
-        leagueName: ev.league?.name || "League",
-        leagueSlug: ev.league?.slug || "",
-        blockName: ev.blockName || "",
-        startTimeUtc: ev.startTime || "",
-        state: m.state || (ev.state === "completed" ? "completed" : "unstarted"),
-        bestOf: m.strategy?.count || 3,
-        team1Code: t1.code || t1.name || "TBD",
-        team1Name: t1.name || "TBD",
-        team1Image: t1.image,
-        team1Score: t1.result?.gameWins ?? 0,
-        team2Code: t2.code || t2.name || "TBD",
-        team2Name: t2.name || "TBD",
-        team2Image: t2.image,
-        team2Score: t2.result?.gameWins ?? 0,
-        games: [],
-      });
-    }
-    return matches;
-  } catch (err) {
-    console.warn("fetchSchedule fallback:", err);
-    return [];
   }
+  return matches;
+}
+
+/**
+ * Riot's schedule endpoint only returns about two days per request.
+ * We take the first page, then follow "newer" pages a couple of times so
+ * "next match for a team you follow" can see further ahead.
+ */
+export async function fetchSchedule(extraNewerPages = 2): Promise<Match[]> {
+  const first = await fetchJson(`${RIOT_BASE}/getSchedule?hl=en-US`, { headers: riotHeaders });
+  const all: Match[] = scheduleEventsToMatches(first?.data?.schedule?.events || []);
+
+  let token: string | undefined = first?.data?.schedule?.pages?.newer;
+  for (let i = 0; i < extraNewerPages && token; i++) {
+    try {
+      const next = await fetchJson(
+        `${RIOT_BASE}/getSchedule?hl=en-US&pageToken=${encodeURIComponent(token)}`,
+        { headers: riotHeaders },
+      );
+      all.push(...scheduleEventsToMatches(next?.data?.schedule?.events || []));
+      token = next?.data?.schedule?.pages?.newer;
+    } catch {
+      break; // later pages are a bonus; keep what we have
+    }
+  }
+
+  const seen = new Set<string>();
+  const unique = all.filter((m) => (seen.has(m.matchId) ? false : (seen.add(m.matchId), true)));
+  unique.sort((a, b) => a.startTimeUtc.localeCompare(b.startTimeUtc));
+  return unique;
 }
 
 export async function fetchStreamSchedule(): Promise<StreamEvent[]> {
-  try {
-    const res = await fetch(STREAM_SCHEDULE_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data: any[] = await res.json();
-    return data.map((item) => ({
-      id: item.id,
-      type: item.type,
-      name: item.name,
-      event: item.event,
-      season: item.season,
-      stage: item.stage,
-      team1: item.team1,
-      team2: item.team2,
-      rawTime: item.rawTime,
-      utcIso: item.utcIso,
-      isBanger: item.isBanger === true || (typeof item.tag === "string" && item.tag.toLowerCase().trim() === "banger"),
-    }));
-  } catch (err) {
-    console.warn("fetchStreamSchedule fallback:", err);
-    return [];
-  }
+  const data: any[] = await fetchJson(STREAM_SCHEDULE_URL, undefined, 20000);
+  return data.map((item) => ({
+    id: item.id,
+    type: item.type,
+    name: item.name,
+    event: item.event,
+    season: item.season,
+    stage: item.stage,
+    team1: item.team1,
+    team2: item.team2,
+    rawTime: item.rawTime,
+    utcIso: item.utcIso,
+    isBanger: item.isBanger === true || (typeof item.tag === "string" && item.tag.toLowerCase().trim() === "banger"),
+  }));
 }
 
 export async function fetchCuratedNews(): Promise<NewsItem[]> {

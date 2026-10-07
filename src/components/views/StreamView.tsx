@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { StreamEvent, AppSettings, CatalogData } from "../../types";
+import { currentStreamEvent, upcomingStreamMatches } from "../../helpers";
 import {
   Radio,
   Play,
@@ -46,11 +47,10 @@ export const StreamView: React.FC<StreamViewProps> = ({
   }, [catalog]);
 
   const now = Date.now();
-  const pastEvents = events.filter((e) => e.utcIso && new Date(e.utcIso).getTime() <= now);
-  const currentEvent = pastEvents.length > 0 ? pastEvents[pastEvents.length - 1] : events[0];
+  const currentEvent = currentStreamEvent(events, now);
 
-  const upcomingEvents = events.filter((e) => e.utcIso && new Date(e.utcIso).getTime() > now);
-  const displayUpcoming = upcomingEvents.length > 0 ? upcomingEvents.slice(0, 40) : events.slice(1, 41);
+  const upcomingEvents = upcomingStreamMatches(events, now);
+  const displayUpcoming = upcomingEvents.slice(0, 40);
   const nextInRotation = displayUpcoming[0];
 
   // Only genuine bangers where isBanger is explicitly true
@@ -139,7 +139,7 @@ export const StreamView: React.FC<StreamViewProps> = ({
             )}
           </div>
           <span className="text-xs text-[#0ac8b9] font-mono">
-            {formatStartedTime(currentEvent?.utcIso)}
+            {currentEvent ? formatStartedTime(currentEvent.utcIso) : "Off air right now"}
           </span>
         </div>
 
@@ -182,7 +182,7 @@ export const StreamView: React.FC<StreamViewProps> = ({
 
             {!currentEvent?.team1 && !currentEvent?.team2 && (
               <h1 className="text-xl font-bold text-[#f0e6d2]">
-                {currentEvent ? currentEvent.name || "Broadcast Intermission" : "Tournament Marathon"}
+                {currentEvent ? currentEvent.name || "Broadcast Intermission" : "Between marathons — next match below"}
               </h1>
             )}
           </div>

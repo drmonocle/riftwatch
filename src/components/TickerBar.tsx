@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AppSettings, Match, StreamEvent } from "../types";
 import { ChevronLeft, ChevronRight, Pin, PinOff, Minimize2, Maximize2, X } from "lucide-react";
+import { currentStreamEvent, nextUpcomingMatches } from "../helpers";
 
 interface TickerBarProps {
   settings: AppSettings;
@@ -85,26 +86,23 @@ export const TickerBar: React.FC<TickerBarProps> = ({
     });
   }
 
-  // 2. 24/7 continuous stream
-  if (streamEvents.length > 0) {
-    const now = Date.now();
-    const past = streamEvents.filter((e) => e.utcIso && new Date(e.utcIso).getTime() <= now);
-    const cur = past.length > 0 ? past[past.length - 1] : streamEvents[0];
-    if (cur) {
-      items.push({
-        id: `stream-${cur.id}`,
-        badge: "📺 24/7 STREAM",
-        badgeBg: "bg-[#0ac8b9]",
-        badgeFg: "text-[#091428]",
-        headline: `24/7 Marathon: ${cur.event} ${cur.season}`,
-        details: cur.stage ? `${cur.stage} · Airing on Twitch & YouTube` : "Airing on Twitch & YouTube",
-        targetTab: "stream",
-      });
-    }
+  // 2. 24/7 continuous stream (only when something is actually airing)
+  const cur = currentStreamEvent(streamEvents);
+  if (cur) {
+    const matchup = cur.team1 && cur.team2 ? `${cur.team1} vs ${cur.team2}` : cur.name || `${cur.event} ${cur.season}`;
+    items.push({
+      id: `stream-${cur.id}`,
+      badge: "📺 24/7 STREAM",
+      badgeBg: "bg-[#0ac8b9]",
+      badgeFg: "text-[#091428]",
+      headline: `24/7 Marathon: ${matchup}`,
+      details: `${cur.event} ${cur.season}${cur.stage ? ` · ${cur.stage}` : ""}`,
+      targetTab: "stream",
+    });
   }
 
-  // 3. Upcoming matches
-  for (const m of upcomingMatches.slice(0, 3)) {
+  // 3. Upcoming matches (not yet started; teams you follow come first)
+  for (const m of nextUpcomingMatches(upcomingMatches, settings.followedTeams, 3)) {
     const relTime = m.startTimeUtc
       ? new Date(m.startTimeUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
       : "Soon";

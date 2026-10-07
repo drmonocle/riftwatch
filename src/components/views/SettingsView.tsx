@@ -15,6 +15,8 @@ import {
   Radio,
   Database,
 } from "lucide-react";
+import { APP_VERSION } from "../../version";
+import { DEFAULT_FOLLOWED_REGIONS, DEFAULT_FOLLOWED_LEAGUES } from "../../api";
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -37,16 +39,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleClearCache = () => {
     localStorage.removeItem("riftwatch_settings");
+    localStorage.removeItem("riftwatch_catalog");
+    localStorage.removeItem("riftwatch_has_launched");
     setCacheCleared(true);
-    setTimeout(() => setCacheCleared(false), 2500);
+    setTimeout(() => {
+      window.location.reload();
+    }, 400);
   };
 
   const handleResetWatchlist = () => {
     onUpdateSettings({
       followedTeams: [],
       followedPlayers: [],
-      followedLeagues: ["worlds", "msi", "first_stand"],
-      followedRegions: ["INTERNATIONAL", "KOREA", "CHINA", "EUROPE", "NORTH AMERICA", "APAC", "BRAZIL"],
+      followedLeagues: [...DEFAULT_FOLLOWED_LEAGUES],
+      followedRegions: [...DEFAULT_FOLLOWED_REGIONS],
     });
   };
 
@@ -452,7 +458,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Footer */}
       <footer className="pt-2 text-[11px] text-[#7e8e9f] space-y-1">
         <div className="flex items-center justify-between">
-          <div>RiftWatch Desktop v0.3.3 · Rust & Webview2 · MIT License</div>
+          <div>RiftWatch Desktop v{APP_VERSION} · Rust & Webview2 · MIT License</div>
           <button
             onClick={() => onOpenUrl("https://github.com/drmonocle/riftwatch")}
             className="hover:text-[#c8aa6e] underline"

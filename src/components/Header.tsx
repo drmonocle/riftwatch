@@ -1,6 +1,8 @@
 import React from "react";
 import { AppSettings, Match, StreamEvent } from "../types";
-import { Radio, RefreshCw, Eye, EyeOff, Heart, ExternalLink } from "lucide-react";
+import { Radio, RefreshCw, Eye, EyeOff, Heart } from "lucide-react";
+import { currentStreamEvent } from "../helpers";
+import { APP_VERSION } from "../version";
 
 interface HeaderProps {
   settings: AppSettings;
@@ -25,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const hasLive = liveMatches.length > 0;
   const firstLive = hasLive ? liveMatches[0] : null;
+  const streamLive = currentStreamEvent(streamEvents) !== null;
 
   return (
     <header className="bg-[#0a0e17] border-b border-[#c8aa6e] px-4 py-2 flex items-center justify-between select-none">
@@ -32,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-4">
         <div className="flex items-baseline gap-1.5 cursor-pointer" onClick={() => onSelectTab("live")}>
           <span className="text-[#c8aa6e] font-bold text-lg tracking-wider">RIFTWATCH</span>
-          <span className="text-[#a09b8c] text-[10px]">v0.3.3</span>
+          <span className="text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
         </div>
 
         {/* Pro Matches Pill */}
@@ -60,7 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
           title="Click to view 24/7 Continuous Twitch Stream"
         >
           <Radio className="w-3.5 h-3.5 text-[#0ac8b9]" />
-          <span className="font-medium">Twitch 24/7: Airing Now</span>
+          <span className="font-medium">{streamLive ? "Twitch 24/7: Airing Now" : "Twitch 24/7: Off Air"}</span>
         </div>
       </div>
 

@@ -1,8 +1,10 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
+use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
 fn start_window_drag(window: tauri::WebviewWindow) {
@@ -45,22 +47,69 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Shows a native desktop notification (used for kickoff / pre-match / banger alerts).
 #[tauri::command]
-fn open_external_url(url: String) {
+fn send_notification(app: tauri::AppHandle, title: String, body: String) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app.notification().builder().title(title).body(body).show();
+}
+
+/// Adds or removes RiftWatch from the current user's Windows startup list (no admin needed).
+#[tauri::command]
+fn set_autostart(enabled: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let _ = std::process::Command::new("cmd")
-            .args(["/c", "start", "", &url])
+        const RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+
+        let mut cmd = std::process::Command::new("reg");
+        if enabled {
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let value = format!("\"{}\" --minimized", exe.display());
+            cmd.args(["add", RUN_KEY, "/v", "RiftWatch", "/t", "REG_SZ", "/d", &value, "/f"]);
+        } else {
+            cmd.args(["delete", RUN_KEY, "/v", "RiftWatch", "/f"]);
+        }
+        let status = cmd
             .creation_flags(CREATE_NO_WINDOW)
-            .spawn();
+            .status()
+            .map_err(|e| e.to_string())?;
+        // Deleting a value that isn't there reports failure; that's fine.
+        if enabled && !status.success() {
+            return Err("Could not add RiftWatch to Windows startup".into());
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = std::process::Command::new("xdg-open")
-            .arg(&url)
-            .spawn();
+        let _ = enabled;
+    }
+    Ok(())
+}
+
+/// Whether closing the main window hides it to the tray (true) or quits the app (false).
+static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(true);
+
+#[tauri::command]
+fn set_close_to_tray(enabled: bool) {
+    CLOSE_TO_TRAY.store(enabled, Ordering::Relaxed);
+}
+
+/// Opens a web link in the user's default browser. Only plain http/https links are allowed.
+fn open_url_checked(app: &tauri::AppHandle, url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    if !(lower.starts_with("https://") || lower.starts_with("http://")) {
+        return false;
+    }
+    app.opener().open_url(url.trim(), None::<&str>).is_ok()
+}
+
+#[tauri::command]
+fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    if open_url_checked(&app, &url) {
+        Ok(())
+    } else {
+        Err("Blocked: only http/https links can be opened".into())
     }
 }
 
@@ -68,6 +117,7 @@ fn open_external_url(url: String) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             show_ticker,
             hide_ticker,
@@ -75,9 +125,18 @@ pub fn run() {
             start_window_drag,
             show_main,
             quit_app,
-            open_external_url
+            open_external_url,
+            set_close_to_tray,
+            send_notification,
+            set_autostart
         ])
         .setup(|app| {
+            // Launched by "Start with Windows": stay quietly in the tray
+            if std::env::args().any(|a| a == "--minimized") {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
             let show_i = MenuItem::with_id(app, "show", "Open RiftWatch", true, None::<&str>)?;
             let hide_i = MenuItem::with_id(app, "hide", "Hide to Tray", true, None::<&str>)?;
             let sep1 = PredefinedMenuItem::separator(app)?;
@@ -166,26 +225,28 @@ pub fn run() {
                             }
                         }
                         "toggle_hud" => {
-                            if let Some(w) = app.get_webview_window("ticker") {
+                            // Let the main window flip the setting so the toggle and Settings stay in sync.
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.emit("toggle_hud", ());
+                            } else if let Some(w) = app.get_webview_window("ticker") {
                                 if w.is_visible().unwrap_or(false) {
                                     let _ = w.hide();
                                 } else {
                                     let _ = w.show();
-                                    let _ = w.set_focus();
                                 }
                             }
                         }
                         "stream_twitch" => {
-                            open_external_url("https://www.twitch.tv/LoLWorldChampionship".to_string());
+                            open_url_checked(app, "https://www.twitch.tv/LoLWorldChampionship");
                         }
                         "stream_youtube" => {
-                            open_external_url("https://www.youtube.com/@LoLWorldChampionships/live".to_string());
+                            open_url_checked(app, "https://www.youtube.com/@LoLWorldChampionships/live");
                         }
                         "stream_sched" => {
-                            open_external_url("https://lolworlds.com".to_string());
+                            open_url_checked(app, "https://lolworlds.com");
                         }
                         "kofi_support" => {
-                            open_external_url("https://ko-fi.com/monocle".to_string());
+                            open_url_checked(app, "https://ko-fi.com/monocle");
                         }
                         "quit" => {
                             app.exit(0);
@@ -224,8 +285,12 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
+                    if CLOSE_TO_TRAY.load(Ordering::Relaxed) {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    } else {
+                        window.app_handle().exit(0);
+                    }
                 }
             }
         })

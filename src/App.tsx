@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AppSettings, Match, StreamEvent, CatalogData } from "./types";
 import {
   loadSettings,
@@ -6,8 +6,10 @@ import {
   fetchLiveMatches,
   fetchSchedule,
   fetchStreamSchedule,
-  loadCatalog,
+  loadCachedCatalog,
+  loadBundledCatalog,
   fetchLiveCatalog,
+  EMPTY_CATALOG,
 } from "./api";
 import { Header } from "./components/Header";
 import { Navigation, TabKey } from "./components/Navigation";
@@ -19,9 +21,26 @@ import { WatchlistView } from "./components/views/WatchlistView";
 import { NewsView } from "./components/views/NewsView";
 import { SettingsView } from "./components/views/SettingsView";
 
+// The floating HUD is the same app loaded with ?mode=detached in its own window.
+const IS_HUD_WINDOW = window.location.search.includes("mode=detached");
+
+// How often each data source is re-fetched (ms)
+const LIVE_POLL_MS = 60_000;
+const LIVE_POLL_ACTIVE_MS = 30_000; // faster while a match is in progress
+const SCHEDULE_POLL_MS = 5 * 60_000;
+const STREAM_POLL_MS = 15 * 60_000;
+
 export default function App() {
-  const [settings, setSettings] = useState<AppSettings>(loadSettings());
-  const [catalog, setCatalog] = useState<CatalogData>(loadCatalog());
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  // The HUD window never shows the catalog, so skip loading it there.
+  const [catalog, setCatalog] = useState<CatalogData>(() =>
+    IS_HUD_WINDOW ? EMPTY_CATALOG : loadCachedCatalog() ?? EMPTY_CATALOG,
+  );
 
   // Determine initial tab: on first launch, open directly to Watchlist so users configure their teams
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
@@ -32,19 +51,22 @@ export default function App() {
         return "watchlist";
       }
     } catch {}
-    const s = loadSettings();
-    return s.defaultTab || "live";
+    return loadSettings().defaultTab || "live";
   });
 
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
   const [schedule, setSchedule] = useState<Match[]>([]);
   const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastSync, setLastSync] = useState<number | null>(null);
+  const [syncFailed, setSyncFailed] = useState(false);
 
   // Sync settings across windows (main window and detached HUD window)
   useEffect(() => {
     const handleSync = () => {
-      setSettings(loadSettings());
+      const fresh = loadSettings();
+      settingsRef.current = fresh;
+      setSettings(fresh);
     };
     window.addEventListener("riftwatch_settings_updated", handleSync);
     window.addEventListener("storage", handleSync);
@@ -54,85 +76,241 @@ export default function App() {
     };
   }, []);
 
-  // Listen for tray menu tab navigation events
-  useEffect(() => {
-    try {
-      import("@tauri-apps/api/event")
-        .then(({ listen }) => {
-          listen<string>("navigate_tab", (event) => {
-            if (event.payload) {
-              setActiveTab(event.payload as TabKey);
-            }
-          });
-        })
-        .catch(() => {});
-    } catch {}
+  const handleUpdateSettings = useCallback((partial: Partial<AppSettings>) => {
+    const updated = { ...settingsRef.current, ...partial };
+    settingsRef.current = updated;
+    setSettings(updated);
+    saveSettings(updated);
   }, []);
 
-  // Load initial data and poll periodically
-  const refreshData = async () => {
+  // Listen for tray menu events (main window only, with proper cleanup)
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    let cancelled = false;
+    const unlisteners: Array<() => void> = [];
+
+    import("@tauri-apps/api/event")
+      .then(async ({ listen }) => {
+        const offTab = await listen<string>("navigate_tab", (event) => {
+          if (event.payload) setActiveTab(event.payload as TabKey);
+        });
+        const offHud = await listen("toggle_hud", () => {
+          const next = settingsRef.current.tickerMode === "detached" ? "docked" : "detached";
+          handleUpdateSettings({ tickerMode: next });
+        });
+        if (cancelled) {
+          offTab();
+          offHud();
+        } else {
+          unlisteners.push(offTab, offHud);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      unlisteners.forEach((off) => off());
+    };
+  }, [handleUpdateSettings]);
+
+  // ---------------------------------------------------------------
+  // Data polling
+  // ---------------------------------------------------------------
+  const inFlight = useRef(false);
+  const lastSchedule = useRef(0);
+  const lastStream = useRef(0);
+  const liveCount = useRef(0);
+
+  const refreshData = useCallback(async (force = false) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setIsRefreshing(true);
+    const now = Date.now();
+    const wantSchedule = force || now - lastSchedule.current >= SCHEDULE_POLL_MS - 1000;
+    const wantStream = force || now - lastStream.current >= STREAM_POLL_MS - 1000;
+
     try {
-      const [liveRes, schedRes, streamRes] = await Promise.all([
+      // allSettled: one source failing must never wipe the data we already have
+      const [live, sched, stream] = await Promise.allSettled([
         fetchLiveMatches(),
-        fetchSchedule(),
-        fetchStreamSchedule(),
+        wantSchedule ? fetchSchedule() : Promise.resolve(null),
+        wantStream ? fetchStreamSchedule() : Promise.resolve(null),
       ]);
-      setLiveMatches(liveRes.matches);
-      setSchedule(schedRes);
-      setStreamEvents(streamRes);
-    } catch (err) {
-      console.error("Error refreshing data:", err);
+
+      if (live.status === "fulfilled") {
+        setLiveMatches(live.value.matches);
+        liveCount.current = live.value.matches.filter((m) => m.state === "inProgress").length;
+      }
+      if (sched.status === "fulfilled" && sched.value) {
+        setSchedule(sched.value);
+        lastSchedule.current = now;
+      }
+      if (stream.status === "fulfilled" && stream.value) {
+        setStreamEvents(stream.value);
+        lastStream.current = now;
+      }
+
+      const anyFailed = [live, sched, stream].some((r) => r.status === "rejected");
+      setSyncFailed(anyFailed);
+      if (!anyFailed || live.status === "fulfilled") setLastSync(Date.now());
     } finally {
+      inFlight.current = false;
       setIsRefreshing(false);
     }
-  };
-
-  useEffect(() => {
-    refreshData();
-    const interval = setInterval(refreshData, 60000);
-    return () => clearInterval(interval);
   }, []);
 
-  const handleUpdateSettings = (partial: Partial<AppSettings>) => {
-    setSettings((prev) => {
-      const updated = { ...prev, ...partial };
-      saveSettings(updated);
-      return updated;
-    });
-  };
+  // The HUD window only needs to poll while it is actually the active ticker.
+  const pollingActive = !IS_HUD_WINDOW || settings.tickerMode === "detached";
 
-  // Synchronize detached ticker window state with Tauri
   useEffect(() => {
-    try {
-      import("@tauri-apps/api/core").then(({ invoke }) => {
+    if (!pollingActive) return;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const loop = async () => {
+      if (!document.hidden) await refreshData();
+      if (cancelled) return;
+      timer = window.setTimeout(loop, liveCount.current > 0 ? LIVE_POLL_ACTIVE_MS : LIVE_POLL_MS);
+    };
+    const onVisible = () => {
+      if (!document.hidden) refreshData();
+    };
+
+    loop();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [pollingActive, refreshData]);
+
+  // ---------------------------------------------------------------
+  // Native window sync (main window only; the HUD window just follows)
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
         if (settings.tickerMode === "detached") {
           invoke("show_ticker").catch(() => {});
         } else {
           invoke("hide_ticker").catch(() => {});
         }
-      }).catch(() => {});
-    } catch {
-      // Fallback in web browser mode
-    }
+      })
+      .catch(() => {});
   }, [settings.tickerMode]);
 
   useEffect(() => {
-    try {
-      import("@tauri-apps/api/core").then(({ invoke }) => {
+    if (IS_HUD_WINDOW) return;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
         invoke("set_ticker_topmost", { topmost: settings.tickerTopmost }).catch(() => {});
-      }).catch(() => {});
-    } catch {
-      // Fallback in web browser mode
-    }
+      })
+      .catch(() => {});
   }, [settings.tickerTopmost]);
 
-  // Auto-refresh catalog in background if older than 24 hours
+  // Tell the native side whether closing the window should hide to tray or quit
   useEffect(() => {
-    const age = Date.now() - (catalog.updatedAt || 0);
+    if (IS_HUD_WINDOW) return;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        invoke("set_close_to_tray", { enabled: settings.minimizeToTrayOnClose }).catch(() => {});
+      })
+      .catch(() => {});
+  }, [settings.minimizeToTrayOnClose]);
+
+  // Synchronize Windows autostart on sign-in
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        invoke("set_autostart", { enabled: settings.startWithWindows }).catch(() => {});
+      })
+      .catch(() => {});
+  }, [settings.startWithWindows]);
+
+  // ---------------------------------------------------------------
+  // Desktop Notifications (Kickoffs & S-Tier Bangers)
+  // ---------------------------------------------------------------
+  const notifiedKickoffs = useRef(new Set<string>());
+  const notifiedBangers = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    if (!settings.notifyKickoff || liveMatches.length === 0) return;
+
+    const followed = new Set(settings.followedTeams.map((t) => t.toUpperCase()));
+    for (const m of liveMatches) {
+      if (m.state === "inProgress" && !notifiedKickoffs.current.has(m.matchId)) {
+        const isFollowed =
+          followed.has(m.team1Code.toUpperCase()) || followed.has(m.team2Code.toUpperCase());
+        if (isFollowed) {
+          notifiedKickoffs.current.add(m.matchId);
+          import("@tauri-apps/api/core")
+            .then(({ invoke }) => {
+              invoke("send_notification", {
+                title: `🔴 MATCH LIVE: ${m.team1Code} vs ${m.team2Code}`,
+                body: `${m.leagueName} match is now live! (Bo${m.bestOf})`,
+              }).catch(() => {});
+            })
+            .catch(() => {});
+        }
+      }
+    }
+  }, [liveMatches, settings.notifyKickoff, settings.followedTeams]);
+
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    if (!settings.notifyStream || streamEvents.length === 0) return;
+
+    const now = Date.now();
+    for (const ev of streamEvents) {
+      if (ev.isBanger && ev.utcIso) {
+        const start = new Date(ev.utcIso).getTime();
+        // Airing now (started within the last 45 minutes)
+        if (now >= start && now - start < 45 * 60 * 1000) {
+          const key = `banger-${ev.id}`;
+          if (!notifiedBangers.current.has(key)) {
+            notifiedBangers.current.add(key);
+            const matchup =
+              ev.team1 && ev.team2 ? `${ev.team1} vs ${ev.team2}` : ev.name || "Legendary Match";
+            import("@tauri-apps/api/core")
+              .then(({ invoke }) => {
+                invoke("send_notification", {
+                  title: `🔥 S-TIER BANGER AIRING NOW`,
+                  body: `${matchup} (${ev.event} ${ev.season}) is playing on 24/7 stream!`,
+                }).catch(() => {});
+              })
+              .catch(() => {});
+          }
+        }
+      }
+    }
+  }, [streamEvents, settings.notifyStream]);
+
+  // ---------------------------------------------------------------
+  // Catalog (teams / players / leagues)
+  // ---------------------------------------------------------------
+  // First run: load the snapshot bundled with the app (kept out of the startup bundle).
+  useEffect(() => {
+    if (IS_HUD_WINDOW || catalog.teams.length > 0) return;
+    loadBundledCatalog()
+      .then((bundled) => setCatalog((prev) => (prev.teams.length > 0 ? prev : bundled)))
+      .catch((e) => console.warn("Failed to load bundled catalog:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh from Riot in the background if the saved copy is older than 24 hours
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    const cached = loadCachedCatalog();
+    const age = Date.now() - (cached?.updatedAt || 0);
     if (age > 24 * 60 * 60 * 1000) {
-      fetchLiveCatalog()
-        .then((updated) => setCatalog(updated))
+      fetchLiveCatalog(cached ?? undefined)
+        .then((updated) => {
+          if (updated) setCatalog(updated);
+        })
         .catch(() => {});
     }
   }, []);
@@ -140,32 +318,28 @@ export default function App() {
   const handleRefreshCatalog = async () => {
     setIsRefreshing(true);
     try {
-      const updated = await fetchLiveCatalog();
-      setCatalog(updated);
+      const updated = await fetchLiveCatalog(catalog);
+      if (updated) setCatalog(updated);
     } finally {
       setIsRefreshing(false);
     }
   };
 
   const handleOpenUrl = (url: string) => {
-    try {
-      import("@tauri-apps/api/core")
-        .then(({ invoke }) => {
-          invoke("open_external_url", { url }).catch(() => {
-            window.open(url, "_blank");
-          });
-        })
-        .catch(() => {
-          window.open(url, "_blank");
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        invoke("open_external_url", { url }).catch(() => {
+          // Native side refused (not an http/https link) or isn't available (browser dev mode)
+          if (/^https?:\/\//i.test(url)) window.open(url, "_blank");
         });
-    } catch {
-      window.open(url, "_blank");
-    }
+      })
+      .catch(() => {
+        if (/^https?:\/\//i.test(url)) window.open(url, "_blank");
+      });
   };
 
   // If running in detached HUD mode (query parameter ?mode=detached)
-  const isHudOnly = window.location.search.includes("mode=detached");
-  if (isHudOnly) {
+  if (IS_HUD_WINDOW) {
     return (
       <div className="w-screen h-screen bg-[#080c14] overflow-hidden m-0 p-0 select-none">
         <TickerBar
@@ -181,6 +355,14 @@ export default function App() {
     );
   }
 
+  const syncLabel = syncFailed
+    ? lastSync
+      ? `Connection problem · showing data from ${new Date(lastSync).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : "Can't reach the data sources right now"
+    : lastSync
+      ? `Updated ${new Date(lastSync).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : "Loading…";
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#091428] text-[#f0e6d2] overflow-hidden select-none">
       {/* Header */}
@@ -189,7 +371,7 @@ export default function App() {
         onUpdateSettings={handleUpdateSettings}
         liveMatches={liveMatches}
         streamEvents={streamEvents}
-        onRefresh={refreshData}
+        onRefresh={() => refreshData(true)}
         isRefreshing={isRefreshing}
         onSelectTab={setActiveTab}
         onOpenUrl={handleOpenUrl}
@@ -257,8 +439,8 @@ export default function App() {
       {/* Minimal Status Footer */}
       <footer className="bg-[#0a0e17] border-t border-[#1e282d] px-4 py-1 flex items-center justify-between text-[11px] text-[#7e8e9f] select-none">
         <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#0ac8b9]" />
-          <span>All data sources synchronized</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${syncFailed ? "bg-[#e84057]" : "bg-[#0ac8b9]"}`} />
+          <span>{syncLabel}</span>
         </div>
         <div className="flex items-center gap-3">
           {settings.spoilerMode && (
