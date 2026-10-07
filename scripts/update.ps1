@@ -36,6 +36,11 @@ if (-not $ExeAsset) {
     Write-Warning "No .exe asset found in release $LatestTag."
     return
 }
+$SumAsset = $Release.assets | Where-Object { $_.name -like "*SHA256*" } | Select-Object -First 1
+if (-not $SumAsset) {
+    Write-Warning "Release $LatestTag has no SHA256SUMS file, so it can't be verified. Not installing."
+    return
+}
 
 $DownloadUrl = $ExeAsset.browser_download_url
 $TempExe = "$env:TEMP\RiftScout_$LatestTag.exe"
@@ -47,6 +52,21 @@ if (-not (Test-Path $TempExe)) {
     Write-Error "Download failed. File not found at $TempExe"
     return
 }
+
+$Sums = (Invoke-WebRequest -Uri $SumAsset.browser_download_url -UserAgent "RiftScout-Updater" -UseBasicParsing).Content
+if ($Sums -is [byte[]]) { $Sums = [System.Text.Encoding]::UTF8.GetString($Sums) }
+$Expected = $null
+foreach ($line in ($Sums -split "`n")) {
+    $parts = $line.Trim() -split '\s+'
+    if ($parts.Count -ge 2 -and $parts[-1].TrimStart('*') -ieq $ExeAsset.name) { $Expected = $parts[0].ToUpper() }
+}
+$Actual = (Get-FileHash -Path $TempExe -Algorithm SHA256).Hash.ToUpper()
+if (-not $Expected -or $Actual -ne $Expected) {
+    Remove-Item -Path $TempExe -Force -ErrorAction SilentlyContinue
+    Write-Error "Checksum verification failed (expected $Expected, got $Actual). The download was deleted."
+    return
+}
+Write-Host "[+] SHA-256 verified: $Actual" -ForegroundColor Green
 
 # Stop running RiftScout processes if any
 $RunningProc = Get-Process -Name "RiftScout" -ErrorAction SilentlyContinue

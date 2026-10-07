@@ -1,70 +1,72 @@
-"""
-Unit tests for RiftScout settings and entity watchlist matching.
-"""
+import json
 
-from pathlib import Path
-from riftscout.settings import SettingsManager
+from riftscout.settings import SettingsManager, migrate
 
 
-def test_settings_initialization_and_save(tmp_path: Path):
-    settings_file = tmp_path / "settings.json"
-    sm = SettingsManager(file_path=settings_file)
-
-    assert sm.get("spoiler_mode") is False
-    assert "T1" in sm.get("followed_teams")
-
-    # Change a setting and verify persistence
-    sm.set("spoiler_mode", True)
-    assert settings_file.exists()
-
-    # Reload from disk
-    sm2 = SettingsManager(file_path=settings_file)
-    assert sm2.get("spoiler_mode") is True
+def test_defaults_follow_no_teams(tmp_path):
+    s = SettingsManager(tmp_path / "s.json")
+    assert s.followed_teams() == []
+    assert s.get("followed_players") == []
+    assert "lck" in s.get("followed_leagues")
 
 
-def test_watchlist_toggling(tmp_path: Path):
-    settings_file = tmp_path / "settings_toggle.json"
-    sm = SettingsManager(file_path=settings_file)
-
-    # Team toggle
-    assert sm.is_team_followed("C9") is False
-    sm.toggle_team("C9")
-    assert sm.is_team_followed("C9") is True
-    assert sm.is_team_followed("c9") is True  # Case insensitive
-    sm.toggle_team("C9")
-    assert sm.is_team_followed("C9") is False
-
-    # Region toggle
-    assert sm.is_region_followed("lck") is True
-    sm.toggle_region("lck")
-    assert sm.is_region_followed("lck") is False
-    sm.toggle_region("lck")
-    assert sm.is_region_followed("lck") is True
-
-    # Player toggle
-    assert sm.is_player_followed("Faker") is True
-    assert sm.is_player_followed("Gumayusi") is False
-    sm.toggle_player("Gumayusi")
-    assert sm.is_player_followed("gumayusi") is True
+def test_migrate_v1(tmp_path):
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps({"followed_teams": ["T1", "G2"], "followed_regions": ["lck", "lta"],
+                             "followed_players": ["Faker"], "ticker_bar_enabled": True}))
+    s = SettingsManager(p)
+    assert s.followed_teams() == [{"code": "T1", "name": ""}, {"code": "G2", "name": ""}]
+    assert s.get("followed_leagues") == ["lck", "lcs", "cblol-brazil"]
+    assert "followed_regions" not in s.data and "ticker_bar_enabled" not in s.data
+    assert json.loads(p.read_text())["version"] == 2
 
 
-def test_match_follow_matching(tmp_path: Path):
-    settings_file = tmp_path / "settings_match.json"
-    sm = SettingsManager(file_path=settings_file)
-    # Default followed: T1, GEN, G2, FLY, BLG | lck, lpl, lec, lta, worlds, msi | Faker, Chovy
+def test_migrate_is_idempotent():
+    once = migrate({"followed_teams": ["T1"], "followed_regions": ["lck"]})
+    assert migrate(once) == once
 
-    # Match featuring followed team
-    match1 = {"team1_code": "T1", "team2_code": "KT", "league_slug": "other"}
-    assert sm.is_match_followed(match1) is True
 
-    # Match featuring followed region
-    match2 = {"team1_code": "BRO", "team2_code": "DRX", "league_slug": "lck"}
-    assert sm.is_match_followed(match2) is True
+def test_team_follow_code_and_name(tmp_path):
+    s = SettingsManager(tmp_path / "s.json")
+    assert s.toggle_team("HLE", "Hanwha Life Esports") is True
+    assert s.is_team_followed("HLE", "Hanwha Life Esports")
+    assert not s.is_team_followed("HLE", "HLE Challengers")      # same code, different team
+    assert s.is_team_followed("hle")                              # code-only lookup (stream)
+    assert not s.is_team_followed("TBD") and not s.is_team_followed("")
+    assert s.toggle_team("HLE", "Hanwha Life Esports") is False
+    assert s.followed_teams() == []
 
-    # Match featuring unfollowed teams and region, but followed starting player
-    match3 = {"team1_code": "ABC", "team2_code": "XYZ", "league_slug": "unknown"}
-    assert sm.is_match_followed(match3, roster_players={"Zeus", "Oner", "Faker"}) is True
 
-    # Completely unfollowed match
-    match4 = {"team1_code": "ABC", "team2_code": "XYZ", "league_slug": "unknown"}
-    assert sm.is_match_followed(match4, roster_players={"PlayerA", "PlayerB"}) is False
+def test_legacy_code_only_team_matches_any_name(tmp_path):
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps({"followed_teams": ["T1"]}))
+    s = SettingsManager(p)
+    assert s.is_team_followed("T1", "T1")
+
+
+def test_league_and_player_toggles(tmp_path):
+    s = SettingsManager(tmp_path / "s.json")
+    s.set("followed_leagues", [])
+    assert s.toggle_league("LEC") is True and s.is_league_followed("lec")
+    assert s.toggle_league("lec") is False
+    assert s.toggle_player("Faker") is True and s.is_player_followed("FAKER")
+    assert s.toggle_player("faker") is False and not s.is_player_followed("Faker")
+
+
+def test_corrupt_file_falls_back(tmp_path):
+    p = tmp_path / "s.json"
+    p.write_text("{not json")
+    s = SettingsManager(p)
+    assert s.followed_teams() == []
+
+
+def test_attach_team_names_resolves_legacy_codes(tmp_path):
+    p = tmp_path / "s.json"
+    p.write_text(json.dumps({"followed_teams": ["HLE", "T1", "ZZZ"]}))
+    s = SettingsManager(p)
+    names = {"HLE": "Hanwha Life Esports", "T1": "T1"}
+    assert s.attach_team_names(names.get) == 2
+    assert s.is_team_followed("HLE", "Hanwha Life Esports")
+    assert not s.is_team_followed("HLE", "HLE Challengers")    # no longer matches every HLE
+    assert s.followed_teams()[2] == {"code": "ZZZ", "name": ""}  # unknown codes left alone
+    assert s.attach_team_names(names.get) == 0

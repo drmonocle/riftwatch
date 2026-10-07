@@ -1,37 +1,39 @@
-"""
-Integration tests verifying live data fetching and local Twitch broadcast ingestion.
-"""
+"""Live checks against the real APIs. Skipped automatically when offline.
+Run with:  py -3.12 -m pytest tests/test_live_integration.py -m live"""
 
-from pathlib import Path
+import pytest
+
+from riftscout import catalog, net
 from riftscout import config as C
 from riftscout.data import DataCoordinator
 from riftscout.stream import StreamScheduleReader
 
-
-def test_riot_schedule_live_fetch():
-    """Verify live connection to Riot LoL Esports persisted API."""
-    coordinator = DataCoordinator()
-    matches = coordinator.fetch_schedule(force_refresh=True)
-
-    # Should fetch active or upcoming pro events
-    assert isinstance(matches, list)
-    assert len(matches) > 0
-
-    first = matches[0]
-    assert "match_id" in first
-    assert "team1_name" in first
-    assert "team2_name" in first
-    assert "start_time_utc" in first
+pytestmark = pytest.mark.live
 
 
-def test_local_broadcast_db_ingestion():
-    """Verify ingestion of the actual 24/7 Twitch broadcast database."""
-    if not C.LOCAL_TWITCH_DB_PATH.exists():
-        return
+def _online():
+    return net.fetch_bytes(C.RIOT_LEAGUES_URL, headers={"x-api-key": C.RIOT_API_KEY}, max_retries=1) is not None
 
-    reader = StreamScheduleReader(local_db_path=C.LOCAL_TWITCH_DB_PATH)
-    items = reader.fetch_stream_schedule()
 
-    assert len(items) > 100
-    bangers = [i for i in items if i.get("is_banger")]
-    assert len(bangers) > 0
+@pytest.fixture(scope="module", autouse=True)
+def require_network():
+    if not _online():
+        pytest.skip("Riot API unreachable")
+
+
+def test_schedule(tmp_path):
+    matches = DataCoordinator(db_path=tmp_path / "c.db").fetch_schedule()
+    assert matches, "schedule returned no matches"
+    assert all(m["team1_code"] and m["team2_code"] for m in matches)
+
+
+def test_catalog(tmp_path):
+    cat = catalog.refresh(tmp_path / "c.db")
+    assert cat and len(cat.teams) > 100
+    assert any(p.name.lower() == "faker" for p in cat.roster_for("T1", "T1"))
+
+
+def test_stream_schedule(tmp_path):
+    events = StreamScheduleReader(db_path=tmp_path / "c.db").fetch()
+    assert events, "lolworlds schedule-json returned nothing"
+    assert all(e["start_utc"] for e in events)

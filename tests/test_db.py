@@ -1,115 +1,83 @@
-"""
-Unit tests for RiftScout SQLite cache and relational match storage.
-"""
+import pytest
 
-import time
-from pathlib import Path
 from riftscout import db
 
 
-def test_db_init_and_api_cache(tmp_path: Path):
-    db_file = tmp_path / "test_cache.db"
-    db.init_db(db_file)
-
-    # Test cache insertion and retrieval
-    endpoint = "https://esports-api.lolesports.com/test"
-    data = {"events": [{"id": "1", "state": "completed"}]}
-    db.set_cached_api(endpoint, "q1", data, ttl_sec=60, db_path=db_file)
-
-    cached = db.get_cached_api(endpoint, "q1", db_path=db_file)
-    assert cached == data
-
-    # Test expired cache returns None
-    db.set_cached_api(endpoint, "q_expired", data, ttl_sec=-10, db_path=db_file)
-    assert db.get_cached_api(endpoint, "q_expired", db_path=db_file) is None
+@pytest.fixture
+def dbp(tmp_path):
+    p = tmp_path / "cache.db"
+    db.init_db(p)
+    return p
 
 
-def test_match_upserts_and_queries(tmp_path: Path):
-    db_file = tmp_path / "test_matches.db"
-    db.init_db(db_file)
-
-    matches = [
-        {
-            "match_id": "1001",
-            "league_name": "LCK",
-            "league_slug": "lck",
-            "block_name": "Finals",
-            "start_time_utc": "2026-10-07T08:00:00Z",
-            "state": "inProgress",
-            "team1_name": "T1",
-            "team1_code": "T1",
-            "team1_score": 1,
-            "team2_name": "Gen.G",
-            "team2_code": "GEN",
-            "team2_score": 1,
-            "best_of": 5,
-        },
-        {
-            "match_id": "1002",
-            "league_name": "LEC",
-            "league_slug": "lec",
-            "block_name": "Week 1",
-            "start_time_utc": "2026-10-08T16:00:00Z",
-            "state": "unstarted",
-            "team1_name": "G2 Esports",
-            "team1_code": "G2",
-            "team1_score": 0,
-            "team2_name": "Fnatic",
-            "team2_code": "FNC",
-            "team2_score": 0,
-            "best_of": 3,
-        }
-    ]
-
-    inserted = db.upsert_matches(matches, db_path=db_file)
-    assert inserted == 2
-
-    # Query live matches
-    live = db.get_live_matches(db_path=db_file)
-    assert len(live) == 1
-    assert live[0]["match_id"] == "1001"
-    assert live[0]["team1_code"] == "T1"
-
-    # Query schedule
-    sched = db.get_schedule(limit=10, db_path=db_file)
-    assert len(sched) == 2
+def _match(mid, start, state="unstarted", **kw):
+    m = {"match_id": mid, "league_name": "LCK", "league_slug": "lck", "start_time_utc": start,
+         "state": state, "team1_name": "T1", "team1_code": "T1", "team2_name": "Gen.G", "team2_code": "GEN"}
+    m.update(kw)
+    return m
 
 
-def test_stream_schedule_and_bangers(tmp_path: Path):
-    db_file = tmp_path / "test_stream.db"
-    db.init_db(db_file)
+def test_upsert_and_query_matches(dbp):
+    db.upsert_matches([_match("1", "2099-01-01T10:00:00Z"),
+                       _match("2", "2099-01-01T08:00:00Z", state="inProgress", team1_score=1)], dbp)
+    sched = db.get_schedule(db_path=dbp)
+    assert [m["match_id"] for m in sched] == ["2", "1"]
+    live = db.get_live_matches(dbp)
+    assert len(live) == 1 and live[0]["team1_score"] == 1
 
-    series_data = [
-        {
-            "series_num": 1,
-            "tournament_slug": "worlds_2022",
-            "tournament_name": "2022 World Championship",
-            "title": "T1 vs DRX (Grand Finals)",
-            "stage": "Finals",
-            "team_1": "T1",
-            "team_2": "DRX",
-            "score": "2-3",
-            "winner": "DRX",
-            "is_banger": 1,
-            "banger_tier": "S-Tier Banger"
-        },
-        {
-            "series_num": 2,
-            "tournament_slug": "msi_2023",
-            "tournament_name": "2023 MSI",
-            "title": "JDG vs BLG",
-            "stage": "Finals",
-            "team_1": "JDG",
-            "team_2": "BLG",
-            "score": "3-1",
-            "winner": "JDG",
-            "is_banger": 0,
-            "banger_tier": ""
-        }
-    ]
 
-    db.upsert_stream_schedule(series_data, db_path=db_file)
-    bangers = db.get_stream_bangers(db_path=db_file)
-    assert len(bangers) == 1
-    assert bangers[0]["title"] == "T1 vs DRX (Grand Finals)"
-    assert bangers[0]["banger_tier"] == "S-Tier Banger"
+def test_old_matches_pruned(dbp):
+    db.upsert_matches([_match("old", "2000-01-01T00:00:00Z"), _match("new", "2099-01-01T00:00:00Z")], dbp)
+    assert [m["match_id"] for m in db.get_schedule(db_path=dbp)] == ["new"]
+
+
+def test_none_values_get_defaults(dbp):
+    db.upsert_matches([_match("1", "2099-01-01T00:00:00Z", winner=None, stream_url=None)], dbp)
+    m = db.get_schedule(db_path=dbp)[0]
+    assert m["winner"] == "" and m["stream_url"] == ""
+
+
+def test_catalog_roundtrip_and_replace(dbp):
+    leagues = [{"slug": "lck", "name": "LCK", "priority": 1}]
+    teams = [{"slug": "t1", "code": "T1", "name": "T1", "league_name": "LCK"}]
+    rosters = [{"team_slug": "t1", "player_name": "Faker", "role": "mid"}]
+    db.replace_catalog(leagues, teams, rosters, dbp)
+    assert db.get_leagues(dbp)[0]["slug"] == "lck"
+    assert db.get_rosters(dbp)[0]["player_name"] == "Faker"
+    # Replacing with an empty team list keeps the old teams (failed fetch must not wipe cache).
+    db.replace_catalog([], [], [], dbp)
+    assert len(db.get_teams(dbp)) == 1
+
+
+def test_stream_events_roundtrip(dbp):
+    ev = [{"event_id": "a", "kind": "match", "team1": "SKT", "team2": "SSG",
+           "start_utc": "2026-10-07T07:00:00Z", "is_banger": True}]
+    db.replace_stream_events(ev, dbp)
+    got = db.get_stream_events(dbp)
+    assert got[0]["is_banger"] is True and got[0]["team1"] == "SKT"
+
+
+def test_meta_and_api_cache(dbp):
+    assert db.get_meta("x", dbp) is None
+    db.set_meta("x", "1", dbp)
+    assert db.get_meta("x", dbp) == "1"
+    db.set_cached_api("ep", "q", {"a": 1}, ttl_sec=60, db_path=dbp)
+    assert db.get_cached_api("ep", "q", dbp) == {"a": 1}
+    db.set_cached_api("ep", "gone", {"a": 1}, ttl_sec=-1, db_path=dbp)
+    assert db.get_cached_api("ep", "gone", dbp) is None
+
+
+def test_legacy_v010_cache_is_rebuilt(tmp_path):
+    import sqlite3
+    p = tmp_path / "legacy.db"
+    c = sqlite3.connect(p)
+    c.execute("CREATE TABLE team_rosters (team_code TEXT, player_name TEXT, role TEXT, is_starter BOOLEAN,"
+              " updated_at REAL, PRIMARY KEY (team_code, player_name))")
+    c.execute("CREATE TABLE stream_schedule (series_num INTEGER PRIMARY KEY, title TEXT)")
+    c.commit()
+    c.close()
+    db.replace_catalog([], [{"slug": "t1", "code": "T1", "name": "T1"}],
+                       [{"team_slug": "t1", "player_name": "Faker"}], p)
+    assert db.get_rosters(p)[0]["team_slug"] == "t1"
+    names = {r[0] for r in sqlite3.connect(p).execute("select name from sqlite_master where type='table'")}
+    assert "stream_schedule" not in names

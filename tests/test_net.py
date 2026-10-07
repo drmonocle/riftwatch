@@ -1,21 +1,27 @@
-"""
-Unit tests for RiftScout networking and host security allowlist.
-"""
-
-from riftscout.net import is_allowed_host
+from riftscout import net
 
 
-def test_allowed_hosts():
-    assert is_allowed_host("https://esports-api.lolesports.com/persisted/gw/getSchedule") is True
-    assert is_allowed_host("http://static.lolesports.com/teams/t1.png") is True
-    assert is_allowed_host("https://lol.fandom.com/api.php") is True
-    assert is_allowed_host("https://lolworlds.com/api.ashx") is True
-    assert is_allowed_host("https://api.github.com/repos/drmonocle/rift-scout") is True
-    assert is_allowed_host("https://objects.githubusercontent.com/download/RiftScout.exe") is True
+def test_fetch_allowlist():
+    assert net.is_allowed_host("https://esports-api.lolesports.com/persisted/gw/getLive")
+    assert net.is_allowed_host("https://lolworlds.com/api.ashx")
+    assert not net.is_allowed_host("https://evil.com/x")
+    assert not net.is_allowed_host("https://lolesports.com.evil.com/x")
+    assert not net.is_allowed_host("file:///C:/Windows/win.ini")
 
 
-def test_blocked_hosts():
-    assert is_allowed_host("https://malicious-site.com/payload.exe") is False
-    assert is_allowed_host("http://evil-tracker.io/ping") is False
-    assert is_allowed_host("file:///C:/Windows/System32/cmd.exe") is False
-    assert is_allowed_host("ftp://insecure.org") is False
+def test_browser_allowlist():
+    assert net.is_safe_browser_url("https://www.twitch.tv/lolworldchampionship")
+    assert net.is_safe_browser_url("https://www.youtube.com/watch?v=abc")
+    assert net.is_safe_browser_url("https://lolesports.com/schedule")
+    assert not net.is_safe_browser_url("http://www.twitch.tv/x")       # https only
+    assert not net.is_safe_browser_url("https://evil.com")
+    assert not net.is_safe_browser_url("javascript:alert(1)")
+
+
+def test_https_upgrade():
+    assert net.https("http://static.lolesports.com/a.png") == "https://static.lolesports.com/a.png"
+    assert net.https("") == ""
+
+
+def test_blocked_fetch_returns_none():
+    assert net.fetch_json("https://evil.com/data.json") is None
