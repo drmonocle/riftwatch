@@ -153,55 +153,78 @@ fn apply_app_update(app: tauri::AppHandle, download_url: String) -> Result<(), S
             return Err("Downloaded update file not found on disk.".into());
         }
 
-        let script_path = temp_dir.join("riftwatch_apply_update.cmd");
-        let current_exe_str = current_exe.to_str().unwrap();
-        let new_exe_str = new_exe.to_str().unwrap();
+        let script_path = temp_dir.join("riftwatch_apply_update.ps1");
+        let current_exe_str = current_exe.to_string_lossy().replace(r"\\?\", "");
+        let new_exe_str = new_exe.to_string_lossy().replace(r"\\?\", "");
 
         let script_content = format!(
-            "@echo off\r\n\
-setlocal\r\n\
-set \"OLD_PID={pid}\"\r\n\
-set \"TARGET={current_exe_str}\"\r\n\
-set \"SOURCE={new_exe_str}\"\r\n\
+            "$oldPid = {pid}\r\n\
+$target = '{target}'\r\n\
+$source = '{source}'\r\n\
 \r\n\
-for /l %%i in (1,1,20) do (\r\n\
-    tasklist /fi \"PID eq %OLD_PID%\" 2>nul | findstr \"%OLD_PID%\" >nul\r\n\
-    if errorlevel 1 goto :SWAP\r\n\
-    timeout /t 1 /nobreak >nul\r\n\
-)\r\n\
+try {{\r\n\
+    $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue\r\n\
+    if ($proc) {{\r\n\
+        $proc.WaitForExit(4000)\r\n\
+        if (-not $proc.HasExited) {{\r\n\
+            Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue\r\n\
+            Start-Sleep -Milliseconds 500\r\n\
+        }}\r\n\
+    }}\r\n\
+}} catch {{}}\r\n\
 \r\n\
-:SWAP\r\n\
-powershell -NoProfile -Command \"Unblock-File -LiteralPath '%SOURCE%'\" 2>nul\r\n\
+Start-Sleep -Milliseconds 600\r\n\
+try {{ Unblock-File -LiteralPath $source -ErrorAction SilentlyContinue }} catch {{}}\r\n\
 \r\n\
-for /l %%i in (1,1,10) do (\r\n\
-    move /y \"%TARGET%\" \"%TARGET%.bak\" >nul 2>nul\r\n\
-    copy /y \"%SOURCE%\" \"%TARGET%\" >nul 2>nul\r\n\
-    if exist \"%TARGET%\" (\r\n\
-        del /f /q \"%TARGET%.bak\" >nul 2>nul\r\n\
-        del /f /q \"%SOURCE%\" >nul 2>nul\r\n\
-        goto :LAUNCH\r\n\
-    )\r\n\
-    timeout /t 1 /nobreak >nul\r\n\
-)\r\n\
+$swapped = $false\r\n\
+for ($i = 0; $i -lt 25; $i++) {{\r\n\
+    try {{\r\n\
+        if (Test-Path -LiteralPath \"$target.bak\") {{\r\n\
+            Remove-Item -LiteralPath \"$target.bak\" -Force -ErrorAction SilentlyContinue\r\n\
+        }}\r\n\
+        Move-Item -LiteralPath $target -Destination \"$target.bak\" -Force\r\n\
+        Copy-Item -LiteralPath $source -Destination $target -Force\r\n\
+        if ((Test-Path -LiteralPath $target) -and ((Get-Item $target).Length -ge 500000)) {{\r\n\
+            $swapped = $true\r\n\
+            Remove-Item -LiteralPath \"$target.bak\" -Force -ErrorAction SilentlyContinue\r\n\
+            break\r\n\
+        }}\r\n\
+    }} catch {{\r\n\
+        Start-Sleep -Milliseconds 500\r\n\
+    }}\r\n\
+}}\r\n\
 \r\n\
-if not exist \"%TARGET%\" if exist \"%TARGET%.bak\" move /y \"%TARGET%.bak\" \"%TARGET%\" >nul 2>nul\r\n\
-goto :DONE\r\n\
+if (-not $swapped -and (Test-Path -LiteralPath \"$target.bak\")) {{\r\n\
+    try {{ Move-Item -LiteralPath \"$target.bak\" -Destination $target -Force -ErrorAction SilentlyContinue }} catch {{}}\r\n\
+}}\r\n\
 \r\n\
-:LAUNCH\r\n\
-start \"\" \"%TARGET%\"\r\n\
+$desktopCopy = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'RiftWatch.exe')\r\n\
+if ((Test-Path -LiteralPath $desktopCopy) -and ($desktopCopy -ne $target)) {{\r\n\
+    try {{ Copy-Item -LiteralPath $target -Destination $desktopCopy -Force -ErrorAction SilentlyContinue }} catch {{}}\r\n\
+}}\r\n\
 \r\n\
-:DONE\r\n\
-del /f /q \"%~f0\" >nul 2>nul\r\n\
-exit\r\n",
+if ($swapped) {{\r\n\
+    Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue\r\n\
+    Start-Sleep -Seconds 1\r\n\
+    Start-Process -FilePath $target -ArgumentList '--updated'\r\n\
+}}\r\n\
+\r\n\
+try {{ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue }} catch {{}}\r\n",
             pid = pid,
-            current_exe_str = current_exe_str,
-            new_exe_str = new_exe_str
+            target = current_exe_str.replace("'", "''"),
+            source = new_exe_str.replace("'", "''")
         );
 
         std::fs::write(&script_path, script_content).map_err(|e| format!("Failed to write update script: {}", e))?;
 
-        Command::new("cmd.exe")
-            .args(["/c", script_path.to_str().unwrap()])
+        Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle", "Hidden",
+                "-ExecutionPolicy", "Bypass",
+                "-File", script_path.to_str().unwrap(),
+            ])
             .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
             .spawn()
             .map_err(|e| format!("Failed to start update helper: {}", e))?;
@@ -227,6 +250,7 @@ fn is_another_instance_running() -> bool {
             lpName: *const u16,
         ) -> *mut std::ffi::c_void;
         fn GetLastError() -> u32;
+        fn CloseHandle(hObject: *mut std::ffi::c_void) -> i32;
         fn FindWindowW(lpClassName: *const u16, lpWindowName: *const u16) -> *mut std::ffi::c_void;
         fn ShowWindow(hWnd: *mut std::ffi::c_void, nCmdShow: i32) -> i32;
         fn SetForegroundWindow(hWnd: *mut std::ffi::c_void) -> i32;
@@ -239,24 +263,43 @@ fn is_another_instance_running() -> bool {
         .chain(std::iter::once(0))
         .collect();
 
-    let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 0, mutex_name.as_ptr()) };
-    if handle.is_null() {
+    let is_updated = std::env::args().any(|a| a == "--updated");
+    let max_attempts = if is_updated { 15 } else { 4 };
+
+    for attempt in 0..max_attempts {
+        let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 0, mutex_name.as_ptr()) };
+        if handle.is_null() {
+            return false;
+        }
+
+        if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+            let win_title: Vec<u16> = OsStr::new("RiftWatch")
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            let hwnd = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
+            if !hwnd.is_null() {
+                unsafe {
+                    ShowWindow(hwnd, SW_RESTORE);
+                    SetForegroundWindow(hwnd);
+                    CloseHandle(handle);
+                }
+                return true;
+            }
+
+            // Window is null: previous instance is still shutting down
+            unsafe { CloseHandle(handle); }
+            if attempt + 1 < max_attempts {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                continue;
+            }
+            return true;
+        }
+
+        // Successfully acquired primary instance mutex
         return false;
     }
-    if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
-        let win_title: Vec<u16> = OsStr::new("RiftWatch")
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-        let hwnd = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
-        if !hwnd.is_null() {
-            unsafe {
-                ShowWindow(hwnd, SW_RESTORE);
-                SetForegroundWindow(hwnd);
-            }
-        }
-        return true;
-    }
+
     false
 }
 
