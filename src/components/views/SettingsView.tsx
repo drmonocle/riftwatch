@@ -452,7 +452,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Footer */}
       <footer className="pt-2 text-[11px] text-[#7e8e9f] space-y-1">
         <div className="flex items-center justify-between">
-          <div>RiftWatch Desktop v0.3.2 · Rust & Webview2 · MIT License</div>
+          <div>RiftWatch Desktop v0.3.3 · Rust & Webview2 · MIT License</div>
           <button
             onClick={() => onOpenUrl("https://github.com/drmonocle/riftwatch")}
             className="hover:text-[#c8aa6e] underline"

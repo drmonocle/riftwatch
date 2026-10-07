@@ -1,7 +1,7 @@
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 
 #[tauri::command]
@@ -80,8 +80,50 @@ pub fn run() {
         .setup(|app| {
             let show_i = MenuItem::with_id(app, "show", "Open RiftWatch", true, None::<&str>)?;
             let hide_i = MenuItem::with_id(app, "hide", "Hide to Tray", true, None::<&str>)?;
+            let sep1 = PredefinedMenuItem::separator(app)?;
+
+            let nav_live = MenuItem::with_id(app, "nav_live", "🔴 Live Matches", true, None::<&str>)?;
+            let nav_schedule = MenuItem::with_id(app, "nav_schedule", "📅 Schedule & Results", true, None::<&str>)?;
+            let nav_stream = MenuItem::with_id(app, "nav_stream", "📺 24/7 Stream Marathon", true, None::<&str>)?;
+            let nav_watchlist = MenuItem::with_id(app, "nav_watchlist", "⭐ Watchlist & Teams", true, None::<&str>)?;
+            let nav_news = MenuItem::with_id(app, "nav_news", "📰 News & Intel", true, None::<&str>)?;
+            let nav_settings = MenuItem::with_id(app, "nav_settings", "⚙ Settings", true, None::<&str>)?;
+            let sep2 = PredefinedMenuItem::separator(app)?;
+
+            let toggle_hud = MenuItem::with_id(app, "toggle_hud", "📌 Toggle Desktop HUD", true, None::<&str>)?;
+            let sep3 = PredefinedMenuItem::separator(app)?;
+
+            let stream_twitch = MenuItem::with_id(app, "stream_twitch", "▶ Watch 24/7 on Twitch", true, None::<&str>)?;
+            let stream_youtube = MenuItem::with_id(app, "stream_youtube", "▶ Watch 24/7 on YouTube", true, None::<&str>)?;
+            let stream_sched = MenuItem::with_id(app, "stream_sched", "🌐 Full Schedule (lolworlds.com)", true, None::<&str>)?;
+            let kofi_support = MenuItem::with_id(app, "kofi_support", "☕ Support on Ko-fi", true, None::<&str>)?;
+            let sep4 = PredefinedMenuItem::separator(app)?;
+
             let quit_i = MenuItem::with_id(app, "quit", "Quit RiftWatch", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_i, &hide_i, &quit_i])?;
+
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &show_i,
+                    &hide_i,
+                    &sep1,
+                    &nav_live,
+                    &nav_schedule,
+                    &nav_stream,
+                    &nav_watchlist,
+                    &nav_news,
+                    &nav_settings,
+                    &sep2,
+                    &toggle_hud,
+                    &sep3,
+                    &stream_twitch,
+                    &stream_youtube,
+                    &stream_sched,
+                    &kofi_support,
+                    &sep4,
+                    &quit_i,
+                ],
+            )?;
 
             let tray_icon = match tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png")) {
                 Ok(img) => Some(img),
@@ -105,6 +147,45 @@ pub fn run() {
                             if let Some(w) = app.get_webview_window("main") {
                                 let _ = w.hide();
                             }
+                        }
+                        "nav_live" | "nav_schedule" | "nav_stream" | "nav_watchlist" | "nav_news" | "nav_settings" => {
+                            let tab = match event.id.as_ref() {
+                                "nav_live" => "live",
+                                "nav_schedule" => "schedule",
+                                "nav_stream" => "stream",
+                                "nav_watchlist" => "watchlist",
+                                "nav_news" => "news",
+                                "nav_settings" => "settings",
+                                _ => "live",
+                            };
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                                let _ = w.emit("navigate_tab", tab);
+                            }
+                        }
+                        "toggle_hud" => {
+                            if let Some(w) = app.get_webview_window("ticker") {
+                                if w.is_visible().unwrap_or(false) {
+                                    let _ = w.hide();
+                                } else {
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
+                            }
+                        }
+                        "stream_twitch" => {
+                            open_external_url("https://www.twitch.tv/LoLWorldChampionship".to_string());
+                        }
+                        "stream_youtube" => {
+                            open_external_url("https://www.youtube.com/@LoLWorldChampionships/live".to_string());
+                        }
+                        "stream_sched" => {
+                            open_external_url("https://lolworlds.com".to_string());
+                        }
+                        "kofi_support" => {
+                            open_external_url("https://ko-fi.com/monocle".to_string());
                         }
                         "quit" => {
                             app.exit(0);

@@ -32,7 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-4">
         <div className="flex items-baseline gap-1.5 cursor-pointer" onClick={() => onSelectTab("live")}>
           <span className="text-[#c8aa6e] font-bold text-lg tracking-wider">RIFTWATCH</span>
-          <span className="text-[#a09b8c] text-[10px]">v0.3.2</span>
+          <span className="text-[#a09b8c] text-[10px]">v0.3.3</span>
         </div>
 
         {/* Pro Matches Pill */}

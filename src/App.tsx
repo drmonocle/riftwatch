@@ -54,6 +54,21 @@ export default function App() {
     };
   }, []);
 
+  // Listen for tray menu tab navigation events
+  useEffect(() => {
+    try {
+      import("@tauri-apps/api/event")
+        .then(({ listen }) => {
+          listen<string>("navigate_tab", (event) => {
+            if (event.payload) {
+              setActiveTab(event.payload as TabKey);
+            }
+          });
+        })
+        .catch(() => {});
+    } catch {}
+  }, []);
+
   // Load initial data and poll periodically
   const refreshData = async () => {
     setIsRefreshing(true);
@@ -211,7 +226,12 @@ export default function App() {
           <ScheduleView schedule={schedule} settings={settings} onOpenUrl={handleOpenUrl} />
         )}
         {activeTab === "stream" && (
-          <StreamView events={streamEvents} settings={settings} onOpenUrl={handleOpenUrl} />
+          <StreamView
+            events={streamEvents}
+            settings={settings}
+            catalog={catalog}
+            onOpenUrl={handleOpenUrl}
+          />
         )}
         {activeTab === "watchlist" && (
           <WatchlistView

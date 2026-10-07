@@ -383,7 +383,7 @@ export async function fetchStreamSchedule(): Promise<StreamEvent[]> {
       team2: item.team2,
       rawTime: item.rawTime,
       utcIso: item.utcIso,
-      isBanger: item.isBanger || item.event?.toLowerCase().includes("worlds") || item.stage?.toLowerCase().includes("finals"),
+      isBanger: item.isBanger === true || (typeof item.tag === "string" && item.tag.toLowerCase().trim() === "banger"),
     }));
   } catch (err) {
     console.warn("fetchStreamSchedule fallback:", err);

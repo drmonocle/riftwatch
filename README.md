@@ -14,7 +14,7 @@ A fast, lightweight Windows desktop app for League of Legends esports. Check liv
 Download the latest version from [**GitHub Releases**](https://github.com/drmonocle/riftwatch/releases):
 
 * 🚀 [**Download RiftWatch.exe**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch.exe) (Portable, ~4.6 MB)
-* 📦 [**Download RiftWatch.zip**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch-v0.3.2-windows-x64.zip) (~2.0 MB)
+* 📦 [**Download RiftWatch.zip**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch-v0.3.3-windows-x64.zip) (~2.0 MB)
 
 > **No installer needed.** Just download and run. It runs on Windows 10 and 11 and uses almost no RAM (~35 MB).
 
