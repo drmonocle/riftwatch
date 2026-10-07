@@ -385,3 +385,76 @@ def test_settings_view_in_place_status(app):
     assert txt.cget("text") == "cached copy is fresh"
     assert dot.cget("text") == "●"
 
+
+def test_live_view_inplace_scoreboard_updates(app):
+    app.settings.set("spoiler_mode", False)
+    app.show_tab("live")
+    lv = app.views["live"]
+    lv.render()
+
+    # Verify binding exists
+    assert "live1" in lv._live_bindings
+    b = lv._live_bindings["live1"]
+    score_widget = b.lbl_score
+    diff_widget = b.lbl_diff
+    assert score_widget is not None
+    assert score_widget.cget("text") == "7  :  8"
+
+    # Mutate stats and series score
+    app.state["live"][0]["team1_score"] = 9
+    st = app.state["livestats"]["live1"]
+    st["blue"]["kills"] = 22
+    st["blue"]["gold"] = 55000
+    st["red"]["gold"] = 50000
+
+    # Re-render: must update in-place without rebuilding
+    lv.render()
+
+    # Widget instances must be preserved identically (zero reconstruction, zero flicker)
+    assert lv._live_bindings["live1"].lbl_score is score_widget
+    assert score_widget.cget("text") == "9  :  8"
+    kills_label = lv._live_bindings["live1"].stat_cells["blue"][0]
+    assert kills_label.cget("text") == "22"
+    assert "+5.0k gold" in diff_widget.cget("text")
+
+
+def test_first_launch_opens_watchlist_and_sets_onboarding_completed(tmp_path):
+    import tkinter as tk
+    from riftscout.settings import SettingsManager
+    from riftscout.ui.app import RiftScoutApp
+
+    s_path = tmp_path / "first_launch.json"
+    s = SettingsManager(s_path)
+    assert s.get("onboarding_completed") is False
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        app = RiftScoutApp(root, settings=s, start_worker=False, offline_images=True)
+        # First launch must open to Watchlist
+        assert app.active == "watchlist"
+        # Onboarding must be marked completed
+        assert s.get("onboarding_completed") is True
+        app.close()
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+
+def test_schedule_view_pagination_and_show_more(app):
+    app.show_tab("schedule")
+    sv = app.views["schedule"]
+    assert sv._visible_count == 25
+
+    # Check that filter click does NOT bump global prefs
+    pref_v_before = app.versions.get("prefs", 0)
+    sv._set("schedule_filter_range", "today")
+    assert app.versions.get("prefs", 0) == pref_v_before
+    assert sv._visible_count == 25
+
+    # Test show more
+    sv._show_more()
+    assert sv._visible_count == 50
+

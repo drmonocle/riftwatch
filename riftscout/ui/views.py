@@ -65,11 +65,123 @@ class View(tk.Frame):
 # =============================================================================
 # LIVE
 # =============================================================================
+class _LiveCardBinding:
+    def __init__(self, match_id: str, hidden: bool, has_stats: bool, blue_ti: int, red_ti: int):
+        self.match_id = match_id
+        self.hidden = hidden
+        self.has_stats = has_stats
+        self.blue_ti = blue_ti
+        self.red_ti = red_ti
+        self.lbl_game: Optional[tk.Label] = None
+        self.lbl_score: Optional[tk.Label] = None
+        self.lbl_diff: Optional[tk.Label] = None
+        self.stat_cells: Dict[str, List[tk.Label]] = {"blue": [], "red": []}
+        self.player_champs: Dict[str, List[tk.Label]] = {"blue": [], "red": []}
+
+
 class LiveView(View):
     deps = ("live", "livestats", "schedule", "catalog")
     minute_refresh = True
 
+    def __init__(self, parent, app):
+        super().__init__(parent, app)
+        self._live_bindings: Dict[str, _LiveCardBinding] = {}
+
+    def render(self) -> None:
+        if self._try_update_inplace():
+            return
+        self.scroll.keep_scroll(self._build)
+
+    def _try_update_inplace(self) -> bool:
+        a = self.app
+        live = list(a.state.get("live", []))
+        if not live or not getattr(self, "_live_bindings", None):
+            return False
+        cur_ids = [m.get("match_id") for m in live if m.get("match_id")]
+        if list(self._live_bindings.keys()) != cur_ids:
+            return False
+        stats = a.state.get("livestats", {})
+
+        for m in live:
+            mid = m.get("match_id")
+            b = self._live_bindings.get(mid)
+            if not b or not b.lbl_score or not b.lbl_score.winfo_exists():
+                return False
+            hidden = cards.scores_hidden(a, m)
+            if hidden != b.hidden:
+                return False
+            st = stats.get(mid)
+            if bool(st) != b.has_stats:
+                return False
+            if st and not hidden:
+                blue_is_team1 = st.get("blue", {}).get("team_id") == m.get("team1_id") or \
+                    st.get("blue_team_id") == m.get("team1_id")
+                blue_ti = 1 if blue_is_team1 else 2
+                red_ti = 2 if blue_is_team1 else 1
+                if blue_ti != b.blue_ti or red_ti != b.red_ti:
+                    return False
+                for side in ("blue", "red"):
+                    curr_p = (st.get(side) or {}).get("players", [])
+                    if len(curr_p) != len(b.player_champs.get(side, [])):
+                        return False
+
+        for m in live:
+            mid = m.get("match_id")
+            b = self._live_bindings[mid]
+            st = stats.get(mid)
+            hidden = b.hidden
+
+            g = next((x for x in m.get("games", []) if x.get("state") == "inProgress"), None)
+            if b.lbl_game and b.lbl_game.winfo_exists():
+                if g and not hidden:
+                    b.lbl_game.configure(text=f"Game {g.get('number')} · Best of {m.get('best_of', 1)}")
+                else:
+                    b.lbl_game.configure(text=f"Best of {m.get('best_of', 1)}")
+
+            s1, s2 = cards.score_text(a, m)
+            if b.lbl_score and b.lbl_score.winfo_exists():
+                b.lbl_score.configure(text=f"{s1}  :  {s2}",
+                                      fg=C.COLOR_TEXT_DIM if hidden else C.COLOR_TEXT_PRIMARY)
+
+            if st and not hidden:
+                sides = [("blue", b.blue_ti), ("red", b.red_ti)]
+                for side, ti in sides:
+                    d = st.get(side) or {}
+                    vals = [
+                        str(d.get("kills", 0)),
+                        f"{d.get('gold', 0) / 1000:.1f}k",
+                        str(d.get("towers", 0)),
+                        str(len(d.get("dragons", []))),
+                        str(d.get("barons", 0)),
+                        str(d.get("inhibitors", 0)),
+                    ]
+                    cells = b.stat_cells.get(side, [])
+                    for cell, val in zip(cells, vals):
+                        if cell.winfo_exists():
+                            cell.configure(text=val)
+
+                bg_gold = (st.get("blue") or {}).get("gold", 0)
+                rg_gold = (st.get("red") or {}).get("gold", 0)
+                diff = bg_gold - rg_gold
+                if b.lbl_diff and b.lbl_diff.winfo_exists():
+                    if bg_gold or rg_gold:
+                        lead_code = m[f"team{sides[0][1]}_code"] if diff > 0 else m[f"team{sides[1][1]}_code"]
+                        txt = "Gold even" if abs(diff) < 500 else f"{lead_code} +{abs(diff) / 1000:.1f}k gold"
+                        b.lbl_diff.configure(text=txt)
+                    else:
+                        b.lbl_diff.configure(text="")
+
+                for side in ("blue", "red"):
+                    curr_p = (st.get(side) or {}).get("players", [])
+                    champ_lbls = b.player_champs.get(side, [])
+                    for p_data, c_lbl in zip(curr_p, champ_lbls):
+                        if c_lbl.winfo_exists():
+                            c_lbl.configure(text=p_data.get("champion", ""))
+
+        return True
+
     def _build(self) -> None:
+        self._live_bindings.clear()
         clear(self.body)
         a = self.app
         live = list(a.state["live"])
@@ -129,18 +241,30 @@ class LiveView(View):
         c = tk.Frame(outer, bg=C.COLOR_SURFACE)
         c.pack(fill="both", expand=True, padx=1, pady=1)
 
+        hidden = cards.scores_hidden(a, m)
+        blue_is_team1 = False
+        if st:
+            blue_is_team1 = st.get("blue", {}).get("team_id") == m.get("team1_id") or \
+                st.get("blue_team_id") == m.get("team1_id")
+        blue_ti = 1 if blue_is_team1 else 2
+        red_ti = 2 if blue_is_team1 else 1
+        binding = _LiveCardBinding(m["match_id"], hidden, bool(st), blue_ti, red_ti)
+        self._live_bindings[m["match_id"]] = binding
+
         top = tk.Frame(c, bg=C.COLOR_SURFACE)
         top.pack(fill="x", padx=px(14), pady=(px(10), 0))
         pill(top, "● LIVE", C.COLOR_LIVE, fg="white").pack(side="left")
         label(top, f"  {m['league_name']}" + (f" · {m['block_name']}" if m.get("block_name") else ""), 9, True,
               fg=C.COLOR_TEXT_MUTED).pack(side="left")
-        hidden = cards.scores_hidden(a, m)
         g = next((x for x in m.get("games", []) if x.get("state") == "inProgress"), None)
         if g and not hidden:
-            label(top, f"Game {g.get('number')} · Best of {m.get('best_of', 1)}", 9, True,
-                  fg=C.COLOR_CYAN).pack(side="right")
+            lbl_game = label(top, f"Game {g.get('number')} · Best of {m.get('best_of', 1)}", 9, True,
+                             fg=C.COLOR_CYAN)
         else:  # the game number would reveal the series score (Game 5 of a Bo5 means 2-2)
-            label(top, f"Best of {m.get('best_of', 1)}", 9, True, fg=C.COLOR_CYAN).pack(side="right")
+            lbl_game = label(top, f"Best of {m.get('best_of', 1)}", 9, True, fg=C.COLOR_CYAN)
+        lbl_game.pack(side="right")
+        binding.lbl_game = lbl_game
+
         mid = tk.Frame(c, bg=C.COLOR_SURFACE)
         mid.pack(fill="x", padx=px(14), pady=px(8))
         mid.grid_columnconfigure(0, weight=1, uniform="s")
@@ -157,11 +281,14 @@ class LiveView(View):
         s1, s2 = cards.score_text(a, m)
         center = tk.Frame(mid, bg=C.COLOR_SURFACE)
         center.grid(row=0, column=1, padx=px(10))
-        label(center, f"{s1}  :  {s2}", 26, True, fg=C.COLOR_TEXT_DIM if hidden else C.COLOR_TEXT_PRIMARY).pack()
+        lbl_score = label(center, f"{s1}  :  {s2}", 26, True,
+                          fg=C.COLOR_TEXT_DIM if hidden else C.COLOR_TEXT_PRIMARY)
+        lbl_score.pack()
+        binding.lbl_score = lbl_score
         label(center, "series", 8, fg=C.COLOR_TEXT_DIM).pack()
 
         if st:
-            self._stats_panel(c, m, st, hidden)
+            self._stats_panel(c, m, st, hidden, binding)
         else:
             label(c, "In-game stats are not available for this broadcast yet.", 8,
                   fg=C.COLOR_TEXT_DIM).pack(pady=(0, px(4)))
@@ -175,7 +302,7 @@ class LiveView(View):
             button(bottom, "Reveal scores", lambda: a.reveal(m["match_id"]), size=8, bold=False,
                    fg=C.COLOR_TEXT_MUTED).pack(side="right", padx=px(8))
 
-    def _stats_panel(self, parent, m, st, hidden: bool) -> None:
+    def _stats_panel(self, parent, m, st, hidden: bool, binding: Optional[_LiveCardBinding] = None) -> None:
         a = self.app
         # Work out which listed team is on blue side this game.
         blue_is_team1 = st.get("blue", {}).get("team_id") == m.get("team1_id") or \
@@ -201,14 +328,22 @@ class LiveView(View):
                 vals = [d.get("kills", 0), f"{d.get('gold', 0) / 1000:.1f}k", d.get("towers", 0),
                         len(d.get("dragons", [])), d.get("barons", 0), d.get("inhibitors", 0)]
                 for col, v in enumerate(vals, start=1):
-                    label(grid, str(v), 11, True, bg=C.COLOR_BG_DARK).grid(row=row, column=col)
+                    c_lbl = label(grid, str(v), 11, True, bg=C.COLOR_BG_DARK)
+                    c_lbl.grid(row=row, column=col)
+                    if binding:
+                        binding.stat_cells[side].append(c_lbl)
             bg_gold = (st.get("blue") or {}).get("gold", 0)
             rg_gold = (st.get("red") or {}).get("gold", 0)
             diff = bg_gold - rg_gold
             if bg_gold or rg_gold:
                 lead_code = m[f"team{sides[0][1]}_code"] if diff > 0 else m[f"team{sides[1][1]}_code"]
                 txt = "Gold even" if abs(diff) < 500 else f"{lead_code} +{abs(diff) / 1000:.1f}k gold"
-                label(box, txt, 9, True, fg=C.COLOR_GOLD, bg=C.COLOR_BG_DARK).pack(pady=(0, px(6)))
+            else:
+                txt = ""
+            diff_lbl = label(box, txt, 9, True, fg=C.COLOR_GOLD, bg=C.COLOR_BG_DARK)
+            diff_lbl.pack(pady=(0, px(6)))
+            if binding:
+                binding.lbl_diff = diff_lbl
 
         lineups = tk.Frame(box, bg=C.COLOR_BG_DARK)
         lineups.pack(fill="x", padx=px(10), pady=(0, px(8)))
@@ -230,7 +365,10 @@ class LiveView(View):
                       width=8, anchor="w").pack(side="left")
                 label(row, ("★ " if is_f else "") + p.get("name", ""), 9, is_f,
                       fg=C.COLOR_GOLD if is_f else C.COLOR_TEXT_PRIMARY, bg=C.COLOR_BG_DARK).pack(side="left")
-                label(row, p.get("champion", ""), 8, fg=C.COLOR_TEXT_MUTED, bg=C.COLOR_BG_DARK).pack(side="right")
+                c_lbl = label(row, p.get("champion", ""), 8, fg=C.COLOR_TEXT_MUTED, bg=C.COLOR_BG_DARK)
+                c_lbl.pack(side="right")
+                if binding:
+                    binding.player_champs[side].append(c_lbl)
 
 
 # =============================================================================
@@ -268,12 +406,14 @@ class ScheduleView(View):
         self._mb_league = self._btn_leagues  # Backwards compatibility alias
         label(self.filters, "Times in your local time zone", 8, fg=C.COLOR_TEXT_DIM).pack(side="right")
         self._known_leagues = None
+        self._visible_count = 25
 
     def open_league_selector(self) -> None:
         from .leagues import LeagueFilterDialog
         LeagueFilterDialog(self.winfo_toplevel(), self.app, on_apply=self._on_leagues_applied)
 
     def _on_leagues_applied(self, selected_slugs: List[str]) -> None:
+        self._visible_count = 25
         if hasattr(self.app, "worker"):
             self.app.worker.request("schedule")
         self.render()
@@ -320,7 +460,12 @@ class ScheduleView(View):
 
     def _set(self, key: str, value) -> None:
         self.app.settings.set(key, value)
-        self.app.bump("prefs")
+        self._visible_count = 25
+        self.render()
+
+    def _show_more(self) -> None:
+        self._visible_count += 25
+        self.render()
 
     def filtered(self) -> List[Dict[str, Any]]:
         a, s = self.app, self.app.settings
@@ -352,7 +497,7 @@ class ScheduleView(View):
                 continue
             out.append(m)
         out.sort(key=lambda m: m["start_time_utc"], reverse=(rng == "results"))
-        return out[:100]
+        return out[:150]
 
     def _build(self) -> None:
         self._update_filters()
@@ -366,12 +511,21 @@ class ScheduleView(View):
             self.empty("No matches for these filters", hint)
             return
         day = None
-        for m in matches:
+        visible_matches = matches[:self._visible_count]
+        for m in visible_matches:
             d = format_local_day(m["start_time_utc"])
             if d != day:
                 day = d
                 self.section(d)
             cards.match_row(self.body, self.app, m).pack(fill="x", padx=px(18), pady=px(4))
+        if len(matches) > len(visible_matches):
+            remaining = len(matches) - len(visible_matches)
+            show_n = min(25, remaining)
+            row = tk.Frame(self.body, bg=C.COLOR_BG)
+            row.pack(fill="x", padx=px(18), pady=px(12))
+            button(row, f"▼ Show {show_n} more match{'es' if show_n != 1 else ''} ({remaining} remaining)",
+                   self._show_more, size=9, bg=C.COLOR_SURFACE, fg=C.COLOR_CYAN,
+                   hover_bg=C.COLOR_SURFACE_HOVER).pack(fill="x")
         tk.Frame(self.body, bg=C.COLOR_BG, height=px(16)).pack()
 
 
@@ -820,8 +974,6 @@ class SettingsView(View):
               8, fg=C.COLOR_GOLD).pack(anchor="w", pady=(px(2), 0))
         w_actions = tk.Frame(wbox, bg=C.COLOR_SURFACE)
         w_actions.pack(side="right", padx=px(10))
-        button(w_actions, "Run Setup Wizard", a.open_onboarding_wizard, size=9,
-               bg=C.COLOR_GOLD, fg=C.COLOR_BG, hover_bg=C.COLOR_GOLD_HOVER).pack(side="left", padx=px(4))
         button(w_actions, "Reset All Follows", a.reset_watchlist, size=8, bold=False,
                bg=C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_LIVE).pack(side="left", padx=px(4))
 

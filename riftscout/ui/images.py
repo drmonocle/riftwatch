@@ -11,7 +11,7 @@ import queue
 import threading
 import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .. import config as C
 from .. import net
@@ -23,6 +23,19 @@ try:
     HAVE_PIL = True
 except Exception:  # pragma: no cover - Pillow is a declared dependency
     HAVE_PIL = False
+
+_FONT_CACHE: Dict[int, Any] = {}
+
+
+def _get_font(size: int):
+    if not HAVE_PIL:
+        return None
+    if size not in _FONT_CACHE:
+        try:
+            _FONT_CACHE[size] = ImageFont.truetype("segoeuib.ttf", size)
+        except Exception:
+            _FONT_CACHE[size] = ImageFont.load_default()
+    return _FONT_CACHE[size]
 
 
 class ImageCache:
@@ -91,10 +104,8 @@ class ImageCache:
         d = ImageDraw.Draw(img)
         d.ellipse((1, 1, size - 2, size - 2), fill=(23, 38, 60, 255), outline=(200, 170, 110, 255))
         label = (text or "?")[:3].upper()
-        try:
-            f = ImageFont.truetype("segoeuib.ttf", max(8, int(size * (0.34 if len(label) > 2 else 0.42))))
-        except Exception:
-            f = ImageFont.load_default()
+        font_size = max(8, int(size * (0.34 if len(label) > 2 else 0.42)))
+        f = _get_font(font_size)
         bbox = d.textbbox((0, 0), label, font=f)
         d.text(((size - (bbox[2] - bbox[0])) / 2 - bbox[0], (size - (bbox[3] - bbox[1])) / 2 - bbox[1]),
                label, font=f, fill=(240, 230, 210, 255))

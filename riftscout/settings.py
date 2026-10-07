@@ -102,6 +102,7 @@ class SettingsManager:
     def __init__(self, file_path: Optional[Path] = None):
         self.file_path = Path(file_path) if file_path else C.SETTINGS_PATH
         self._lock = threading.RLock()
+        self._save_timer: Optional[threading.Timer] = None
         self.data: Dict[str, Any] = copy.deepcopy(DEFAULT_SETTINGS)
         self.load()
 
@@ -120,30 +121,54 @@ class SettingsManager:
                 log.warning("Could not read settings %s (%s); using defaults.", self.file_path, exc)
                 self.data = copy.deepcopy(DEFAULT_SETTINGS)
 
-    def save(self) -> bool:
+    def _schedule_save(self) -> None:
         with self._lock:
-            self.file_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.file_path.with_suffix(".tmp")
-            try:
-                tmp.write_text(json.dumps(self.data, indent=2, ensure_ascii=False), encoding="utf-8")
-                tmp.replace(self.file_path)
-                return True
-            except Exception as exc:
-                log.error("Failed saving settings to %s: %s", self.file_path, exc)
+            if self._save_timer is not None:
                 try:
-                    tmp.unlink()
+                    self._save_timer.cancel()
                 except Exception:
                     pass
-                return False
+            self._save_timer = threading.Timer(0.2, self._bg_save)
+            self._save_timer.daemon = True
+            self._save_timer.start()
+
+    def _bg_save(self) -> None:
+        self.save()
+
+    def save(self) -> bool:
+        with self._lock:
+            if self._save_timer is not None:
+                try:
+                    self._save_timer.cancel()
+                except Exception:
+                    pass
+                self._save_timer = None
+            payload = json.dumps(self.data, indent=2, ensure_ascii=False)
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.file_path.with_suffix(".tmp")
+        try:
+            tmp.write_text(payload, encoding="utf-8")
+            tmp.replace(self.file_path)
+            return True
+        except Exception as exc:
+            log.error("Failed saving settings to %s: %s", self.file_path, exc)
+            try:
+                tmp.unlink()
+            except Exception:
+                pass
+            return False
 
     def get(self, key: str, default: Any = None) -> Any:
         with self._lock:
             return copy.deepcopy(self.data.get(key, default))
 
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: Any, sync: bool = False) -> None:
         with self._lock:
             self.data[key] = value
-            self.save()
+            if sync:
+                self.save()
+            else:
+                self._schedule_save()
 
     # ---------------------------------------------------------------- teams
     def followed_teams(self) -> List[Dict[str, str]]:
@@ -174,7 +199,7 @@ class SettingsManager:
             if now_followed:
                 keep.append({"code": code.strip(), "name": (name or "").strip()})
             self.data["followed_teams"] = keep
-            self.save()
+            self._schedule_save()
             return now_followed
 
     def attach_team_names(self, lookup) -> int:
@@ -191,7 +216,7 @@ class SettingsManager:
                         changed += 1
             if changed:
                 self.data["followed_teams"] = teams
-                self.save()
+                self._schedule_save()
             return changed
 
     # ---------------------------------------------------------------- leagues
@@ -209,7 +234,7 @@ class SettingsManager:
                 leagues.append(s)
                 now_followed = True
             self.data["followed_leagues"] = leagues
-            self.save()
+            self._schedule_save()
             return now_followed
 
     # ---------------------------------------------------------------- regions
@@ -230,7 +255,7 @@ class SettingsManager:
                 regions.append(r)
                 now_followed = True
             self.data["followed_regions"] = regions
-            self.save()
+            self._schedule_save()
             return now_followed
 
     # ---------------------------------------------------------------- players
@@ -250,7 +275,7 @@ class SettingsManager:
                 players.append(name)
                 now_followed = True
             self.data["followed_players"] = players
-            self.save()
+            self._schedule_save()
             return now_followed
 
     def reset_all_follows(self) -> None:
@@ -260,4 +285,4 @@ class SettingsManager:
             self.data["followed_players"] = []
             self.data["followed_leagues"] = []
             self.data["followed_regions"] = []
-            self.save()
+            self._schedule_save()

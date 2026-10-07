@@ -28,7 +28,6 @@ from . import widgets as W
 from .images import ImageCache
 from .tray import TrayManager
 from .views import LiveView, ScheduleView, SettingsView, StreamView, WatchlistView
-from .wizard import OnboardingWizard
 
 log = logging.getLogger(__name__)
 
@@ -75,8 +74,15 @@ class RiftScoutApp:
             v = cls(self.container, self)
             v.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.views[key] = v
-        last = self.settings.get("last_tab", "live")
-        self.active = last if last in self.views else "live"
+
+        first_launch = not self.settings.get("onboarding_completed", False)
+        if first_launch:
+            self.settings.set("onboarding_completed", True)
+            self.active = "watchlist"
+        else:
+            pref_tab = self.settings.get("default_tab", "live")
+            last = self.settings.get("last_tab") or pref_tab
+            self.active = last if last in self.views else "live"
         self.show_tab(self.active)
 
         self.tray = TrayManager(self)
@@ -86,9 +92,6 @@ class RiftScoutApp:
         if start_worker:
             self.worker.start()
         self._poll()
-
-        if not self.settings.get("onboarding_completed", False):
-            self.root.after(350, self.open_onboarding_wizard)
 
     # ================================================================ chrome
     def _set_icon(self) -> None:
@@ -365,7 +368,7 @@ class RiftScoutApp:
         self.bump("prefs")
 
     def open_onboarding_wizard(self) -> None:
-        OnboardingWizard(self.root, self)
+        self.show_tab("watchlist")
 
     def on_close_requested(self) -> None:
         if self.settings.get("minimize_to_tray_on_close", True) and getattr(self, "tray", None) and self.tray.is_available:
@@ -516,6 +519,7 @@ class RiftScoutApp:
                 self.settings.set("window_geometry", self.root.geometry())
         except tk.TclError:
             pass
+        self.settings.save()
         if getattr(self, "tray", None):
             self.tray.stop()
         self.worker.stop()
