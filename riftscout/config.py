@@ -13,15 +13,24 @@ from . import __version__, __app_name__
 # ==============================================================================
 # 1. APPLICATION & SYSTEM PATHS
 # ==============================================================================
-APP_ID = "com.monocle.riftscout"
+APP_ID = "com.monocle.riftwatch"
 APP_NAME = __app_name__
 APP_VERSION = __version__
 
-# User Data Directory: %APPDATA%\RiftScout
-APPDATA_DIR = Path(os.environ.get("APPDATA", Path.home() / ".config")) / "RiftScout"
+# User Data Directory: %APPDATA%\RiftWatch (with automatic migration from legacy RiftScout)
+_base_appdata = Path(os.environ.get("APPDATA", Path.home() / ".config"))
+APPDATA_DIR = _base_appdata / "RiftWatch"
+_legacy_dir = _base_appdata / "RiftScout"
+if _legacy_dir.exists() and not APPDATA_DIR.exists():
+    try:
+        import shutil
+        shutil.copytree(_legacy_dir, APPDATA_DIR)
+    except Exception:
+        pass
+
 CACHE_DB_PATH = APPDATA_DIR / "cache.db"
 SETTINGS_PATH = APPDATA_DIR / "settings.json"
-LOG_PATH = APPDATA_DIR / "riftscout.log"
+LOG_PATH = APPDATA_DIR / "riftwatch.log"
 UPDATES_DIR = APPDATA_DIR / "updates"
 LOGO_CACHE_DIR = APPDATA_DIR / "logos"
 
@@ -55,8 +64,10 @@ GITHUB_REPO = "drmonocle/rift-scout"
 GITHUB_LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_PROJECT_URL = f"https://github.com/{GITHUB_REPO}"
 
+KOFI_URL = "https://ko-fi.com/monocle"
+
 # Honest User-Agent header
-USER_AGENT = f"RiftScout/{APP_VERSION} (Esports Desktop Companion; +{GITHUB_PROJECT_URL})"
+USER_AGENT = f"RiftWatch/{APP_VERSION} (Esports Desktop Companion; +{GITHUB_PROJECT_URL})"
 
 # Hosts the app may fetch data from.
 ALLOWED_HOSTS = {
@@ -77,6 +88,7 @@ BROWSER_HOSTS = {
     "youtube.com", "www.youtube.com", "youtu.be",
     "lolesports.com", "www.lolesports.com",
     "lolworlds.com", "www.lolworlds.com",
+    "ko-fi.com", "www.ko-fi.com",
     "github.com",
 }
 
@@ -128,4 +140,48 @@ FONT_FAMILY = "Segoe UI"
 # from getLeagues and shown in the Watchlist tab.
 DEFAULT_FOLLOWED_LEAGUES = [
     "worlds", "msi", "first_stand", "lck", "lpl", "lec", "lcs", "lcp", "cblol-brazil",
+]
+
+DEFAULT_FOLLOWED_REGIONS = [
+    "INTERNATIONAL", "KOREA", "EUROPE", "NORTH AMERICA", "CHINA",
+]
+
+MAJOR_REGIONS = [
+    {"code": "INTERNATIONAL", "name": "International", "leagues": ["Worlds", "MSI", "First Stand"], "badge": "🌐"},
+    {"code": "KOREA", "name": "Korea", "leagues": ["LCK", "LCK Challengers"], "badge": "🇰🇷"},
+    {"code": "CHINA", "name": "China", "leagues": ["LPL", "LDL"], "badge": "🇨🇳"},
+    {"code": "EUROPE", "name": "Europe", "leagues": ["LEC", "EMEA Masters"], "badge": "🇪🇺"},
+    {"code": "NORTH AMERICA", "name": "North America", "leagues": ["LCS", "NACL"], "badge": "🇺🇸"},
+    {"code": "APAC", "name": "Asia-Pacific", "leagues": ["LCP", "PCS", "VCS"], "badge": "🌏"},
+    {"code": "BRAZIL", "name": "Brazil", "leagues": ["CBLOL", "CBLOL Academy"], "badge": "🇧🇷"},
+]
+
+POPULAR_TEAMS = [
+    {"code": "T1", "name": "T1", "league": "LCK"},
+    {"code": "GEN", "name": "Gen.G Esports", "league": "LCK"},
+    {"code": "HLE", "name": "Hanwha Life Esports", "league": "LCK"},
+    {"code": "DK", "name": "Dplus KIA", "league": "LCK"},
+    {"code": "BLG", "name": "BILIBILI GAMING", "league": "LPL"},
+    {"code": "TES", "name": "Top Esports", "league": "LPL"},
+    {"code": "WBG", "name": "Weibo Gaming", "league": "LPL"},
+    {"code": "G2", "name": "G2 Esports", "league": "LEC"},
+    {"code": "FNC", "name": "Fnatic", "league": "LEC"},
+    {"code": "FLY", "name": "FlyQuest", "league": "LCS"},
+    {"code": "C9", "name": "Cloud9", "league": "LCS"},
+    {"code": "TL", "name": "Team Liquid", "league": "LCS"},
+]
+
+POPULAR_PLAYERS = [
+    {"name": "Faker", "team": "T1", "role": "Mid"},
+    {"name": "Chovy", "team": "GEN", "role": "Mid"},
+    {"name": "Ruler", "team": "GEN", "role": "Bot"},
+    {"name": "Caps", "team": "G2", "role": "Mid"},
+    {"name": "Bwipo", "team": "FLY", "role": "Top"},
+    {"name": "Gumayusi", "team": "T1", "role": "Bot"},
+    {"name": "Keria", "team": "T1", "role": "Support"},
+    {"name": "Knight", "team": "BLG", "role": "Mid"},
+    {"name": "Bin", "team": "BLG", "role": "Top"},
+    {"name": "JackeyLove", "team": "TES", "role": "Bot"},
+    {"name": "Inspired", "team": "FLY", "role": "Jungle"},
+    {"name": "Viper", "team": "HLE", "role": "Bot"},
 ]

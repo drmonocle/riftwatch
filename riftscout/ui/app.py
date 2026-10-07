@@ -26,7 +26,9 @@ from ..watchlist import Watchlist
 from ..worker import Worker
 from . import widgets as W
 from .images import ImageCache
+from .tray import TrayManager
 from .views import LiveView, ScheduleView, SettingsView, StreamView, WatchlistView
+from .wizard import OnboardingWizard
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ TABS = (
     ("settings", "Settings", SettingsView),
 )
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-RUN_NAME = "RiftScout"
+RUN_NAME = "RiftWatch"
 
 
 class RiftScoutApp:
@@ -59,7 +61,7 @@ class RiftScoutApp:
         self.worker = Worker(self.settings, self.q, db_path=db_path)
 
         W.init_scale(root)
-        root.title(f"RiftScout {__version__}")
+        root.title(f"RiftWatch {__version__}")
         root.configure(bg=C.COLOR_BG)
         root.minsize(W.px(820), W.px(560))
         geo = self.settings.get("window_geometry", "")
@@ -76,10 +78,16 @@ class RiftScoutApp:
         self.active = last if last in self.views else "live"
         self.show_tab(self.active)
 
-        root.protocol("WM_DELETE_WINDOW", self.close)
+        self.tray = TrayManager(self)
+        self.tray.start()
+
+        root.protocol("WM_DELETE_WINDOW", self.on_close_requested)
         if start_worker:
             self.worker.start()
         self._poll()
+
+        if not self.settings.get("onboarding_completed", False):
+            self.root.after(350, self.open_onboarding_wizard)
 
     # ================================================================ chrome
     def _set_icon(self) -> None:
@@ -102,7 +110,7 @@ class RiftScoutApp:
         tk.Frame(r, bg=C.COLOR_GOLD, height=1).pack(fill="x")
         left = tk.Frame(header, bg=C.COLOR_BG_DARK)
         left.pack(side="left", padx=W.px(16), pady=W.px(10))
-        W.label(left, "RIFTSCOUT", 15, True, fg=C.COLOR_GOLD).pack(side="left")
+        W.label(left, "RIFTWATCH", 15, True, fg=C.COLOR_GOLD).pack(side="left")
         W.label(left, f" v{__version__}", 8, fg=C.COLOR_TEXT_DIM).pack(side="left", anchor="s", pady=(0, W.px(3)))
 
         right = tk.Frame(header, bg=C.COLOR_BG_DARK)
@@ -112,6 +120,10 @@ class RiftScoutApp:
         self.b_spoiler = W.button(right, "", self.toggle_spoiler, size=9,
                                   tooltip="Spoiler mode hides scores and results")
         self.b_spoiler.pack(side="right", padx=W.px(4))
+        self.b_support = W.button(right, "♥ Support", lambda: self.open_url(C.KOFI_URL), size=9,
+                                  bg="#720e9e", fg="white", hover_bg="#8c19bd",
+                                  tooltip="Support RiftWatch on Ko-fi")
+        self.b_support.pack(side="right", padx=W.px(4))
         self.b_update = W.button(right, "", self.install_update, size=9, bg=C.COLOR_GOLD, fg=C.COLOR_BG,
                                  hover_bg=C.COLOR_GOLD_HOVER)
 
@@ -143,8 +155,12 @@ class RiftScoutApp:
         footer.pack(side="bottom", fill="x")
         self.l_status = W.label(footer, "Starting…", 8, fg=C.COLOR_TEXT_MUTED)
         self.l_status.pack(side="left", padx=W.px(12), pady=W.px(4))
+        self.b_hide_tray = W.button(footer, "🗕 Hide to Tray", self.hide_to_tray, size=8, bold=False,
+                                    bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_SURFACE_HOVER,
+                                    tooltip="Minimize RiftWatch to system notification area")
+        self.b_hide_tray.pack(side="right", padx=W.px(8), pady=W.px(2))
         self.l_spoiler_foot = W.label(footer, "", 8, True, fg=C.COLOR_GOLD)
-        self.l_spoiler_foot.pack(side="right", padx=W.px(12))
+        self.l_spoiler_foot.pack(side="right", padx=W.px(8))
 
         self.container = tk.Frame(r, bg=C.COLOR_BG)
         self.container.pack(fill="both", expand=True)
@@ -293,9 +309,47 @@ class RiftScoutApp:
                 self.settings.toggle_league(s)
         self.bump("prefs")
 
+    def toggle_region(self, region_name: str) -> None:
+        self.settings.toggle_region(region_name)
+        self.bump("prefs")
+
+    def follow_all_regions(self) -> None:
+        for r in C.MAJOR_REGIONS:
+            if not self.settings.is_region_followed(r["name"]):
+                self.settings.toggle_region(r["name"])
+        self.bump("prefs")
+
+    def unfollow_all_regions(self) -> None:
+        self.settings.set("followed_regions", [])
+        self.bump("prefs")
+
+    def open_onboarding_wizard(self) -> None:
+        OnboardingWizard(self.root, self)
+
+    def on_close_requested(self) -> None:
+        if self.settings.get("minimize_to_tray_on_close", True) and getattr(self, "tray", None) and self.tray.is_available:
+            self.hide_to_tray()
+        else:
+            self.close()
+
+    def hide_to_tray(self) -> None:
+        try:
+            if self.root.state() == "normal":
+                self.settings.set("window_geometry", self.root.geometry())
+        except tk.TclError:
+            pass
+        self.root.withdraw()
+        if getattr(self, "tray", None):
+            self.tray.notify_hidden()
+
+    def show_from_tray(self) -> None:
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
     def open_url(self, url: str) -> None:
         if not net.open_in_browser(url):
-            messagebox.showwarning("RiftScout", "That link couldn't be opened.", parent=self.root)
+            messagebox.showwarning("RiftWatch", "That link couldn't be opened.", parent=self.root)
 
     def watch(self, match: Dict[str, Any]) -> None:
         self.open_url(match.get("stream_url") or "https://lolesports.com/en-US/live")
@@ -368,7 +422,7 @@ class RiftScoutApp:
                 log.exception("Update failed")
                 self.q.put(("update_error", f"Update failed: {exc}"))
 
-        threading.Thread(target=run, name="riftscout-update", daemon=True).start()
+        threading.Thread(target=run, name="riftwatch-update", daemon=True).start()
         self.show_tab("settings")
 
     def _finish_update(self, path: str) -> None:
@@ -377,7 +431,7 @@ class RiftScoutApp:
         except Exception as exc:
             self.state["update_progress"] = ""
             self.bump("update_progress")
-            messagebox.showerror("RiftScout update", str(exc), parent=self.root)
+            messagebox.showerror("RiftWatch update", str(exc), parent=self.root)
             return
         self.close()
 
@@ -388,6 +442,8 @@ class RiftScoutApp:
                 self.settings.set("window_geometry", self.root.geometry())
         except tk.TclError:
             pass
+        if getattr(self, "tray", None):
+            self.tray.stop()
         self.worker.stop()
         self.images.shutdown()
         try:
@@ -407,13 +463,13 @@ def _setup_logging() -> None:
 
 
 def _single_instance() -> bool:
-    """Return False if another RiftScout window is already running."""
+    """Return False if another RiftWatch window is already running."""
     if sys.platform != "win32":
         return True
     try:
         import ctypes
         kernel32 = ctypes.windll.kernel32
-        _single_instance.handle = kernel32.CreateMutexW(None, False, "Local\\RiftScoutSingleInstance")
+        _single_instance.handle = kernel32.CreateMutexW(None, False, "Local\\RiftWatchSingleInstance")
         return kernel32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
     except Exception:
         return True

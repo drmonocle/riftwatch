@@ -138,6 +138,10 @@ class Catalog:
             return candidates[0]
         return None
 
+    def team_image(self, code: str, name: str = "") -> str:
+        t = self.find_team(code, name)
+        return (t.get("image") or "") if t else ""
+
     def roster_for(self, code: str, name: str = "") -> List[PlayerEntry]:
         t = self.find_team(code, name)
         return list(self.players_by_team.get(t["slug"], [])) if t else []

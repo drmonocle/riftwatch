@@ -214,8 +214,11 @@ class LiveView(View):
             lineups.grid_columnconfigure(col, weight=1, uniform="l")
             colf = tk.Frame(lineups, bg=C.COLOR_BG_DARK)
             colf.grid(row=0, column=col, sticky="nwe", padx=px(6))
-            label(colf, f"{m[f'team{ti}_code']} ({side} side)", 8, True,
-                  fg=C.COLOR_BLUE_SIDE if side == "blue" else C.COLOR_RED_SIDE, bg=C.COLOR_BG_DARK).pack(anchor="w")
+            col_head = tk.Frame(colf, bg=C.COLOR_BG_DARK)
+            col_head.pack(anchor="w", pady=(0, px(2)))
+            cards.logo(col_head, a, m.get(f"team{ti}_image", ""), 16, m[f"team{ti}_code"]).pack(side="left", padx=(0, px(4)))
+            label(col_head, f"{m[f'team{ti}_code']} ({side} side)", 8, True,
+                  fg=C.COLOR_BLUE_SIDE if side == "blue" else C.COLOR_RED_SIDE, bg=C.COLOR_BG_DARK).pack(side="left")
             for p in (st.get(side) or {}).get("players", []):
                 is_f = p.get("name", "").lower() in followed
                 row = tk.Frame(colf, bg=C.COLOR_BG_DARK)
@@ -409,7 +412,22 @@ class StreamView(View):
               width=9, anchor="w").pack(side="left", padx=(px(12), px(6)), pady=px(8))
         mid = tk.Frame(row, bg=C.COLOR_SURFACE)
         mid.pack(side="left", fill="x", expand=True)
-        label(mid, event_title(e), 11, True).pack(anchor="w")
+        title_box = tk.Frame(mid, bg=C.COLOR_SURFACE)
+        title_box.pack(anchor="w")
+        if e.get("kind") == "match" and (e.get("team1") or e.get("team2")):
+            t1, t2 = e.get("team1", ""), e.get("team2", "")
+            cat = self.app.state.get("catalog")
+            img1 = cat.team_image(t1) if cat else ""
+            img2 = cat.team_image(t2) if cat else ""
+            if img1 or t1:
+                cards.logo(title_box, self.app, img1, 16, t1[:3]).pack(side="left", padx=(0, px(4)))
+                label(title_box, t1, 11, True).pack(side="left")
+            label(title_box, " vs ", 9, fg=C.COLOR_TEXT_DIM).pack(side="left", padx=px(2))
+            if img2 or t2:
+                cards.logo(title_box, self.app, img2, 16, t2[:3]).pack(side="left", padx=(0, px(4)))
+                label(title_box, t2, 11, True).pack(side="left")
+        else:
+            label(title_box, event_title(e), 11, True).pack(side="left")
         label(mid, event_subtitle(e), 8, fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
         right = tk.Frame(row, bg=C.COLOR_SURFACE)
         right.pack(side="right", padx=px(12))
@@ -459,7 +477,7 @@ class WatchlistView(View):
 
     def _modebar(self):
         clear(self.modebar)
-        for key, text in (("teams", "Teams"), ("players", "Players"), ("leagues", "Leagues")):
+        for key, text in (("teams", "Teams"), ("players", "Players"), ("regions", "Regions"), ("leagues", "Leagues")):
             on = key == self.mode
             button(self.modebar, text, lambda k=key: self._set_mode(k),
                    bg=C.COLOR_GOLD if on else C.COLOR_SURFACE, fg=C.COLOR_BG if on else C.COLOR_TEXT_PRIMARY,
@@ -475,25 +493,27 @@ class WatchlistView(View):
         clear(self.body)
         self._following()
         cat = self.app.state["catalog"]
-        if cat.empty and self.mode != "leagues":
+        if cat.empty and self.mode not in ("leagues", "regions"):
             self.empty("Loading the team directory…", "Downloading teams and rosters from Riot (about 1.5 MB, "
                        "refreshed once a day).")
             return
-        {"teams": self._teams, "players": self._players, "leagues": self._leagues}[self.mode]()
+        {"teams": self._teams, "players": self._players, "regions": self._regions, "leagues": self._leagues}[self.mode]()
         tk.Frame(self.body, bg=C.COLOR_BG, height=px(16)).pack()
 
     # ---- following summary
     def _following(self) -> None:
         s = self.app.settings
         teams, players = s.followed_teams(), s.get("followed_players", [])
+        regions = s.followed_regions()
         leagues = s.get("followed_leagues", [])
-        self.section("Following", f"{len(teams)} teams · {len(players)} players · {len(leagues)} leagues")
+        self.section("Following", f"{len(teams)} teams · {len(players)} players · {len(regions)} regions · {len(leagues)} leagues")
         wrap = tk.Frame(self.body, bg=C.COLOR_BG)
         wrap.pack(fill="x", padx=px(18))
-        if not (teams or players):
-            label(wrap, "Star teams and players below (or on any match card) to follow them.", 9,
+        if not (teams or players or regions or leagues):
+            label(wrap, "Star teams, players, and regions below (or on any match card) to follow them.", 9,
                   fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
-        chips = [(f"★ {t.get('name') or t['code']}", lambda t=t: self.app.toggle_team(t["code"], t.get("name", "")),
+        chips = [(f"🌐 {r}", lambda r=r: self.app.toggle_region(r), C.COLOR_CYAN_DIM) for r in regions]
+        chips += [(f"★ {t.get('name') or t['code']}", lambda t=t: self.app.toggle_team(t["code"], t.get("name", "")),
                   C.COLOR_GOLD) for t in teams]
         chips += [(f"★ {p}", lambda p=p: self.app.toggle_player(p), C.COLOR_CYAN_DIM) for p in players]
         # Wrap by estimated text width (Tk has no flow layout).
@@ -605,8 +625,42 @@ class WatchlistView(View):
         if p.real_name:
             label(row, f"  {p.real_name}", 8, fg=C.COLOR_TEXT_DIM, bg=bg).pack(side="left")
         if show_team:
-            label(row, f"  {p.team_name} ({p.team_code})", 9, fg=C.COLOR_TEXT_MUTED, bg=bg).pack(side="left")
+            cat = a.state.get("catalog")
+            img = cat.team_image(p.team_code, p.team_name) if cat else ""
+            cards.logo(row, a, img, 18, p.team_code).pack(side="left", padx=(px(6), px(2)))
+            label(row, f"{p.team_name} ({p.team_code})", 9, fg=C.COLOR_TEXT_MUTED, bg=bg).pack(side="left")
         self._follow_btn(row, on, lambda: a.toggle_player(p.name)).pack(side="right", padx=px(8))
+
+    # ---- regions
+    def _regions(self) -> None:
+        a = self.app
+        q = self.query.get().strip().lower()
+        regions = list(C.MAJOR_REGIONS)
+        if q:
+            regions = [r for r in regions if q in r["name"].lower() or q in r["code"].lower()
+                       or any(q in l.lower() for l in r.get("leagues", []))]
+        self.section("Regions & Tournaments", "follow competitive ecosystems to track all of their matches")
+        row = tk.Frame(self.body, bg=C.COLOR_BG)
+        row.pack(fill="x", padx=px(18), pady=(0, px(6)))
+        button(row, "★ Follow All Major Regions",
+               lambda: a.follow_all_regions(), size=8, bold=False).pack(side="left")
+        button(row, "Unfollow All Regions",
+               lambda: a.unfollow_all_regions(), size=8, bold=False).pack(side="left", padx=px(6))
+        if not regions:
+            self.empty("No regions match that search")
+            return
+        for r in regions:
+            on = a.settings.is_region_followed(r["name"]) or a.settings.is_region_followed(r["code"])
+            card = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightthickness=1,
+                            highlightbackground=C.COLOR_GOLD if on else C.COLOR_BORDER)
+            card.pack(fill="x", padx=px(18), pady=px(2))
+            head = tk.Frame(card, bg=C.COLOR_SURFACE)
+            head.pack(fill="x", padx=px(12), pady=px(8))
+            label(head, r.get("badge", "🌐"), 14).pack(side="left", padx=(0, px(8)))
+            label(head, r["name"], 11, True, fg=C.COLOR_GOLD if on else C.COLOR_TEXT_PRIMARY).pack(side="left")
+            leagues_str = " · ".join(r.get("leagues", []))
+            label(head, f"  ({leagues_str})", 9, fg=C.COLOR_TEXT_MUTED).pack(side="left")
+            self._follow_btn(head, on, lambda reg=r["name"]: a.toggle_region(reg)).pack(side="right")
 
     # ---- leagues
     def _leagues(self) -> None:
@@ -652,9 +706,36 @@ class SettingsView(View):
         self._toggle("Spoiler mode", "Hide all scores, results and in-game stats until you reveal a match.",
                      s.get("spoiler_mode", False), a.toggle_spoiler)
 
+        self.section("System Tray")
+        self._toggle("Close button minimizes to system tray",
+                     "Keep RiftWatch running in the background notification area when the window is closed.",
+                     s.get("minimize_to_tray_on_close", True),
+                     lambda: (s.set("minimize_to_tray_on_close", not s.get("minimize_to_tray_on_close", True)), a.bump("prefs")))
+
         self.section("Startup")
-        self._toggle("Start RiftScout with Windows", "Launch automatically when you sign in.",
+        self._toggle("Start RiftWatch with Windows", "Launch automatically when you sign in.",
                      s.get("start_with_windows", False), a.toggle_autostart)
+
+        self.section("Watchlist Setup")
+        wbox = tk.Frame(self.body, bg=C.COLOR_SURFACE)
+        wbox.pack(fill="x", padx=px(18), pady=px(4))
+        wtxt = tk.Frame(wbox, bg=C.COLOR_SURFACE)
+        wtxt.pack(side="left", padx=px(12), pady=px(10))
+        label(wtxt, "Watchlist Setup Wizard", 10, True).pack(anchor="w")
+        label(wtxt, "Quickly select regions, international tournaments, popular teams, and star players.", 8,
+              fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
+        button(wbox, "Run Setup Wizard", a.open_onboarding_wizard, size=9).pack(side="right", padx=px(10))
+
+        self.section("Support RiftWatch")
+        sbox = tk.Frame(self.body, bg=C.COLOR_SURFACE)
+        sbox.pack(fill="x", padx=px(18), pady=px(4))
+        stxt = tk.Frame(sbox, bg=C.COLOR_SURFACE)
+        stxt.pack(side="left", padx=px(12), pady=px(10))
+        label(stxt, "Enjoying RiftWatch & the 24/7 Twitch Broadcast?", 10, True, fg=C.COLOR_GOLD).pack(anchor="w")
+        label(stxt, "RiftWatch is 100% free and open-source. Support ongoing development and streaming servers on Ko-fi.", 8,
+              fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
+        button(sbox, "☕ Support on Ko-fi ↗", lambda: a.open_url(C.KOFI_URL), bg="#720e9e", fg="white",
+               hover_bg="#8c19bd", size=9).pack(side="right", padx=px(10))
 
         self.section("Updates", f"you are running v{__version__}")
         self._toggle("Check for updates automatically", "Looks for a new GitHub release every 6 hours.",
@@ -705,9 +786,9 @@ class SettingsView(View):
         self.section("About")
         about = tk.Frame(self.body, bg=C.COLOR_BG)
         about.pack(fill="x", padx=px(18))
-        label(about, f"RiftScout v{__version__} · © 2026 Monocle Productions LLC · MIT License", 9,
+        label(about, f"RiftWatch v{__version__} · © 2026 Monocle Productions LLC · MIT License", 9,
               fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
-        label(about, "RiftScout is an unofficial fan project. It is not endorsed by Riot Games and does not "
+        label(about, "RiftWatch is an unofficial fan project. It is not endorsed by Riot Games and does not "
                      "reflect the views or opinions of Riot Games or anyone officially involved in producing or "
                      "managing League of Legends. League of Legends and Riot Games are trademarks or registered "
                      "trademarks of Riot Games, Inc.", 8, fg=C.COLOR_TEXT_DIM, wraplength=px(640),

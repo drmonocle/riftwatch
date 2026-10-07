@@ -1,41 +1,36 @@
-# RiftScout
+# RiftWatch
 
-A Windows desktop tracker for League of Legends esports. Follow the teams, players and
-leagues you care about, see what is live right now, and see what is airing on the
+A Windows desktop tracker and sentinel for League of Legends esports. Follow the regions, teams, players and
+tournaments you care about, see what is live right now with in-game gold/kill stats, and track upcoming matches airing on the
 24/7 rebroadcast channel [twitch.tv/LoLWorldChampionship](https://www.twitch.tv/LoLWorldChampionship).
 
-RiftScout is an unofficial fan project by Monocle Productions LLC. It is not endorsed by Riot Games.
+RiftWatch is an unofficial fan project by Monocle Productions LLC. It is not endorsed by Riot Games.
 
 ## Status
 
 | Phase | What | State |
 |---|---|---|
 | 1 | Data engine (Riot schedule/live/livestats, SQLite cache, lolworlds.com stream schedule) | done |
-| 2 | Watchlist engine (team / player / league follows, team directory, roster matching) | done |
-| 3 | Desktop UI (Live, Schedule, 24/7 Stream, Watchlist, Settings tabs) | done |
-| 4 | Tray icon, desktop notifications, floating ticker | not started |
-| 5 | Packaged `RiftScout.exe` + GitHub release with checksums | not started |
-| 6 | Web version at lolworlds.com/scout | not started |
+| 2 | Watchlist engine (team / player / region / league follows, team directory, roster matching) | done |
+| 3 | Desktop UI (Live, Schedule, 24/7 Stream, Watchlist [Teams/Players/Regions/Leagues], Settings tabs) | done |
+| 4 | First-run Onboarding Setup Wizard, System Tray icon, close-to-tray & hide-to-tray, Ko-fi support | done |
+| 5 | Packaged `RiftWatch.exe` + GitHub release with checksums | not started |
+| 6 | Web version at lolworlds.com | not started |
 
 ## Features (v0.2.0)
 
-- **Live tab**: every pro match in progress, with series score, and when Riot's live-stats feed
-  covers the game: kills, gold, towers, dragons, barons, inhibitors, gold lead, and the
-  starting lineups with champions. When nothing is live it counts down to your next match.
-- **Schedule tab**: upcoming, today, and results (last 7 days), filterable by league and
-  "followed only". Times are shown in your local time zone.
-- **24/7 Stream tab**: what is on the Twitch channel now, what's next, the next S-tier "banger",
-  and the upcoming rebroadcast list. Read from the public schedule at lolworlds.com.
-- **Watchlist tab**: browse or search all ~450 active pro teams and ~2,900 registered players,
-  and follow teams, players and leagues. You can also star a team on any match card.
-- **Why a match is highlighted**: each card shows chips such as `★ T1` (followed team),
-  `★ Faker starting (Mid)` (followed player confirmed in the live lineup) or
-  `★ Faker (T1 Mid)` (on the registered roster; Riot rosters include academy and sub players,
-  so this is only confirmed once the game is live), plus the league name for followed leagues.
-- **Spoiler mode**: hides series scores, winners, game numbers and in-game stats everywhere,
-  including the header and `--diag` output. Each match has its own "Reveal" button.
-- **Works offline**: everything is cached in `%APPDATA%\RiftScout\cache.db`; if an API is down
-  you see the last good data and a warning in the footer.
+- **Onboarding Setup Wizard**: On first install, launches a streamlined wizard allowing 1-click selection of major regions (International, Korea, China, Europe, North America, APAC, Brazil), popular pro teams, and star players. Can be re-launched anytime from the Settings tab.
+- **Regions & Tournaments**: Follow entire competitive ecosystems (LCK, LPL, LEC, LCS, Worlds, MSI, First Stand) from the dedicated Regions sub-tab in Watchlist.
+- **System Tray & Close-to-Tray**: Live notification area icon with quick actions (Open RiftWatch, Spoiler Mode toggle, Refresh, Support on Ko-fi, Exit). Includes a dedicated "Hide to Tray" button in the bottom right corner, and window close (X) minimizes to the system tray by default (configurable in Settings).
+- **Team Logos Everywhere**: Displays crisp team logos next to player cards, live lineup headers, 24/7 stream cards, and match rows.
+- **Ko-fi Support**: Integrated "♥ Support" button in the header and Settings tab linking directly to the creator's Ko-fi page (`https://ko-fi.com/monocle`).
+- **Live tab**: Every pro match in progress, with series score, and when Riot's live-stats feed covers the game: kills, gold, towers, dragons, barons, inhibitors, gold lead, and the starting lineups with champions and team logos. When nothing is live it counts down to your next match.
+- **Schedule tab**: Upcoming, today, and results (last 7 days), filterable by league and "followed only". Times are shown in your local time zone.
+- **24/7 Stream tab**: What is on the Twitch channel now, what's next, the next S-tier "banger", and the upcoming rebroadcast list. Read from the public schedule at lolworlds.com.
+- **Watchlist tab**: Browse or search all ~450 active pro teams and ~2,900 registered players, and follow regions, teams, players, and leagues.
+- **Why a match is highlighted**: Each card shows chips such as `🌐 Korea` (followed region), `★ T1` (followed team), `★ Faker starting (Mid)` (followed player confirmed in the live lineup) or `★ Faker (T1 Mid)` (on the registered roster), plus league chips.
+- **Spoiler mode**: Hides series scores, winners, game numbers and in-game stats everywhere, including the header and `--diag` output. Each match has its own "Reveal" button.
+- **Works offline**: Everything is cached in `%APPDATA%\RiftWatch\cache.db`; if an API is down you see the last good data and a warning in the footer.
 - **Start with Windows** option (per-user registry Run key, no admin needed).
 
 ## Running from source
@@ -44,23 +39,17 @@ Requires Python 3.12 on Windows.
 
 ```powershell
 py -3.12 -m pip install -r requirements.txt
-py -3.12 -m riftscout              # open the app
+py -3.12 -m riftscout              # open RiftWatch
 py -3.12 -m riftscout --diag       # text diagnostics: checks every data source
-pyw -3.12 run_riftscout.pyw        # open the app without a console window
+pyw -3.12 run_riftscout.pyw        # open RiftWatch without a console window
 ```
 
-Only one copy of the app runs at a time. Logs go to `%APPDATA%\RiftScout\riftscout.log`.
+Only one copy of the app runs at a time (protected by a single-instance mutex). Logs go to `%APPDATA%\RiftWatch\riftwatch.log`.
 
 ## Updating
 
-- **From source**: `git pull` in the project folder. The app notices newer GitHub releases
-  and tells you, but it won't replace your source files.
-- **Packaged exe (from Phase 5)**: the app checks GitHub Releases every 6 hours (or on
-  "Check now"). "Update & restart" downloads the new exe, **verifies its SHA-256 against the
-  release's `SHA256SUMS` file** and refuses to install if the checksum is missing or wrong,
-  then swaps the exe and restarts. `scripts\update.ps1` does the same from PowerShell.
-
-No release has been published yet, so today the update check always reports "up to date".
+- **From source**: `git pull` in the project folder. The app notices newer GitHub releases and notifies you.
+- **Packaged exe (from Phase 5)**: The app checks GitHub Releases every 6 hours (or on "Check now"). "Update & restart" downloads the new exe, **verifies its SHA-256 against the release's `SHA256SUMS` file** and refuses to install if the checksum is missing or wrong, then swaps the exe and restarts.
 
 ## Configuration
 
@@ -69,45 +58,52 @@ No release has been published yet, so today the update check always reports "up 
 | `RIFTSCOUT_RIOT_KEY` | Override the LoL Esports API key |
 | `RIFTSCOUT_STREAM_URL` | Override the 24/7 schedule URL (default `https://lolworlds.com/api.ashx?type=schedule-json`) |
 
-Settings (follows, filters, spoiler mode) are stored in `%APPDATA%\RiftScout\settings.json`.
-Deleting `cache.db` is always safe; it is rebuilt automatically.
+Settings (follows, regions, filters, spoiler mode, tray preferences) are stored in `%APPDATA%\RiftWatch\settings.json`. Deleting `cache.db` is always safe; it is rebuilt automatically.
+
+## Support & Ko-fi
+
+If you enjoy RiftWatch and the 24/7 Twitch broadcast, you can support development and hosting on Ko-fi:
+[https://ko-fi.com/monocle](https://ko-fi.com/monocle)
 
 ## Data sources
 
-- Riot's LoL Esports API (`esports-api.lolesports.com`, `feed.lolesports.com`). This is the
-  same public, but undocumented, API the lolesports.com website uses. Its key is not an
-  official developer key and Riot could change or revoke it at any time.
+- Riot's LoL Esports API (`esports-api.lolesports.com`, `feed.lolesports.com`).
 - The 24/7 channel schedule published at lolworlds.com.
 
 ## Tests
 
 ```powershell
-py -3.12 -m pytest tests            # 51 tests: unit, UI render + spoiler gate, live API checks
-py -3.12 -m pytest tests -m "not live"   # skip the tests that call the real APIs
+py -3.12 -m pytest tests            # 54 tests: unit, UI render + spoiler gate, tray, wizard, live API checks
+py -3.12 -m pytest tests -m "not live"   # skip tests that call live APIs
 ```
-
-The UI test renders every tab with fixture data and fails if any score, kill count, gold
-value or game number is visible while spoiler mode is on.
 
 ## Project layout
 
 ```
 riftscout/
-  config.py      endpoints, allowlists, poll intervals, colours
+  __init__.py    version & metadata (__app_name__ = "RiftWatch")
+  config.py      endpoints, regions, popular teams/players, allowlists, poll intervals, colors
   net.py         HTTP with host allowlist, retries, size cap; safe browser opening
   db.py          SQLite cache (matches, team directory, stream schedule)
   data.py        Riot schedule/live/livestats parsing
-  catalog.py     team / roster / league directory and search
-  watchlist.py   "why does this match matter to me" rules
+  catalog.py     team / roster / league directory, search, and logo resolver
+  watchlist.py   "why does this match matter to me" rules (teams, players, regions, leagues)
   stream.py      24/7 schedule: now airing, upcoming, next banger
-  settings.py    settings.json with migration from v0.1
+  settings.py    settings.json with migration from v1/v2, region & tray persistence
   worker.py      background thread: all network and disk I/O
   updater.py     GitHub release check + checksum-verified self-update
   diag.py        --diag text report
-  ui/            Tkinter app: app.py, views.py, cards.py, widgets.py, images.py
+  ui/            Tkinter & pystray app:
+    app.py       main window, single-instance mutex, tray coordination, close/hide logic
+    views.py     tab views (Live, Schedule, Stream, Watchlist, Settings)
+    cards.py     card renderers (match cards, chips, logos)
+    widgets.py   Hextech widgets (buttons, pills, scrollframe)
+    wizard.py    first-launch onboarding modal dialog
+    tray.py      system tray manager (pystray background thread)
+    images.py    offline / async image caching
 tests/
-scripts/update.ps1
 run_riftscout.pyw
+run_riftwatch.pyw
 ```
 
 ## License

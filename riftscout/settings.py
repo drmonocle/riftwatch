@@ -22,8 +22,11 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     # Followed teams are {"code", "name"} pairs: codes alone are not unique.
     "followed_teams": [],
     "followed_leagues": list(C.DEFAULT_FOLLOWED_LEAGUES),
+    "followed_regions": list(C.DEFAULT_FOLLOWED_REGIONS),
     "followed_players": [],
+    "onboarding_completed": False,
     "spoiler_mode": False,
+    "minimize_to_tray_on_close": True,
     "auto_update_check": True,
     "start_with_windows": False,
     "schedule_filter_followed": False,
@@ -45,11 +48,19 @@ _LEGACY_REGION_MAP = {"lta": ["lcs", "cblol-brazil"]}
 def migrate(data: Dict[str, Any]) -> Dict[str, Any]:
     """Upgrade settings written by older versions."""
     out = dict(data)
+    ver = out.get("version", 1)
+    try:
+        ver = int(ver)
+    except (ValueError, TypeError):
+        ver = 1
+
     teams = out.get("followed_teams") or []
     out["followed_teams"] = [
         t if isinstance(t, dict) else {"code": str(t), "name": ""}
         for t in teams if t
     ]
+
+    # Legacy v1 migration: followed_regions previously held league slugs ("lck", "lta", etc.)
     if "followed_regions" in out and "followed_leagues" not in out:
         leagues: List[str] = []
         for r in out.pop("followed_regions") or []:
@@ -57,7 +68,23 @@ def migrate(data: Dict[str, Any]) -> Dict[str, Any]:
                 if slug not in leagues:
                     leagues.append(slug)
         out["followed_leagues"] = leagues
-    out.pop("followed_regions", None)
+
+    # Modern followed_regions (e.g. "KOREA", "INTERNATIONAL", "NORTH AMERICA")
+    if "followed_regions" not in out or not isinstance(out["followed_regions"], list):
+        out["followed_regions"] = list(C.DEFAULT_FOLLOWED_REGIONS)
+    else:
+        out["followed_regions"] = [str(r).upper() for r in out["followed_regions"]]
+
+    if "followed_leagues" not in out:
+        out["followed_leagues"] = list(C.DEFAULT_FOLLOWED_LEAGUES)
+
+    if "onboarding_completed" not in out:
+        # If user already had teams or players followed, consider onboarding done
+        out["onboarding_completed"] = bool(out.get("followed_teams") or out.get("followed_players"))
+
+    if "minimize_to_tray_on_close" not in out:
+        out["minimize_to_tray_on_close"] = True
+
     for stale in ("ticker_bar_enabled", "ticker_bar_coords", "sound_enabled", "minimize_to_tray",
                   "notify_stream_banger"):
         out.pop(stale, None)
@@ -178,6 +205,27 @@ class SettingsManager:
                 leagues.append(s)
                 now_followed = True
             self.data["followed_leagues"] = leagues
+            self.save()
+            return now_followed
+
+    # ---------------------------------------------------------------- regions
+    def followed_regions(self) -> List[str]:
+        return [str(r).upper() for r in self.get("followed_regions", [])]
+
+    def is_region_followed(self, region: str) -> bool:
+        return (region or "").strip().upper() in self.followed_regions()
+
+    def toggle_region(self, region: str) -> bool:
+        with self._lock:
+            regions = self.followed_regions()
+            r = region.strip().upper()
+            if r in regions:
+                regions.remove(r)
+                now_followed = False
+            else:
+                regions.append(r)
+                now_followed = True
+            self.data["followed_regions"] = regions
             self.save()
             return now_followed
 

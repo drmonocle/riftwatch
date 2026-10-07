@@ -61,6 +61,12 @@ class Watchlist:
                         seen.add(key)
                         out.append(FollowReason("player", f"{p.name} ({p.team_code} {role_label(p.role)})", False))
 
+        # 3) Region follows (e.g. KOREA, EUROPE, NORTH AMERICA, INTERNATIONAL)
+        league_info = self.catalog.league_by_slug.get(match.get("league_slug", ""))
+        region = (match.get("region") or (league_info.get("region") if league_info else "") or "").upper()
+        if region and s.is_region_followed(region):
+            out.append(FollowReason("region", region.title(), True))
+
         if s.is_league_followed(match.get("league_slug", "")):
             out.append(FollowReason("league", match.get("league_name") or match.get("league_slug", ""), True))
         return out

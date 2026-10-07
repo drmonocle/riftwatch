@@ -88,7 +88,7 @@ def render_all(app):
                 view.render()
                 seen += texts(view)
         elif key == "watchlist":
-            for mode in ("teams", "players", "leagues"):
+            for mode in ("teams", "players", "regions", "leagues"):
                 view.mode = mode
                 view.render()
                 seen += texts(view)
@@ -106,6 +106,8 @@ def test_all_tabs_render_with_scores(app):
     assert "SKT vs SSG" in all_text        # stream now-airing
     assert "★ Faker starting (Mid)" in all_text
     assert "Hanwha Life Esports" in all_text
+    assert "RIFTWATCH" in all_text
+    assert "Hide to Tray" in all_text
 
 
 def test_spoiler_mode_leaks_nothing(app):
@@ -116,3 +118,26 @@ def test_spoiler_mode_leaks_nothing(app):
     app.reveal("live1")
     app.views["live"].render()
     assert any("7  :  8" in t for t in texts(app.views["live"]))
+
+
+def test_onboarding_wizard_and_regions(app):
+    from riftscout.ui.wizard import OnboardingWizard
+    wiz = OnboardingWizard(app.root, app)
+    assert wiz.winfo_exists()
+    # Check that presets work
+    wiz._preset_recommended()
+    assert "KOREA" in wiz.selected_regions
+    assert "T1" in wiz.selected_teams
+    assert "Faker" in wiz.selected_players
+    # Save & close
+    wiz._save_and_close()
+    assert app.settings.get("onboarding_completed") is True
+    assert app.settings.is_region_followed("Korea")
+    assert not wiz.winfo_exists()
+
+
+def test_hide_to_tray_and_restore(app):
+    app.hide_to_tray()
+    assert app.root.state() == "withdrawn"
+    app.show_from_tray()
+    assert app.root.state() == "normal"

@@ -17,13 +17,27 @@ def test_migrate_v1(tmp_path):
     s = SettingsManager(p)
     assert s.followed_teams() == [{"code": "T1", "name": ""}, {"code": "G2", "name": ""}]
     assert s.get("followed_leagues") == ["lck", "lcs", "cblol-brazil"]
-    assert "followed_regions" not in s.data and "ticker_bar_enabled" not in s.data
+    assert "ticker_bar_enabled" not in s.data
+    # Legacy "lck" in followed_regions was converted to league slug; followed_regions has default modern regions
+    assert "lck" not in [r.lower() for r in s.followed_regions()]
+    assert s.is_region_followed("KOREA")
     assert json.loads(p.read_text())["version"] == 2
 
 
 def test_migrate_is_idempotent():
-    once = migrate({"followed_teams": ["T1"], "followed_regions": ["lck"]})
+    once = migrate({"followed_teams": ["T1"], "followed_regions": ["KOREA"]})
     assert migrate(once) == once
+
+
+def test_regions_and_tray_settings(tmp_path):
+    s = SettingsManager(tmp_path / "s.json")
+    assert s.is_region_followed("Korea")
+    assert s.toggle_region("Korea") is False
+    assert not s.is_region_followed("Korea")
+    assert s.toggle_region("Korea") is True
+    assert s.is_region_followed("KOREA")
+    assert s.get("minimize_to_tray_on_close") is True
+    assert isinstance(s.get("onboarding_completed"), bool)
 
 
 def test_team_follow_code_and_name(tmp_path):

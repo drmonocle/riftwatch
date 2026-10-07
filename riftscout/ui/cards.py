@@ -64,6 +64,9 @@ def reason_chips(parent, reasons: List[FollowReason]) -> tk.Frame:
                      fg=C.COLOR_BG if r.confirmed else C.COLOR_TEXT_PRIMARY)
             if not r.confirmed:
                 Tooltip(p, "On the team's registered roster. Starters are confirmed once the game is live.")
+        elif r.kind == "region":
+            p = pill(row, f"🌐 {r.label}", C.COLOR_CYAN_DIM, fg=C.COLOR_TEXT_PRIMARY, bold=True)
+            Tooltip(p, f"From your followed region: {r.label}")
         else:
             p = pill(row, r.label, C.COLOR_SURFACE_HOVER, fg=C.COLOR_TEXT_MUTED, bold=False)
         p.pack(side="left", padx=(0, px(4)))
