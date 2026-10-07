@@ -57,6 +57,9 @@ STREAM_SCHEDULE_URL = os.environ.get(
 )
 TWITCH_CHANNEL = "LoLWorldChampionship"
 TWITCH_CHANNEL_URL = f"https://www.twitch.tv/{TWITCH_CHANNEL}"
+YOUTUBE_CHANNEL = "@LoLWorldChampionships"
+YOUTUBE_CHANNEL_URL = f"https://www.youtube.com/{YOUTUBE_CHANNEL}"
+YOUTUBE_LIVE_URL = f"https://www.youtube.com/{YOUTUBE_CHANNEL}/live"
 STREAM_SITE_URL = "https://lolworlds.com"
 
 # GitHub Releases & Automated Update Configuration

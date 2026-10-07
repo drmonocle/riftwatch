@@ -31,24 +31,20 @@ def main():
     sha256 = sums.read_text(encoding="utf-8").strip().split()[0]
     print(f"[*] Verified SHA-256: {sha256}")
 
-    notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel
+    notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel & 24/7 Stream Companion
 
 ### ✨ What's New & Refined in {version}
-* **Robust 1-Click In-App Updater & Auto-Restart:**
-  * Fixed process locking and relaunch failures during executable updates. The updater now waits for all running bootloader processes to exit, safely renames in-use binaries to `.old`, atomically swaps the verified executable, and releases the single-instance mutex before relaunching with a visible window.
-  * Added detailed logging to `%APPDATA%\\RiftWatch\\update.log`.
+* **YouTube Live Stream Integration for 24/7 Schedule:**
+  * **24/7 Stream Hero & Spotlight:** Added prominent `▶ Watch on YouTube` buttons (`#cc0000`) alongside `▶ Watch on Twitch` on the 24/7 hero banner and the Next S-Tier Banger spotlight card.
+  * **Direct Stream Action per Schedule Row:** Every upcoming rebroadcast row in the 24/7 schedule table now features individual `YT` and `Twitch` action buttons so users can instantly tune in with a single click.
+  * **System Tray Quick Links:** Added `Watch 24/7 Stream (YouTube)` and `Watch 24/7 Stream (Twitch)` to the system tray context menu.
+  * **Settings Hub Integration:** Displays both Twitch and YouTube stream URLs with one-click direct browser launchers.
 * **Double-Buffered Smooth UI (Zero White Screen Flashing):**
-  * Implemented an off-screen double-buffering frame swap in `ScrollFrame`. Pages now build new card hierarchies completely in the background before atomically swapping the canvas window, eliminating Win32 `WM_ERASEBKGND` white flashes and widget flicker.
-  * Themed native scrollbars with dark Hextech colors (`#091428` trough, `#1e2328` thumb) and enforced global dark widget background defaults.
-* **Twitch 24/7 Clean Status & Offline Mode:**
-  * When the Twitch broadcast is offline, the top header badge and 24/7 tab hero card strictly display `Offline` without showing any scheduled match titles (e.g. "BLG vs WBG").
-  * Fixed `net.fetch_text` to correctly query Twitch channel uptime.
-  * Streamlined active stream titles by removing redundant "ON AIR" badges.
-* **Expanded Settings Hub:**
-  * **Default Launch Tab:** Choose whether RiftWatch opens to Live, Schedule, 24/7 Stream, or Watchlist.
-  * **Desktop Toast Notifications:** Configurable toggles for match kickoffs, 15m pre-match countdowns, and 24/7 stream broadcasts.
-  * **Watchlist Summary & Reset:** Shows live counts of followed entities and provides a 1-click Reset All Follows action.
-  * **Diagnostics & Maintenance:** Quick actions to clear downloaded logo caches, open log files, and inspect data feed health.
+  * Fully background-rendered page hierarchies with atomic canvas swaps in `ScrollFrame` to eliminate Win32 `WM_ERASEBKGND` flicker.
+* **Robust In-App Updater & Auto-Restart:**
+  * Safe file replacement with `.old` fallback, mutex release, and visible process relaunching.
+* **Accurate 24/7 Stream Offline State:**
+  * Streamlined header badge and hero cards strictly displaying `Offline` when streams are down without showing scheduled match titles.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`

@@ -64,8 +64,17 @@ class TrayManager:
         def _exit(icon=None, item=None):
             self.app.root.after(0, self.app.close)
 
+        def _watch_twitch(icon=None, item=None):
+            self.app.root.after(0, lambda: self.app.open_url(C.TWITCH_CHANNEL_URL))
+
+        def _watch_youtube(icon=None, item=None):
+            self.app.root.after(0, lambda: self.app.open_url(C.YOUTUBE_LIVE_URL))
+
         menu = pystray.Menu(
             pystray.MenuItem("Open RiftWatch", _open_app, default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Watch 24/7 Stream (YouTube)", _watch_youtube),
+            pystray.MenuItem("Watch 24/7 Stream (Twitch)", _watch_twitch),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Spoiler Mode", _toggle_spoiler, checked=_is_spoiler),
             pystray.MenuItem("Refresh Schedule", _refresh),

@@ -370,7 +370,7 @@ class StreamView(View):
         now = utcnow()
         cur = now_airing(events, now)
         online = a.state.get("stream_online", True)
-        self.section("Now on Twitch", f"twitch.tv/{C.TWITCH_CHANNEL}")
+        self.section("24/7 Broadcast Replays", f"twitch.tv/{C.TWITCH_CHANNEL} · youtube.com/{C.YOUTUBE_CHANNEL}")
         is_live = cur and (online is not False)
         hero = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightbackground=C.COLOR_LIVE if is_live else C.COLOR_BORDER,
                         highlightthickness=1)
@@ -378,7 +378,7 @@ class StreamView(View):
         if cur and is_live:
             top = tk.Frame(hero, bg=C.COLOR_SURFACE)
             top.pack(fill="x", padx=px(14), pady=(px(12), 0))
-            pill(top, "TWITCH 24/7", C.COLOR_CYAN_DIM, fg=C.COLOR_TEXT_PRIMARY).pack(side="left")
+            pill(top, "24/7 STREAM", C.COLOR_CYAN_DIM, fg=C.COLOR_TEXT_PRIMARY).pack(side="left")
             if cur.get("is_banger"):
                 pill(top, "S-TIER BANGER", C.COLOR_BANGER, fg="white").pack(side="left", padx=px(6))
             started = parse_iso_datetime(cur["start_utc"])
@@ -397,7 +397,7 @@ class StreamView(View):
             pill(top, "OFFLINE", C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED).pack(side="left")
             label(hero, "Stream Offline", 18, True, fg=C.COLOR_TEXT_MUTED).pack(
                 anchor="w", padx=px(14), pady=(px(6), 0))
-            label(hero, "The 24/7 Twitch broadcast is currently offline.", 10,
+            label(hero, "The 24/7 broadcast is currently offline on Twitch and YouTube.", 10,
                   fg=C.COLOR_TEXT_DIM).pack(anchor="w", padx=px(14))
             nxt = upcoming(events, now, limit=1)
             if nxt:
@@ -407,6 +407,8 @@ class StreamView(View):
         btns.pack(fill="x", padx=px(14), pady=px(12))
         button(btns, "▶ Watch on Twitch", lambda: a.open_url(C.TWITCH_CHANNEL_URL), bg="#9146ff", fg="white",
                hover_bg="#a970ff").pack(side="left")
+        button(btns, "▶ Watch on YouTube", lambda: a.open_url(C.YOUTUBE_LIVE_URL), bg="#cc0000", fg="white",
+               hover_bg="#e60000").pack(side="left", padx=px(8))
         button(btns, "Full schedule on lolworlds.com ↗", lambda: a.open_url(C.STREAM_SITE_URL), size=9,
                bold=False).pack(side="left", padx=px(8))
 
@@ -414,8 +416,18 @@ class StreamView(View):
         if banger:
             b = tk.Frame(self.body, bg=C.COLOR_SURFACE, highlightbackground=C.COLOR_BANGER, highlightthickness=1)
             b.pack(fill="x", padx=px(18), pady=(px(10), 0))
-            label(b, "NEXT S-TIER BANGER", 8, True, fg=C.COLOR_BANGER).pack(anchor="w", padx=px(14), pady=(px(8), 0))
-            label(b, f"{event_title(banger)}   ·   {event_subtitle(banger)}", 12, True).pack(anchor="w", padx=px(14))
+            b_top = tk.Frame(b, bg=C.COLOR_SURFACE)
+            b_top.pack(fill="x", padx=px(14), pady=(px(8), 0))
+            label(b_top, "NEXT S-TIER BANGER", 8, True, fg=C.COLOR_BANGER).pack(side="left")
+            b_links = tk.Frame(b_top, bg=C.COLOR_SURFACE)
+            b_links.pack(side="right")
+            button(b_links, "▶ Twitch", lambda: a.open_url(C.TWITCH_CHANNEL_URL), size=7, bold=True,
+                   bg="#9146ff", fg="white", hover_bg="#a970ff", padx=6, pady=2,
+                   tooltip="Watch stream on Twitch").pack(side="left", padx=px(2))
+            button(b_links, "▶ YouTube", lambda: a.open_url(C.YOUTUBE_LIVE_URL), size=7, bold=True,
+                   bg="#cc0000", fg="white", hover_bg="#e60000", padx=6, pady=2,
+                   tooltip="Watch stream on YouTube").pack(side="left", padx=px(2))
+            label(b, f"{event_title(banger)}   ·   {event_subtitle(banger)}", 12, True).pack(anchor="w", padx=px(14), pady=(px(2), 0))
             label(b, f"{format_local_match_time(banger['start_utc'])}  ({format_relative_time(banger['start_utc'], now)})",
                   9, fg=C.COLOR_TEXT_MUTED).pack(anchor="w", padx=px(14), pady=(0, px(8)))
 
@@ -459,6 +471,12 @@ class StreamView(View):
         label(mid, event_subtitle(e), 8, fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
         right = tk.Frame(row, bg=C.COLOR_SURFACE)
         right.pack(side="right", padx=px(12))
+        button(right, "YT", lambda: self.app.open_url(C.YOUTUBE_LIVE_URL), size=7, bold=True,
+               bg="#cc0000", fg="white", hover_bg="#e60000", padx=5, pady=2,
+               tooltip="Watch 24/7 stream on YouTube").pack(side="right", padx=px(2))
+        button(right, "Twitch", lambda: self.app.open_url(C.TWITCH_CHANNEL_URL), size=7, bold=True,
+               bg="#9146ff", fg="white", hover_bg="#a970ff", padx=5, pady=2,
+               tooltip="Watch 24/7 stream on Twitch").pack(side="right", padx=px(2))
         if e.get("is_banger"):
             pill(right, "BANGER", C.COLOR_BANGER, fg="white").pack(side="right", padx=px(3))
         for r in reasons:
@@ -799,18 +817,20 @@ class SettingsView(View):
         button(w_actions, "Reset All Follows", a.reset_watchlist, size=8, bold=False,
                bg=C.COLOR_BORDER, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_LIVE).pack(side="left", padx=px(4))
 
-        self.section("Twitch 24/7 Stream Rebroadcasts")
+        self.section("24/7 Stream Rebroadcasts (Twitch & YouTube)")
         tbox = tk.Frame(self.body, bg=C.COLOR_SURFACE)
         tbox.pack(fill="x", padx=px(18), pady=px(4))
         ttxt = tk.Frame(tbox, bg=C.COLOR_SURFACE)
         ttxt.pack(side="left", padx=px(12), pady=px(10))
-        label(ttxt, f"Channel: twitch.tv/{C.TWITCH_CHANNEL}", 10, True, fg=C.COLOR_CYAN).pack(anchor="w")
+        label(ttxt, f"Twitch: twitch.tv/{C.TWITCH_CHANNEL}   ·   YouTube: {C.YOUTUBE_CHANNEL}", 10, True, fg=C.COLOR_CYAN).pack(anchor="w")
         label(ttxt, f"Schedule synced with {C.STREAM_SITE_URL} continuous marathon database.", 8,
               fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
         t_actions = tk.Frame(tbox, bg=C.COLOR_SURFACE)
         t_actions.pack(side="right", padx=px(10))
         button(t_actions, "Watch on Twitch ↗", lambda: a.open_url(C.TWITCH_CHANNEL_URL),
                bg="#9146ff", fg="white", hover_bg="#a970ff", size=8).pack(side="left", padx=px(4))
+        button(t_actions, "Watch on YouTube ↗", lambda: a.open_url(C.YOUTUBE_LIVE_URL),
+               bg="#cc0000", fg="white", hover_bg="#e60000", size=8).pack(side="left", padx=px(4))
         button(t_actions, "View Schedule ↗", lambda: a.open_url(C.STREAM_SITE_URL), size=8, bold=False).pack(
             side="left", padx=px(4))
 

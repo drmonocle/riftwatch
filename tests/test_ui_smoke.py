@@ -7,6 +7,7 @@ import tkinter as tk
 import pytest
 
 from riftscout import catalog
+from riftscout import config as C
 from riftscout.settings import SettingsManager
 from riftscout.stream import normalize_stream_events
 
@@ -245,3 +246,18 @@ def test_scrollframe_double_buffering(app):
     sf.keep_scroll(rebuild)
     assert rebuilt
     assert not old_body.winfo_exists()
+
+
+def test_stream_view_youtube_links(app, monkeypatch):
+    app.show_tab("stream")
+    stream_view = app.views["stream"]
+    stream_view.render()
+
+    opened = []
+    monkeypatch.setattr(app, "open_url", lambda url: opened.append(url))
+
+    # Test opening YouTube live URL
+    assert hasattr(C, "YOUTUBE_LIVE_URL")
+    assert "youtube.com" in C.YOUTUBE_LIVE_URL
+    app.open_url(C.YOUTUBE_LIVE_URL)
+    assert opened[-1] == C.YOUTUBE_LIVE_URL
