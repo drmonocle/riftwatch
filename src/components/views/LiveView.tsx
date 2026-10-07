@@ -125,38 +125,45 @@ export const LiveView: React.FC<LiveViewProps> = ({
     .filter((m) => {
       if (m.state === "completed") return false;
       const t = new Date(m.startTimeUtc).getTime();
-      // Keep upcoming matches, or any match scheduled within the last 4 hours that hasn't completed
-      return !isNaN(t) && t >= now - 4 * 60 * 60 * 1000;
+      // Keep upcoming matches, or any match scheduled within the last 15 minutes that hasn't completed
+      return !isNaN(t) && t >= now - 15 * 60 * 1000;
     })
     .sort((a, b) => new Date(a.startTimeUtc).getTime() - new Date(b.startTimeUtc).getTime());
+
+  const hasWatchlist =
+    settings.followedTeams.length > 0 ||
+    settings.followedLeagues.length > 0 ||
+    (settings.followedRegions && settings.followedRegions.length > 0);
 
   // Matches that match user's watchlist (followed teams, followed leagues, or followed regions)
   const isFollowed = (m: Match) => isMatchFollowed(m, settings, catalog?.leagues);
 
-  let nextMatch = unstarted.find(isFollowed);
-  let nextTag = "Next match you follow";
+  let nextMatch: Match | undefined;
+  let nextTag = "Next upcoming match";
+  let comingUp: Match[] = [];
 
-  if (nextMatch) {
-    const isTeam =
-      settings.followedTeams.includes(nextMatch.team1Code) ||
-      settings.followedTeams.includes(nextMatch.team2Code);
-    if (isTeam) {
-      nextTag = "Next match you follow";
-    } else {
-      nextTag = `Next in your leagues · ${nextMatch.leagueName}`;
+  if (hasWatchlist) {
+    const followedMatches = unstarted.filter(isFollowed);
+    if (followedMatches.length > 0) {
+      nextMatch = followedMatches[0];
+      const isTeam =
+        settings.followedTeams.includes(nextMatch.team1Code) ||
+        settings.followedTeams.includes(nextMatch.team2Code);
+      nextTag = isTeam
+        ? "Next match you follow"
+        : `Next in your leagues · ${nextMatch.leagueName}`;
+      comingUp = followedMatches.slice(1, 5);
     }
-  } else if (unstarted.length > 0) {
-    nextMatch = unstarted[0];
-    nextTag = "Next pro match";
+  } else {
+    // User has no watchlist items: show upcoming matches overall or say none at all
+    if (unstarted.length > 0) {
+      nextMatch = unstarted[0];
+      nextTag = "Next upcoming match";
+      comingUp = unstarted.slice(1, 5);
+    }
   }
 
   const countdown = useCountdown(nextMatch?.startTimeUtc);
-
-  // Subsequent upcoming matches (next 4)
-  const comingUp = unstarted
-    .filter((m) => m.matchId !== nextMatch?.matchId)
-    .filter(isFollowed)
-    .slice(0, 4);
 
   // If pro matches are live right now
   if (matches.length > 0) {
@@ -528,9 +535,135 @@ export const LiveView: React.FC<LiveViewProps> = ({
             </div>
           </div>
         </section>
+      ) : hasWatchlist ? (
+        <div className="space-y-6">
+          <div className="bg-[#0a1420] border border-[#1e282d] rounded-xl p-8 text-center space-y-4 max-w-xl mx-auto my-4 shadow-lg">
+            <div className="w-12 h-12 rounded-full bg-[#c8aa6e]/10 border border-[#c8aa6e]/30 flex items-center justify-center mx-auto text-[#c8aa6e]">
+              <Star className="w-6 h-6 fill-[#c8aa6e]/20" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[#f0e6d2]">No Upcoming Matches in Your Watchlist</h3>
+              <p className="text-xs text-[#9bb3c9] mt-1.5 leading-relaxed">
+                None of your followed teams, leagues, or regions have matches scheduled in the current window.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+              <button
+                onClick={() => onSelectTab("watchlist")}
+                className="px-4 py-2 rounded-lg bg-[#c8aa6e] hover:bg-[#f0e6d2] text-[#091428] font-bold text-xs transition-colors shadow"
+              >
+                Manage Watchlist
+              </button>
+              <button
+                onClick={() => onSelectTab("schedule")}
+                className="px-4 py-2 rounded-lg bg-[#091428] hover:bg-[#121e2d] border border-[#1e282d] hover:border-[#c8aa6e]/50 text-[#f0e6d2] font-semibold text-xs transition-colors"
+              >
+                Browse All Matches ({unstarted.length})
+              </button>
+            </div>
+          </div>
+
+          {unstarted.length > 0 && (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-[#7e8e9f] uppercase tracking-wider">
+                  Upcoming in Other Leagues
+                </span>
+                <button
+                  onClick={() => onSelectTab("schedule")}
+                  className="text-[#0ac8b9] hover:underline text-[11px] font-medium"
+                >
+                  View all {unstarted.length} matches →
+                </button>
+              </div>
+              <div className="grid gap-2">
+                {unstarted.slice(0, 4).map((m) => (
+                  <div
+                    key={m.matchId}
+                    className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d] hover:border-[#c8aa6e]/60 transition-all text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-[#0ac8b9] text-[11px] w-20 truncate">
+                        {m.leagueName}
+                      </span>
+                      <div className="flex items-center gap-1 text-[#f0e6d2] font-semibold">
+                        <span>{m.team1Name}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTeamFollow(m.team1Code);
+                          }}
+                          className={`p-0.5 rounded hover:bg-[#1e282d] ${
+                            settings.followedTeams.includes(m.team1Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
+                          }`}
+                          title={
+                            settings.followedTeams.includes(m.team1Code)
+                              ? `Unfollow ${m.team1Code}`
+                              : `Follow ${m.team1Code}`
+                          }
+                        >
+                          <Star
+                            className={`w-3 h-3 ${
+                              settings.followedTeams.includes(m.team1Code) ? "fill-[#c8aa6e]" : ""
+                            }`}
+                          />
+                        </button>
+                        <span className="text-[#9bb3c9] mx-1">vs</span>
+                        <span>{m.team2Name}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTeamFollow(m.team2Code);
+                          }}
+                          className={`p-0.5 rounded hover:bg-[#1e282d] ${
+                            settings.followedTeams.includes(m.team2Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
+                          }`}
+                          title={
+                            settings.followedTeams.includes(m.team2Code)
+                              ? `Unfollow ${m.team2Code}`
+                              : `Follow ${m.team2Code}`
+                          }
+                        >
+                          <Star
+                            className={`w-3 h-3 ${
+                              settings.followedTeams.includes(m.team2Code) ? "fill-[#c8aa6e]" : ""
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      <span className="text-[#9bb3c9] text-[11px] font-medium">Bo{m.bestOf}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <AddToCalendarMenu match={m} onOpenUrl={onOpenUrl} compact={true} />
+                      <div className="text-[#9bb3c9] font-mono text-[11px] font-medium">
+                        {formatMatchTime(m.startTimeUtc)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
       ) : (
-        <div className="text-center py-8 text-[#9bb3c9] text-xs">
-          No upcoming matches found in current schedule window.
+        <div className="bg-[#0a1420] border border-[#1e282d] rounded-xl p-8 text-center space-y-3 max-w-xl mx-auto my-6 shadow-lg">
+          <div className="w-12 h-12 rounded-full bg-[#0ac8b9]/10 border border-[#0ac8b9]/30 flex items-center justify-center mx-auto text-[#0ac8b9]">
+            <Calendar className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-[#f0e6d2]">No Upcoming Pro Matches Scheduled</h3>
+          <p className="text-xs text-[#9bb3c9] max-w-md mx-auto leading-relaxed">
+            There are currently no upcoming pro matches scheduled across any league in the current broadcast window.
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={() => onSelectTab("schedule")}
+              className="px-4 py-2 rounded-lg bg-[#c8aa6e] hover:bg-[#f0e6d2] text-[#091428] font-bold text-xs transition-colors shadow"
+            >
+              Check Full Schedule
+            </button>
+          </div>
         </div>
       )}
 

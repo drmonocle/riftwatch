@@ -235,69 +235,34 @@ export function isMatchFollowed(
 }
 
 /**
- * Reconciles Riot's live broadcast events (/getLive) with scheduled matches (/getSchedule).
- * When Riot broadcasts a live show/stream (ev.type === "show") for a league (like EMEA Masters),
- * this correlates uncompleted matches scheduled for that league today, marks them inProgress,
- * attaches the active stream URL, and elevates them into liveMatches so users see real live match cards.
+ * Reconciles Riot's live matches (/getLive) with scheduled matches (/getSchedule).
+ * Ensures legitimate inProgress matches from either source are captured,
+ * while preventing fake/synthetic placeholders from ever appearing in liveMatches.
  */
 export function reconcileLiveAndSchedule(
   liveMatches: Match[],
   scheduleMatches: Match[]
 ): { finalLive: Match[]; finalSchedule: Match[] } {
-  const liveByLeague = new Map<string, Match>();
-  const liveById = new Map<string, Match>();
+  const finalLive: Match[] = [];
+  const liveById = new Set<string>();
 
+  // Add all legitimate live matches from getLive
   for (const lm of liveMatches) {
-    liveById.set(lm.matchId, lm);
-    if (lm.leagueSlug) {
-      liveByLeague.set(lm.leagueSlug.toLowerCase(), lm);
+    if (lm.team1Code === "LIVE" || lm.team2Code === "AIR") continue;
+    if (!liveById.has(lm.matchId)) {
+      liveById.add(lm.matchId);
+      finalLive.push(lm);
     }
   }
 
-  const now = Date.now();
-  const activeLive: Match[] = [...liveMatches];
-  const updatedSchedule: Match[] = [];
-
-  for (const sm of scheduleMatches) {
-    let updated = { ...sm };
-    const t = new Date(sm.startTimeUtc).getTime();
-    // within 6 hours of scheduled start time (e.g. today's tournament slate)
-    const isToday = !isNaN(t) && Math.abs(now - t) < 6 * 60 * 60 * 1000;
-
-    const liveLeague = sm.leagueSlug ? liveByLeague.get(sm.leagueSlug.toLowerCase()) : undefined;
-
-    if (sm.state === "inProgress") {
-      if (!liveById.has(sm.matchId)) {
-        activeLive.push(sm);
-        liveById.set(sm.matchId, sm);
-      }
-    } else if (liveLeague && sm.state !== "completed" && isToday) {
-      // League is currently broadcasting live, and this match is today's slate!
-      updated.state = "inProgress";
-      if (!updated.streamUrl && liveLeague.streamUrl) {
-        updated.streamUrl = liveLeague.streamUrl;
-      }
-      if (!liveById.has(sm.matchId)) {
-        activeLive.push(updated);
-        liveById.set(sm.matchId, updated);
-      }
+  // Also check if schedule has any matches legitimately marked inProgress by Riot
+  const updatedSchedule = scheduleMatches.map((sm) => {
+    if (sm.state === "inProgress" && !liveById.has(sm.matchId)) {
+      liveById.add(sm.matchId);
+      finalLive.push(sm);
     }
-
-    updatedSchedule.push(updated);
-  }
-
-  // Filter out generic placeholder if specific matches were promoted for that league
-  const hasSpecificMatchForLeague = (slug: string) =>
-    activeLive.some(
-      (m) => m.leagueSlug?.toLowerCase() === slug.toLowerCase() && m.team1Code !== "LIVE"
-    );
-
-  const deduplicatedLive = activeLive.filter((m) => {
-    if (m.team1Code === "LIVE" && m.team2Code === "AIR" && m.leagueSlug) {
-      return !hasSpecificMatchForLeague(m.leagueSlug);
-    }
-    return true;
+    return sm;
   });
 
-  return { finalLive: deduplicatedLive, finalSchedule: updatedSchedule };
+  return { finalLive, finalSchedule: updatedSchedule };
 }
