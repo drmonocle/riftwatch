@@ -202,8 +202,18 @@ class ScrollFrame(tk.Frame):
         w = self.canvas.winfo_width()
         if w > 1:
             self.canvas.itemconfigure(self._win, width=w)
+        # Force Tk to measure child widgets so canvas.bbox("all") has actual layout dimensions
+        new_body.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        self.canvas.yview_moveto(pos)
+        if pos > 0.0:
+            self.canvas.yview_moveto(pos)
+
+        def _restore(target_pos=pos):
+            if self.winfo_exists() and self.canvas.winfo_exists() and target_pos > 0.0:
+                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+                self.canvas.yview_moveto(target_pos)
+
+        self.after_idle(_restore)
         self.after_idle(self._safe_destroy, old_body)
 
     def to_top(self) -> None:

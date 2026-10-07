@@ -228,3 +228,31 @@ def test_updater_relaunch_script_structure():
     assert "Copy-Item" in src
     assert "SW_SHOWNORMAL" in src
 
+
+def test_ticker_modes_and_settings_signature_stability(ticker_app):
+    """Verify switching ticker mode handles docked/detached/hidden cleanly and settings signature never reloads on prefs change."""
+    # 1. Docked mode
+    ticker_app.set_ticker_mode("docked")
+    assert ticker_app.get_ticker_mode() == "docked"
+    assert ticker_app.ticker_bar.winfo_manager() == "pack"
+    assert ticker_app.detached_ticker_window is None
+
+    # 2. Detached mode
+    ticker_app.set_ticker_mode("detached")
+    assert ticker_app.get_ticker_mode() == "detached"
+    assert ticker_app.ticker_bar.winfo_manager() == ""
+    assert ticker_app.detached_ticker_window is not None
+    assert ticker_app.detached_ticker_window.winfo_exists()
+
+    # 3. Hidden mode
+    ticker_app.set_ticker_mode("hidden")
+    assert ticker_app.get_ticker_mode() == "hidden"
+    assert ticker_app.ticker_bar.winfo_manager() == ""
+    assert ticker_app.detached_ticker_window is None
+
+    # 4. SettingsView signature stability
+    sv = ticker_app.views["settings"]
+    sig_before = sv.signature()
+    ticker_app.bump("prefs")
+    assert sv.signature() == sig_before, "SettingsView signature must not change on prefs bump (prevents scroll jumps)"
+

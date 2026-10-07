@@ -26,7 +26,7 @@ from ..watchlist import Watchlist
 from ..worker import Worker
 from . import widgets as W
 from .images import ImageCache
-from .ticker import TickerBar
+from .ticker import TickerBar, TickerWindow
 from .tray import TrayManager
 from .views import LiveView, ScheduleView, SettingsView, StreamView, WatchlistView
 
@@ -59,6 +59,7 @@ class RiftScoutApp:
         self.watchlist = Watchlist(self.settings, self.state["catalog"])
         self.images = ImageCache(root, offline=offline_images)
         self.worker = Worker(self.settings, self.q, db_path=db_path)
+        self.detached_ticker_window: Optional[TickerWindow] = None
 
         W.init_scale(root)
         root.title(f"RiftWatch {__version__}")
@@ -172,9 +173,12 @@ class RiftScoutApp:
         # Live Ticker Bar
         self.ticker_bar = TickerBar(r, self)
         self.ticker_sep = tk.Frame(r, bg=C.COLOR_BORDER, height=1)
-        if self.settings.get("show_ticker_bar", True):
+        mode = self.get_ticker_mode()
+        if mode == "docked":
             self.ticker_bar.pack(fill="x")
             self.ticker_sep.pack(fill="x")
+        elif mode == "detached":
+            self.detached_ticker_window = TickerWindow(self)
 
         footer = tk.Frame(r, bg=C.COLOR_BG_DARK)
         footer.pack(side="bottom", fill="x")
@@ -229,8 +233,10 @@ class RiftScoutApp:
             self.b_update.pack(side="right", padx=W.px(4))
         elif not info and self.b_update.winfo_ismapped():
             self.b_update.pack_forget()
-        if hasattr(self, "ticker_bar"):
+        if hasattr(self, "ticker_bar") and self.ticker_bar.winfo_manager() == "pack":
             self.ticker_bar.refresh_data()
+        if getattr(self, "detached_ticker_window", None) and self.detached_ticker_window.winfo_exists():
+            self.detached_ticker_window.ticker_bar.refresh_data()
 
     def _refresh_status(self) -> None:
         st = self.state["status"]
@@ -329,18 +335,47 @@ class RiftScoutApp:
         self.settings.set("last_tab", key)
         self._render_active()
 
-    def set_ticker_visible(self, visible: bool) -> None:
-        self.settings.set("show_ticker_bar", visible)
-        if visible:
+    def get_ticker_mode(self) -> str:
+        mode = self.settings.get("ticker_mode")
+        if mode in ("docked", "detached", "hidden"):
+            return mode
+        return "docked" if self.settings.get("show_ticker_bar", True) else "hidden"
+
+    def set_ticker_mode(self, mode: str) -> None:
+        if mode not in ("docked", "detached", "hidden"):
+            mode = "docked"
+        self.settings.set("ticker_mode", mode)
+        self.settings.set("show_ticker_bar", mode != "hidden")
+
+        if mode == "detached":
+            if self.ticker_bar.winfo_manager() == "pack":
+                self.ticker_bar.pack_forget()
+                self.ticker_sep.pack_forget()
+            if not self.detached_ticker_window or not self.detached_ticker_window.winfo_exists():
+                self.detached_ticker_window = TickerWindow(self)
+            else:
+                self.detached_ticker_window.deiconify()
+                self.detached_ticker_window.lift()
+            self.detached_ticker_window.ticker_bar.refresh_data()
+        elif mode == "docked":
+            if self.detached_ticker_window and self.detached_ticker_window.winfo_exists():
+                self.detached_ticker_window.destroy()
+                self.detached_ticker_window = None
             if self.ticker_bar.winfo_manager() != "pack":
                 self.ticker_bar.pack(fill="x", before=self.container)
                 self.ticker_sep.pack(fill="x", before=self.container)
-                self.ticker_bar.refresh_data()
-        else:
+            self.ticker_bar.refresh_data()
+        else:  # "hidden"
+            if self.detached_ticker_window and self.detached_ticker_window.winfo_exists():
+                self.detached_ticker_window.destroy()
+                self.detached_ticker_window = None
             if self.ticker_bar.winfo_manager() == "pack":
                 self.ticker_bar.pack_forget()
                 self.ticker_sep.pack_forget()
         self.bump("prefs")
+
+    def set_ticker_visible(self, visible: bool) -> None:
+        self.set_ticker_mode("docked" if visible else "hidden")
 
     def spoiler_on(self) -> bool:
         return bool(self.settings.get("spoiler_mode", False))
@@ -542,7 +577,12 @@ class RiftScoutApp:
                 self.settings.set("window_geometry", self.root.geometry())
         except tk.TclError:
             pass
-        self.settings.save()
+        if getattr(self, "detached_ticker_window", None) and self.detached_ticker_window.winfo_exists():
+            try:
+                self.detached_ticker_window.destroy()
+            except Exception:
+                pass
+            self.detached_ticker_window = None
         if getattr(self, "tray", None):
             self.tray.stop()
         if getattr(self, "ticker_bar", None):

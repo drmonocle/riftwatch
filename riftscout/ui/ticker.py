@@ -183,14 +183,16 @@ def gather_ticker_items(app) -> List[TickerItem]:
 
 class TickerBar(tk.Frame):
     """
-    Compact broadcast ticker bar docked below navigation tabs.
-    Rotates live scores, countdowns, and continuous stream highlights.
+    Broadcast sports ticker bar displaying live scores, in-game gold differentials,
+    countdowns, and continuous stream highlights. Supports docked and detached modes.
     """
 
-    def __init__(self, parent: tk.Misc, app: Any):
+    def __init__(self, parent: tk.Misc, app: Any, detached: bool = False, window: Optional[Any] = None):
         super().__init__(parent, bg=C.COLOR_BG_DARK, highlightbackground=C.COLOR_BORDER,
-                         highlightthickness=1, height=px(28))
+                         highlightthickness=1 if not detached else 0, height=px(30 if detached else 28))
         self.app = app
+        self.detached = detached
+        self.window = window
         self.items: List[TickerItem] = []
         self.index = 0
         self._timer: Optional[str] = None
@@ -202,9 +204,16 @@ class TickerBar(tk.Frame):
     def _build_ui(self) -> None:
         self.pack_propagate(False)
 
+        # Drag grip on far left if detached
+        if self.detached:
+            self.grip = tk.Label(self, text="⠿", font=font(10), bg=C.COLOR_BG_DARK,
+                                 fg=C.COLOR_TEXT_DIM, cursor="fleur", padx=px(4))
+            self.grip.pack(side="left")
+            Tooltip(self.grip, "Drag to reposition floating ticker bar")
+
         # Left badge pill
         self.pill = tk.Frame(self, bg=C.COLOR_SURFACE, cursor="hand2")
-        self.pill.pack(side="left", padx=(px(8), px(6)), pady=px(3))
+        self.pill.pack(side="left", padx=(px(4) if self.detached else px(8), px(6)), pady=px(3))
         self.l_badge = tk.Label(self.pill, text="⚡ TICKER", font=font(8, True),
                                 bg=C.COLOR_SURFACE, fg=C.COLOR_GOLD, cursor="hand2",
                                 padx=px(6), pady=px(1))
@@ -232,25 +241,44 @@ class TickerBar(tk.Frame):
 
         # Right controls
         right = tk.Frame(self, bg=C.COLOR_BG_DARK)
-        right.pack(side="right", padx=px(8))
+        right.pack(side="right", padx=px(6))
 
         self.l_counter = tk.Label(right, text="", font=font(8), bg=C.COLOR_BG_DARK, fg=C.COLOR_TEXT_DIM)
-        self.l_counter.pack(side="left", padx=px(6))
+        self.l_counter.pack(side="left", padx=px(4))
 
-        self.btn_prev = button(right, "◀", self.prev_item, size=7, bold=False, padx=4, pady=1,
+        self.btn_prev = button(right, "◀", self.prev_item, size=7, bold=False, padx=3, pady=1,
                                bg=C.COLOR_BG_DARK, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_SURFACE,
                                tooltip="Previous ticker update")
         self.btn_prev.pack(side="left", padx=1)
 
-        self.btn_next = button(right, "▶", self.next_item, size=7, bold=False, padx=4, pady=1,
+        self.btn_next = button(right, "▶", self.next_item, size=7, bold=False, padx=3, pady=1,
                                bg=C.COLOR_BG_DARK, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_SURFACE,
                                tooltip="Next ticker update")
         self.btn_next.pack(side="left", padx=1)
 
-        self.btn_hide = button(right, "✕", self.hide_bar, size=7, bold=False, padx=5, pady=1,
+        if not self.detached:
+            self.btn_detach = button(right, "⧉", self.detach_bar, size=7, bold=False, padx=4, pady=1,
+                                     bg=C.COLOR_BG_DARK, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_SURFACE,
+                                     tooltip="Detach to floating desktop ticker")
+            self.btn_detach.pack(side="left", padx=1)
+        else:
+            pinned = bool(self.app.settings.get("ticker_topmost", True))
+            self.btn_pin = button(right, "📌", self.toggle_pin, size=7, bold=False, padx=4, pady=1,
+                                  bg=C.COLOR_SURFACE if pinned else C.COLOR_BG_DARK,
+                                  fg=C.COLOR_GOLD if pinned else C.COLOR_TEXT_DIM,
+                                  hover_bg=C.COLOR_SURFACE,
+                                  tooltip="Toggle always on top")
+            self.btn_pin.pack(side="left", padx=1)
+
+            self.btn_dock = button(right, "⤓", self.dock_bar, size=7, bold=False, padx=4, pady=1,
+                                   bg=C.COLOR_BG_DARK, fg=C.COLOR_TEXT_MUTED, hover_bg=C.COLOR_SURFACE,
+                                   tooltip="Dock back into main RiftWatch window")
+            self.btn_dock.pack(side="left", padx=1)
+
+        self.btn_hide = button(right, "✕", self.hide_bar, size=7, bold=False, padx=4, pady=1,
                                bg=C.COLOR_BG_DARK, fg=C.COLOR_TEXT_DIM, hover_bg=C.COLOR_LIVE,
                                tooltip="Hide ticker bar (re-enable in Settings)")
-        self.btn_hide.pack(side="left", padx=(px(6), 0))
+        self.btn_hide.pack(side="left", padx=(px(4), 0))
 
         # Bind hover and click events
         clickable = (self, self.pill, self.l_badge, self.content_frame, self.l_headline, self.l_dot, self.l_details)
@@ -275,6 +303,7 @@ class TickerBar(tk.Frame):
         item = self.items[self.index % len(self.items)]
         if item.schedule_filter_range:
             self.app.settings.set("schedule_filter_range", item.schedule_filter_range)
+        self.app.show_from_tray()
         self.app.show_tab(item.tab_target)
 
     def _cancel_timer(self) -> None:
@@ -342,6 +371,92 @@ class TickerBar(tk.Frame):
             self.btn_prev.pack_forget()
             self.btn_next.pack_forget()
 
+    def detach_bar(self) -> None:
+        self.app.set_ticker_mode("detached")
+
+    def dock_bar(self) -> None:
+        self.app.set_ticker_mode("docked")
+
+    def toggle_pin(self) -> None:
+        if self.window and hasattr(self.window, "toggle_pin"):
+            pinned = self.window.toggle_pin()
+            if hasattr(self, "btn_pin"):
+                self.btn_pin.configure(
+                    fg=C.COLOR_GOLD if pinned else C.COLOR_TEXT_DIM,
+                    bg=C.COLOR_SURFACE if pinned else C.COLOR_BG_DARK
+                )
+                self.btn_pin._base_bg = C.COLOR_SURFACE if pinned else C.COLOR_BG_DARK
+
     def hide_bar(self) -> None:
         self._cancel_timer()
-        self.app.set_ticker_visible(False)
+        self.app.set_ticker_mode("hidden")
+
+
+class TickerWindow(tk.Toplevel):
+    """
+    Detached floating desktop ticker window.
+    Draggable across displays, always-on-top capable, and docks back cleanly.
+    """
+
+    def __init__(self, app: Any):
+        super().__init__(app.root)
+        self.app = app
+        self.title("RiftWatch Live Ticker")
+        self.configure(bg=C.COLOR_BG_DARK)
+        self.overrideredirect(True)
+        self.is_pinned = bool(app.settings.get("ticker_topmost", True))
+        self.attributes("-topmost", self.is_pinned)
+
+        # Hextech border container
+        self.border_frame = tk.Frame(self, bg=C.COLOR_BG_DARK,
+                                     highlightbackground=C.COLOR_GOLD, highlightthickness=1)
+        self.border_frame.pack(fill="both", expand=True)
+
+        self.ticker_bar = TickerBar(self.border_frame, app, detached=True, window=self)
+        self.ticker_bar.pack(fill="both", expand=True)
+
+        self._drag_start_x = 0
+        self._drag_start_y = 0
+        self._setup_drag()
+        self._restore_geometry()
+
+    def _restore_geometry(self) -> None:
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        w = px(700)
+        h = px(32)
+        default_x = max(20, (sw - w) // 2)
+        default_y = px(20)
+        x = self.app.settings.get("ticker_x", default_x)
+        y = self.app.settings.get("ticker_y", default_y)
+        if x < -w or x > sw or y < 0 or y > sh:
+            x, y = default_x, default_y
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _setup_drag(self) -> None:
+        drag_widgets = [self, self.border_frame, self.ticker_bar,
+                        self.ticker_bar.content_frame, self.ticker_bar.l_dot,
+                        getattr(self.ticker_bar, "grip", self)]
+        for w in drag_widgets:
+            w.bind("<ButtonPress-1>", self._on_drag_start, add="+")
+            w.bind("<B1-Motion>", self._on_drag_motion, add="+")
+            w.bind("<ButtonRelease-1>", self._on_drag_end, add="+")
+
+    def _on_drag_start(self, event) -> None:
+        self._drag_start_x = event.x_root - self.winfo_x()
+        self._drag_start_y = event.y_root - self.winfo_y()
+
+    def _on_drag_motion(self, event) -> None:
+        new_x = event.x_root - self._drag_start_x
+        new_y = event.y_root - self._drag_start_y
+        self.geometry(f"+{new_x}+{new_y}")
+
+    def _on_drag_end(self, event) -> None:
+        self.app.settings.set("ticker_x", self.winfo_x())
+        self.app.settings.set("ticker_y", self.winfo_y())
+
+    def toggle_pin(self) -> bool:
+        self.is_pinned = not self.is_pinned
+        self.attributes("-topmost", self.is_pinned)
+        self.app.settings.set("ticker_topmost", self.is_pinned)
+        return self.is_pinned

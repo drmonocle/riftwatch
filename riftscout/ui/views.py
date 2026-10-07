@@ -1090,17 +1090,58 @@ class WatchlistView(View):
 class SettingsView(View):
     deps = ("update", "update_progress")
 
+    def signature(self) -> tuple:
+        # SettingsView handles all preference edits in-place with instant feedback.
+        # Only rebuild when external updater state changes.
+        return tuple(self.app.versions.get(d, 0) for d in self.deps)
+
     def _build(self) -> None:
         clear(self.body)
         a, s = self.app, self.app.settings
 
         self.section("Display & Experience")
         self._toggle("Spoiler mode", "Hide all scores, results and in-game stats until you reveal a match.",
-                     s.get("spoiler_mode", False), a.toggle_spoiler)
-        self._toggle("Show Live Ticker Bar",
-                     "Display real-time scores, countdowns, and 24/7 stream highlights beneath tabs.",
-                     s.get("show_ticker_bar", True),
-                     lambda: a.set_ticker_visible(not s.get("show_ticker_bar", True)))
+                     s.get("spoiler_mode", False), lambda _: a.toggle_spoiler())
+
+        # Live Ticker Bar Mode
+        ticker_row = tk.Frame(self.body, bg=C.COLOR_SURFACE)
+        ticker_row.pack(fill="x", padx=px(18), pady=px(2))
+        ticker_txt = tk.Frame(ticker_row, bg=C.COLOR_SURFACE)
+        ticker_txt.pack(side="left", padx=px(12), pady=px(8))
+        label(ticker_txt, "Live Ticker Mode", 10, True).pack(anchor="w")
+        label(ticker_txt, "Real-time scores, countdowns, and 24/7 stream highlights bar.", 8,
+              fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
+
+        ticker_btns = tk.Frame(ticker_row, bg=C.COLOR_SURFACE)
+        ticker_btns.pack(side="right", padx=px(12))
+        cur_mode = a.get_ticker_mode()
+        t_mode_btns = {}
+
+        def _set_ticker_mode(mode: str):
+            a.set_ticker_mode(mode)
+            for m, btn in t_mode_btns.items():
+                is_sel = (m == mode)
+                btn.configure(
+                    bg=C.COLOR_CYAN_DIM if is_sel else C.COLOR_BORDER,
+                    fg=C.COLOR_TEXT_PRIMARY if is_sel else C.COLOR_TEXT_MUTED,
+                )
+                btn._base_bg = C.COLOR_CYAN_DIM if is_sel else C.COLOR_BORDER
+
+        for m_key, m_label in (("docked", "Docked"), ("detached", "⧉ Detached HUD"), ("hidden", "Hidden")):
+            is_sel = (m_key == cur_mode)
+            b = button(ticker_btns, m_label,
+                       lambda k=m_key: _set_ticker_mode(k),
+                       size=8, padx=8, pady=3,
+                       bg=C.COLOR_CYAN_DIM if is_sel else C.COLOR_BORDER,
+                       fg=C.COLOR_TEXT_PRIMARY if is_sel else C.COLOR_TEXT_MUTED)
+            b.pack(side="left", padx=px(2))
+            t_mode_btns[m_key] = b
+
+        self._toggle("Detached Ticker Always on Top",
+                     "Keep the floating desktop ticker bar pinned above games and other windows.",
+                     s.get("ticker_topmost", True),
+                     lambda v: (s.set("ticker_topmost", v),
+                                getattr(a, "detached_ticker_window", None) and a.detached_ticker_window.attributes("-topmost", v)))
 
         # Default tab selector
         tab_row = tk.Frame(self.body, bg=C.COLOR_SURFACE)
@@ -1113,34 +1154,47 @@ class SettingsView(View):
         tab_btns = tk.Frame(tab_row, bg=C.COLOR_SURFACE)
         tab_btns.pack(side="right", padx=px(12))
         cur_def = s.get("default_tab", "live")
+        tab_btns_map = {}
+
+        def _set_default_tab(tab_key: str):
+            s.set("default_tab", tab_key)
+            for k, btn in tab_btns_map.items():
+                is_sel = (k == tab_key)
+                btn.configure(
+                    bg=C.COLOR_GOLD if is_sel else C.COLOR_BORDER,
+                    fg=C.COLOR_BG if is_sel else C.COLOR_TEXT_MUTED,
+                )
+                btn._base_bg = C.COLOR_GOLD if is_sel else C.COLOR_BORDER
+
         for t_key, t_label in (("live", "Live"), ("schedule", "Schedule"), ("stream", "24/7 Stream"), ("watchlist", "Watchlist")):
             is_sel = (t_key == cur_def)
             b = button(tab_btns, t_label,
-                       lambda k=t_key: (s.set("default_tab", k), a.bump("prefs")),
+                       lambda k=t_key: _set_default_tab(k),
                        size=8, padx=8, pady=3,
                        bg=C.COLOR_GOLD if is_sel else C.COLOR_BORDER,
                        fg=C.COLOR_BG if is_sel else C.COLOR_TEXT_MUTED)
             b.pack(side="left", padx=px(2))
+            tab_btns_map[t_key] = b
 
         self.section("Desktop Notifications & Alerts")
         self._toggle("Live kickoff alerts",
                      "Display desktop toast notifications when followed teams or players begin a match.",
                      s.get("notify_kickoff", True),
-                     lambda: (s.set("notify_kickoff", not s.get("notify_kickoff", True)), a.bump("prefs")))
+                     lambda v: s.set("notify_kickoff", v))
         self._toggle("Pre-match 15m countdown",
                      "Display a reminder notification 15 minutes before followed matches start.",
                      s.get("notify_pregame", True),
-                     lambda: (s.set("notify_pregame", not s.get("notify_pregame", True)), a.bump("prefs")))
+                     lambda v: s.set("notify_pregame", v))
         self._toggle("24/7 stream broadcast alerts",
                      "Notify when the 24/7 stream goes online or S-Tier banger matches begin.",
                      s.get("notify_stream", True),
-                     lambda: (s.set("notify_stream", not s.get("notify_stream", True)), a.bump("prefs")))
+                     lambda v: s.set("notify_stream", v))
 
         self.section("System Tray & Startup")
         self._toggle("Close button minimizes to system tray",
                      "Keep RiftWatch running in the background notification area when the window is closed.",
                      s.get("minimize_to_tray_on_close", True),
-                     lambda: (s.set("minimize_to_tray_on_close", not s.get("minimize_to_tray_on_close", True)), a.bump("prefs")))
+                     lambda v: s.set("minimize_to_tray_on_close", v))
         self._toggle("Start RiftWatch with Windows", "Launch automatically when you sign in.",
                      s.get("start_with_windows", False), a.toggle_autostart)
 
@@ -1254,9 +1308,28 @@ class SettingsView(View):
         txt.pack(side="left", padx=px(12), pady=px(8))
         label(txt, title, 10, True).pack(anchor="w")
         label(txt, desc, 8, fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
-        b = button(r, "ON" if on else "OFF", command, size=9, padx=14,
+
+        state = {"on": bool(on)}
+        b_ref: List[Optional[tk.Label]] = [None]
+
+        def _on_click():
+            new_val = not state["on"]
+            state["on"] = new_val
+            if b_ref[0]:
+                b_ref[0].configure(
+                    text="ON" if new_val else "OFF",
+                    bg=C.COLOR_CYAN_DIM if new_val else C.COLOR_BORDER,
+                )
+                b_ref[0]._base_bg = C.COLOR_CYAN_DIM if new_val else C.COLOR_BORDER
+            try:
+                command(new_val)
+            except TypeError:
+                command()
+
+        b = button(r, "ON" if on else "OFF", _on_click, size=9, padx=14,
                    bg=C.COLOR_CYAN_DIM if on else C.COLOR_BORDER, fg=C.COLOR_TEXT_PRIMARY)
         b.pack(side="right", padx=px(12))
+        b_ref[0] = b
 
     def _apply_status_item(self, key: str, st: Optional[Dict[str, Any]]) -> None:
         if not hasattr(self, "_status_labels") or key not in self._status_labels:
