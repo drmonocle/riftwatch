@@ -78,7 +78,21 @@ class Worker(threading.Thread):
             self._status("catalog", False, "Riot teams API unreachable")
 
     def _job_schedule(self) -> None:
-        matches = self.coord.fetch_schedule()
+        leagues = set(self.settings.get("followed_leagues", [])) | set(self.settings.get("schedule_selected_leagues", []))
+        known_ids = dict(C.KNOWN_LEAGUE_IDS)
+        try:
+            db_leagues = catalog_mod.db.get_leagues(self.db_path)
+            for l in db_leagues:
+                if l.get("slug") and l.get("league_id"):
+                    known_ids[l["slug"]] = l["league_id"]
+        except Exception:
+            pass
+        target_ids = {known_ids[sl] for sl in leagues if sl in known_ids}
+        for m in ("lck", "lpl", "lec", "lcs", "worlds", "msi", "first_stand"):
+            if m in known_ids:
+                target_ids.add(known_ids[m])
+
+        matches = self.coord.fetch_schedule(league_ids=target_ids)
         if matches is None:
             self._post("schedule", self.coord.cached_schedule())
             self._status("schedule", False, "Riot schedule API unreachable (showing cache)")

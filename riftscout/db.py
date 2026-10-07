@@ -226,9 +226,9 @@ def upsert_matches(matches: List[Dict[str, Any]], db_path: Optional[Path] = None
                 vals = [str(m.get("match_id"))]
                 vals += [m.get(c) if m.get(c) is not None else _MATCH_DEFAULTS[c] for c in MATCH_COLS[1:]]
                 conn.execute(sql, (*vals, now))
-            # Keep the cache bounded: drop matches older than 21 days.
+            # Keep the cache bounded: drop matches older than 60 days.
             conn.execute(
-                "DELETE FROM matches WHERE start_time_utc < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-21 days')"
+                "DELETE FROM matches WHERE start_time_utc < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-60 days')"
             )
         return len(matches)
     finally:

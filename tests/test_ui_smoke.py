@@ -261,3 +261,81 @@ def test_stream_view_youtube_links(app, monkeypatch):
     assert "youtube.com" in C.YOUTUBE_LIVE_URL
     app.open_url(C.YOUTUBE_LIVE_URL)
     assert opened[-1] == C.YOUTUBE_LIVE_URL
+
+
+def test_schedule_league_selector_dialog(app):
+    from riftscout.ui.leagues import LeagueFilterDialog
+    app.show_tab("schedule")
+    sched_view = app.views["schedule"]
+    sched_view.render()
+
+    applied = []
+    dlg = LeagueFilterDialog(app.root, app, on_apply=lambda slugs: applied.append(slugs))
+    assert dlg.winfo_exists()
+
+    # Test preset big 4
+    dlg._preset_big4()
+    assert dlg.selected_leagues == {"lck", "lpl", "lec", "lcs"}
+
+    # Test preset international
+    dlg._preset_intl()
+    assert "worlds" in dlg.selected_leagues
+    assert "msi" in dlg.selected_leagues
+
+    # Test search filter
+    dlg.search_var.set("korea")
+    visible = [sl for sl, card, _ in dlg._league_widgets if card.winfo_ismapped()]
+    assert "lck" in visible
+
+    # Test save and apply
+    dlg._preset_big4()
+    dlg._save_and_apply()
+    assert applied == [["lck", "lpl", "lec", "lcs"]] or sorted(applied[0]) == ["lck", "lcs", "lec", "lpl"]
+    assert set(app.settings.get("schedule_selected_leagues")) == {"lck", "lpl", "lec", "lcs"}
+
+    # Test filtered schedule matches
+    app.state["schedule"] = [
+        dict(LIVE, match_id="m_lck", league_slug="lck", start_time_utc=iso(1)),
+        dict(LIVE, match_id="m_cblol", league_slug="cblol-brazil", start_time_utc=iso(2)),
+        dict(LIVE, match_id="m_lec", league_slug="lec", start_time_utc=iso(3)),
+    ]
+    filtered = sched_view.filtered()
+    matched_leagues = {m["league_slug"] for m in filtered}
+    assert "lck" in matched_leagues
+    assert "lec" in matched_leagues
+    assert "cblol-brazil" not in matched_leagues
+
+
+def test_stream_view_clean_action_buttons(app):
+    app.show_tab("stream")
+    stream_view = app.views["stream"]
+    stream_view.render()
+
+    def get_all_texts(widget):
+        texts = []
+        try:
+            txt = widget.cget("text")
+            if txt:
+                texts.append(txt)
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            texts.extend(get_all_texts(child))
+        return texts
+
+    all_texts = get_all_texts(stream_view.body)
+    # Hero card has primary watch buttons
+    assert any("Watch on Twitch" in t for t in all_texts)
+    assert any("Watch on YouTube" in t for t in all_texts)
+
+    # Banger and rows must NOT have redundant standalone buttons
+    assert "YT" not in all_texts
+    assert "▶ Twitch" not in all_texts
+    assert "▶ YouTube" not in all_texts
+
+
+def test_apply_dark_titlebar_safe(app):
+    from riftscout.ui.widgets import apply_dark_titlebar
+    # Calling apply_dark_titlebar on any window must execute safely
+    apply_dark_titlebar(app.root)
+

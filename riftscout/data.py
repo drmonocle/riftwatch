@@ -209,15 +209,44 @@ class DataCoordinator:
         self.headers = {"x-api-key": api_key}
         self.db_path = db_path
 
-    def fetch_schedule(self) -> Optional[List[Dict[str, Any]]]:
+    def _get_priority_league_ids(self) -> List[str]:
+        ids = set(C.KNOWN_LEAGUE_IDS.values())
+        try:
+            db_leagues = db.get_leagues(self.db_path)
+            for l in db_leagues:
+                slug, lid = l.get("slug"), l.get("league_id")
+                if slug in C.DEFAULT_FOLLOWED_LEAGUES and lid:
+                    ids.add(lid)
+        except Exception:
+            pass
+        return list(ids)
+
+    def fetch_schedule(self, league_ids: Optional[Any] = None) -> Optional[List[Dict[str, Any]]]:
         payload = net.fetch_json(C.RIOT_SCHEDULE_URL, headers=self.headers)
-        if not isinstance(payload, dict):
-            return None
-        events = ((payload.get("data") or {}).get("schedule") or {}).get("events") or []
-        matches = normalize_events(events)
-        if matches:
-            db.upsert_matches(matches, db_path=self.db_path)
-        return matches
+        all_matches: List[Dict[str, Any]] = []
+        if isinstance(payload, dict):
+            events = ((payload.get("data") or {}).get("schedule") or {}).get("events") or []
+            all_matches.extend(normalize_events(events))
+
+        target_ids = list(league_ids) if league_ids is not None else self._get_priority_league_ids()
+        if target_ids:
+            import concurrent.futures
+            def _fetch_league(lid: str) -> List[Dict[str, Any]]:
+                url = f"{C.RIOT_API_BASE}/getSchedule?hl=en-US&leagueId={lid}"
+                lp = net.fetch_json(url, headers=self.headers, timeout=8.0, max_retries=1)
+                if isinstance(lp, dict):
+                    evs = ((lp.get("data") or {}).get("schedule") or {}).get("events") or []
+                    return normalize_events(evs)
+                return []
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+                for ms in ex.map(_fetch_league, target_ids):
+                    all_matches.extend(ms)
+
+        if all_matches:
+            db.upsert_matches(all_matches, db_path=self.db_path)
+            return all_matches
+        return None if not isinstance(payload, dict) else []
 
     def cached_schedule(self) -> List[Dict[str, Any]]:
         return db.get_schedule(db_path=self.db_path)

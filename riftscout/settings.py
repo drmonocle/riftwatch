@@ -31,6 +31,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "start_with_windows": False,
     "schedule_filter_followed": False,
     "schedule_filter_league": "",
+    "schedule_selected_leagues": [],
     "schedule_filter_range": "upcoming",
     "window_geometry": "",
     "last_tab": "live",

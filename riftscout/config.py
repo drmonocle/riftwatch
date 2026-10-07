@@ -149,6 +149,22 @@ DEFAULT_FOLLOWED_LEAGUES = [
     "worlds", "msi", "first_stand", "lck", "lpl", "lec", "lcs", "lcp", "cblol-brazil",
 ]
 
+# Known Riot API league IDs for direct schedule querying
+KNOWN_LEAGUE_IDS = {
+    "worlds": "98767975604431411",
+    "msi": "98767991325878492",
+    "first_stand": "113464388705111224",
+    "lck": "98767991310872058",
+    "lpl": "98767991314006698",
+    "lec": "98767991302996019",
+    "lcs": "98767991299243165",
+    "cblol-brazil": "98767991332355509",
+    "lcp": "113476371197627891",
+    "demacia_cup": "117126995932274206",
+    "emea_masters": "100695891328981122",
+    "nacl": "109511549831443335",
+}
+
 DEFAULT_FOLLOWED_REGIONS = [
     "INTERNATIONAL", "KOREA", "EUROPE", "NORTH AMERICA", "CHINA",
 ]

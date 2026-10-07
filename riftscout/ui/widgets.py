@@ -25,6 +25,27 @@ def enable_dpi_awareness() -> None:
             pass
 
 
+def apply_dark_titlebar(window: tk.Misc) -> None:
+    """Enable Windows 10/11 Immersive Dark Mode for the native window frame."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetAncestor(window.winfo_id(), 2)
+        if not hwnd:
+            hwnd = window.winfo_id()
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+        value = ctypes.c_int(2)
+        hr = set_window_attribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(value), ctypes.sizeof(value))
+        if hr != 0:
+            DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19
+            set_window_attribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ctypes.byref(value), ctypes.sizeof(value))
+    except Exception:
+        pass
+
+
 def init_scale(root: tk.Misc) -> None:
     global _SCALE
     try:

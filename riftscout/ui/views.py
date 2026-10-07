@@ -262,16 +262,21 @@ class ScheduleView(View):
                               size=9)
         self._btn_fo.pack(side="left", padx=(px(12), px(4)))
 
-        self._mb_league = tk.Menubutton(self.filters, text="League: All  ▾", font=font(9, True),
-                                        bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_PRIMARY, activebackground=C.COLOR_BORDER,
-                                        activeforeground=C.COLOR_TEXT_PRIMARY, relief="flat", padx=px(10), pady=px(4),
-                                        cursor="hand2")
-        self._menu_league = tk.Menu(self._mb_league, tearoff=0, bg=C.COLOR_SURFACE, fg=C.COLOR_TEXT_PRIMARY,
-                                    activebackground=C.COLOR_GOLD, activeforeground=C.COLOR_BG, font=font(9))
-        self._mb_league.configure(menu=self._menu_league)
-        self._mb_league.pack(side="left", padx=px(4))
+        self._btn_leagues = button(self.filters, "🏆 Leagues: All  ▾", self.open_league_selector, size=9,
+                                   tooltip="Click to select individual LoL Esports leagues for the schedule")
+        self._btn_leagues.pack(side="left", padx=px(4))
+        self._mb_league = self._btn_leagues  # Backwards compatibility alias
         label(self.filters, "Times in your local time zone", 8, fg=C.COLOR_TEXT_DIM).pack(side="right")
         self._known_leagues = None
+
+    def open_league_selector(self) -> None:
+        from .leagues import LeagueFilterDialog
+        LeagueFilterDialog(self.winfo_toplevel(), self.app, on_apply=self._on_leagues_applied)
+
+    def _on_leagues_applied(self, selected_slugs: List[str]) -> None:
+        if hasattr(self.app, "worker"):
+            self.app.worker.request("schedule")
+        self.render()
 
     def _update_filters(self) -> None:
         s = self.app.settings
@@ -287,18 +292,31 @@ class ScheduleView(View):
                           C.COLOR_TEXT_PRIMARY)
         self._btn_fo.configure(text=("★ " if fo else "☆ ") + "Followed only")
 
-        leagues = sorted({(m["league_slug"], m["league_name"]) for m in self.app.state["schedule"]},
-                         key=lambda x: x[1].lower())
-        sel = s.get("schedule_filter_league", "")
-        names = dict(leagues)
-        self._mb_league.configure(text=f"League: {names.get(sel, 'All')}  ▾")
+        selected = s.get("schedule_selected_leagues", [])
+        legacy = s.get("schedule_filter_league", "")
+        if not selected and legacy:
+            selected = [legacy]
 
-        if leagues != self._known_leagues:
-            self._known_leagues = leagues
-            self._menu_league.delete(0, "end")
-            self._menu_league.add_command(label="All leagues", command=lambda: self._set("schedule_filter_league", ""))
-            for slug, name in leagues:
-                self._menu_league.add_command(label=name, command=lambda sl=slug: self._set("schedule_filter_league", sl))
+        if not selected:
+            self._btn_leagues.configure(text="🏆 Leagues: All  ▾")
+            set_button_colors(self._btn_leagues, C.COLOR_SURFACE, C.COLOR_TEXT_PRIMARY)
+        elif len(selected) == 1:
+            slug = selected[0]
+            cat = self.app.state.get("catalog")
+            name = slug.upper()
+            if cat and hasattr(cat, "league_by_slug"):
+                l_obj = cat.league_by_slug.get(slug)
+                if l_obj:
+                    name = l_obj.get("name", name)
+            self._btn_leagues.configure(text=f"🏆 League: {name}  ▾")
+            set_button_colors(self._btn_leagues, C.COLOR_GOLD, C.COLOR_BG)
+        elif len(selected) <= 3:
+            names = [s.upper() for s in selected]
+            self._btn_leagues.configure(text=f"🏆 Leagues: {', '.join(names)}  ▾")
+            set_button_colors(self._btn_leagues, C.COLOR_GOLD, C.COLOR_BG)
+        else:
+            self._btn_leagues.configure(text=f"🏆 Leagues ({len(selected)} Selected)  ▾")
+            set_button_colors(self._btn_leagues, C.COLOR_GOLD, C.COLOR_BG)
 
     def _set(self, key: str, value) -> None:
         self.app.settings.set(key, value)
@@ -307,7 +325,11 @@ class ScheduleView(View):
     def filtered(self) -> List[Dict[str, Any]]:
         a, s = self.app, self.app.settings
         rng = s.get("schedule_filter_range", "upcoming")
-        league = s.get("schedule_filter_league", "")
+        selected_leagues = set(s.get("schedule_selected_leagues", []))
+        legacy_league = s.get("schedule_filter_league", "")
+        if legacy_league and not selected_leagues:
+            selected_leagues = {legacy_league}
+
         followed_only = s.get("schedule_filter_followed", False)
         live_ids = {m["match_id"]: m for m in a.state["live"]}
         now = utcnow()
@@ -318,7 +340,7 @@ class ScheduleView(View):
             dt = parse_iso_datetime(m.get("start_time_utc", ""))
             if not dt:
                 continue
-            if league and m["league_slug"] != league:
+            if selected_leagues and m["league_slug"] not in selected_leagues:
                 continue
             if followed_only and not a.watchlist.is_followed(m):
                 continue
@@ -326,11 +348,11 @@ class ScheduleView(View):
                 continue
             if rng == "today" and dt.astimezone().date() != today:
                 continue
-            if rng == "results" and (m["state"] != "completed" or now - dt > datetime.timedelta(days=7)):
+            if rng == "results" and (m["state"] != "completed" or now - dt > datetime.timedelta(days=14)):
                 continue
             out.append(m)
         out.sort(key=lambda m: m["start_time_utc"], reverse=(rng == "results"))
-        return out[:80]
+        return out[:100]
 
     def _build(self) -> None:
         self._update_filters()
@@ -419,14 +441,6 @@ class StreamView(View):
             b_top = tk.Frame(b, bg=C.COLOR_SURFACE)
             b_top.pack(fill="x", padx=px(14), pady=(px(8), 0))
             label(b_top, "NEXT S-TIER BANGER", 8, True, fg=C.COLOR_BANGER).pack(side="left")
-            b_links = tk.Frame(b_top, bg=C.COLOR_SURFACE)
-            b_links.pack(side="right")
-            button(b_links, "▶ Twitch", lambda: a.open_url(C.TWITCH_CHANNEL_URL), size=7, bold=True,
-                   bg="#9146ff", fg="white", hover_bg="#a970ff", padx=6, pady=2,
-                   tooltip="Watch stream on Twitch").pack(side="left", padx=px(2))
-            button(b_links, "▶ YouTube", lambda: a.open_url(C.YOUTUBE_LIVE_URL), size=7, bold=True,
-                   bg="#cc0000", fg="white", hover_bg="#e60000", padx=6, pady=2,
-                   tooltip="Watch stream on YouTube").pack(side="left", padx=px(2))
             label(b, f"{event_title(banger)}   ·   {event_subtitle(banger)}", 12, True).pack(anchor="w", padx=px(14), pady=(px(2), 0))
             label(b, f"{format_local_match_time(banger['start_utc'])}  ({format_relative_time(banger['start_utc'], now)})",
                   9, fg=C.COLOR_TEXT_MUTED).pack(anchor="w", padx=px(14), pady=(0, px(8)))
@@ -471,12 +485,6 @@ class StreamView(View):
         label(mid, event_subtitle(e), 8, fg=C.COLOR_TEXT_MUTED).pack(anchor="w")
         right = tk.Frame(row, bg=C.COLOR_SURFACE)
         right.pack(side="right", padx=px(12))
-        button(right, "YT", lambda: self.app.open_url(C.YOUTUBE_LIVE_URL), size=7, bold=True,
-               bg="#cc0000", fg="white", hover_bg="#e60000", padx=5, pady=2,
-               tooltip="Watch 24/7 stream on YouTube").pack(side="right", padx=px(2))
-        button(right, "Twitch", lambda: self.app.open_url(C.TWITCH_CHANNEL_URL), size=7, bold=True,
-               bg="#9146ff", fg="white", hover_bg="#a970ff", padx=5, pady=2,
-               tooltip="Watch 24/7 stream on Twitch").pack(side="right", padx=px(2))
         if e.get("is_banger"):
             pill(right, "BANGER", C.COLOR_BANGER, fg="white").pack(side="right", padx=px(3))
         for r in reasons:

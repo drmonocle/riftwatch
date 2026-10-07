@@ -10,12 +10,13 @@ from typing import Dict, List, Set
 
 from .. import config as C
 from . import cards
-from .widgets import ScrollFrame, button, font, label, pill, px
+from .widgets import ScrollFrame, apply_dark_titlebar, button, font, label, pill, px
 
 
 class OnboardingWizard(tk.Toplevel):
     def __init__(self, parent, app):
         super().__init__(parent)
+        self.withdraw()
         self.app = app
         self.settings = app.settings
 
@@ -23,8 +24,6 @@ class OnboardingWizard(tk.Toplevel):
         self.configure(bg=C.COLOR_BG)
         self.minsize(px(780), px(580))
         self.geometry(f"{px(860)}x{px(660)}")
-        self.transient(parent)
-        self.grab_set()
 
         # Track local selections before saving
         self.selected_regions: Set[str] = set(self.settings.followed_regions())
@@ -41,6 +40,11 @@ class OnboardingWizard(tk.Toplevel):
 
         self._build_ui()
         self._center_window(parent)
+        apply_dark_titlebar(self)
+        self.update_idletasks()
+        self.deiconify()
+        self.transient(parent)
+        self.grab_set()
 
     def _center_window(self, parent):
         try:

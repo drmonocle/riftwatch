@@ -67,6 +67,7 @@ class RiftScoutApp:
         geo = self.settings.get("window_geometry", "")
         root.geometry(geo if geo else f"{W.px(1000)}x{W.px(720)}")
         self._set_icon()
+        W.apply_dark_titlebar(root)
         self._build_chrome()
 
         self.views: Dict[str, tk.Frame] = {}
@@ -570,9 +571,14 @@ def run() -> None:
         return
     W.enable_dpi_awareness()
     root = tk.Tk()
+    root.withdraw()
     root.option_add("*Background", C.COLOR_BG)
     root.option_add("*Foreground", C.COLOR_TEXT_PRIMARY)
+    root.configure(bg=C.COLOR_BG)
     RiftScoutApp(root)
+    W.apply_dark_titlebar(root)
+    root.update_idletasks()
+    root.deiconify()
     try:
         root.mainloop()
     finally:

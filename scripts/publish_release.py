@@ -34,17 +34,15 @@ def main():
     notes = f"""## RiftWatch {version} - Windows Desktop Esports Sentinel & 24/7 Stream Companion
 
 ### ✨ What's New & Refined in {version}
-* **YouTube Live Stream Integration for 24/7 Schedule:**
-  * **24/7 Stream Hero & Spotlight:** Added prominent `▶ Watch on YouTube` buttons (`#cc0000`) alongside `▶ Watch on Twitch` on the 24/7 hero banner and the Next S-Tier Banger spotlight card.
-  * **Direct Stream Action per Schedule Row:** Every upcoming rebroadcast row in the 24/7 schedule table now features individual `YT` and `Twitch` action buttons so users can instantly tune in with a single click.
-  * **System Tray Quick Links:** Added `Watch 24/7 Stream (YouTube)` and `Watch 24/7 Stream (Twitch)` to the system tray context menu.
-  * **Settings Hub Integration:** Displays both Twitch and YouTube stream URLs with one-click direct browser launchers.
-* **Double-Buffered Smooth UI (Zero White Screen Flashing):**
-  * Fully background-rendered page hierarchies with atomic canvas swaps in `ScrollFrame` to eliminate Win32 `WM_ERASEBKGND` flicker.
-* **Robust In-App Updater & Auto-Restart:**
-  * Safe file replacement with `.old` fallback, mutex release, and visible process relaunching.
-* **Accurate 24/7 Stream Offline State:**
-  * Streamlined header badge and hero cards strictly displaying `Offline` when streams are down without showing scheduled match titles.
+* **Zero White Screen Flash on Startup & Update Relaunch:**
+  * **Off-Screen Window Staging:** Windows are now initialized in a withdrawn off-screen state (`root.withdraw()`) while dark Hextech themes and widgets are assembled, revealing via `deiconify()` only after all off-screen geometry and dark canvas buffers are calculated.
+  * **Windows 10/11 Immersive Dark Mode Titlebars:** Native Win32 HWNDs now automatically activate `DWMWA_USE_IMMERSIVE_DARK_MODE` (20), preventing Windows from painting default `#FFFFFF` white window classes on application launch or after in-app updater restarts.
+* **LoL Esports Leagues Multi-Selector & Schedule Expansion:**
+  * **Dedicated League Filter Modal:** Replaced the single-league dropdown with a comprehensive Hextech league selector dialog (`LeagueFilterDialog`). Users can now select any combination of individual pro leagues to track together on the Schedule page.
+  * **Full Riot Leagues Coverage (LCK, LPL, LEC, LCS, Worlds):** Directly queries Riot's API across 12+ league IDs in parallel, fetching 80+ events per league (LCK, LPL, LEC, LCS, Worlds, MSI, First Stand, Demacia Cup, CBLOL, LCP) and expanding cache retention to 60 days.
+  * **1-Click Quick Presets & Real-Time Search:** Includes instant filters for "★ All Leagues", "⭐ Big 4 Major (LCK/LPL/LEC/LCS)", "🌐 International", and "★ Followed in Watchlist", plus dynamic instant-search filtering.
+* **Streamlined 24/7 Broadcast Replays Tab:**
+  * Cleaned up redundant streaming buttons: high-contrast "▶ Watch on Twitch" and "▶ Watch on YouTube" buttons remain front-and-center on the current live broadcast hero card, while the Next S-Tier Banger card and individual upcoming rebroadcast rows have been decluttered.
 
 ### 📦 Checksums & Integrity
 * **Executable:** `RiftWatch.exe`
