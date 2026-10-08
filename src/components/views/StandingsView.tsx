@@ -32,14 +32,20 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [schedule]);
 
-  const [selectedLeague, setSelectedLeague] = useState<string>(() => {
-    return availableLeagues.length > 0 ? availableLeagues[0].slug : "";
-  });
+  const [selectedLeague, setSelectedLeague] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Automatically select first available league if none selected or previous no longer available
+  const activeLeague = useMemo(() => {
+    if (selectedLeague && availableLeagues.some((l) => l.slug === selectedLeague)) {
+      return selectedLeague;
+    }
+    return availableLeagues.length > 0 ? availableLeagues[0].slug : "";
+  }, [selectedLeague, availableLeagues]);
+
   const standings = useMemo(() => {
-    return computeLeagueStandings(selectedLeague, schedule);
-  }, [selectedLeague, schedule]);
+    return computeLeagueStandings(activeLeague, schedule);
+  }, [activeLeague, schedule]);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return standings;
@@ -61,7 +67,7 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
               type="button"
               onClick={() => setSelectedLeague(l.slug)}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
-                selectedLeague === l.slug
+                activeLeague === l.slug
                   ? "bg-[#c8aa6e] text-[#091428] font-bold shadow-md shadow-[#c8aa6e]/10"
                   : "bg-[#0a1420] text-[#9bb3c9] hover:text-[#f0e6d2] hover:bg-[#121e2d] border border-[#1e282d]"
               }`}
@@ -70,7 +76,9 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
             </button>
           ))}
           {availableLeagues.length === 0 && (
-            <span className="text-xs text-[#9bb3c9]">No completed tournaments in current window</span>
+            <span className="text-xs text-[#9bb3c9]">
+              {schedule.length === 0 ? "Loading tournament schedule…" : "No completed tournament matches in current window"}
+            </span>
           )}
         </div>
 

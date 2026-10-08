@@ -339,8 +339,14 @@ export const LiveView: React.FC<LiveViewProps> = ({
                   <div className="flex items-center justify-center gap-1.5 my-2 pt-2 border-t border-[#1e282d]/40">
                     {Array.from({ length: m.bestOf }).map((_, idx) => {
                       const gNum = idx + 1;
-                      const isPast = gNum <= m.team1Score + m.team2Score;
-                      const isCurrent = !isPast && m.team1Score + m.team2Score === idx;
+                      const winsNeeded = Math.ceil((m.bestOf || 1) / 2);
+                      const isMatchDone = m.state === "completed" || (m.team1Score ?? 0) >= winsNeeded || (m.team2Score ?? 0) >= winsNeeded;
+                      const totalGamesPlayed = (m.team1Score ?? 0) + (m.team2Score ?? 0);
+                      const isPast = gNum <= totalGamesPlayed;
+                      const isCurrent = !isMatchDone && !isPast && totalGamesPlayed === idx;
+                      const isNotNeeded = isMatchDone && gNum > totalGamesPlayed;
+
+                      if (isNotNeeded) return null;
 
                       return (
                         <span
@@ -362,10 +368,27 @@ export const LiveView: React.FC<LiveViewProps> = ({
 
                 {/* Action Footer */}
                 <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#1e282d]/60 text-xs">
-                  <span className="flex items-center gap-1.5 text-[#e84057] font-semibold text-[11px]">
-                    <span className="w-2 h-2 rounded-full bg-[#e84057] animate-ping" />
-                    Match In Progress
-                  </span>
+                  {(() => {
+                    const winsNeeded = Math.ceil((m.bestOf || 1) / 2);
+                    const isDone = m.state === "completed" || (m.team1Score ?? 0) >= winsNeeded || (m.team2Score ?? 0) >= winsNeeded;
+                    if (isDone) {
+                      const winnerName = m.winner
+                        ? m.winner === m.team1Code ? m.team1Name : m.team2Name
+                        : (m.team1Score ?? 0) > (m.team2Score ?? 0) ? m.team1Name : m.team2Name;
+                      return (
+                        <span className="flex items-center gap-1.5 text-[#0ac8b9] font-bold text-[11px]">
+                          <span className="w-2 h-2 rounded-full bg-[#0ac8b9]" />
+                          Final · {winnerName} Won ({Math.max(m.team1Score, m.team2Score)}-{Math.min(m.team1Score, m.team2Score)})
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="flex items-center gap-1.5 text-[#e84057] font-semibold text-[11px]">
+                        <span className="w-2 h-2 rounded-full bg-[#e84057] animate-ping" />
+                        Match In Progress
+                      </span>
+                    );
+                  })()}
 
                   <button
                     onClick={() => onOpenUrl(m.streamUrl || "https://lolesports.com")}

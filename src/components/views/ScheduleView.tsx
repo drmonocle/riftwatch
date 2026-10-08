@@ -59,7 +59,10 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
     if (filterRange === "today") {
       if (!matchDate || matchDate.toDateString() !== todayStr) return false;
     } else if (filterRange === "upcoming") {
-      if (!matchDate || m.state === "completed" || matchDate < now) return false;
+      if (!matchDate || m.state === "completed") return false;
+      // Allow matches scheduled in the future or pending today
+      const isPending = m.state === "inProgress" || m.state === "unstarted";
+      if (!isPending && matchDate < now) return false;
     } else if (filterRange === "results") {
       if (m.state !== "completed") return false;
     }

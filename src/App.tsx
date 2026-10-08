@@ -68,6 +68,23 @@ export default function App() {
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<{ code: string; name?: string } | null>(null);
 
+  // Persistent refs to prevent React stale closure bugs during periodic background polling
+  const liveMatchesRef = useRef<Match[]>([]);
+  const scheduleRef = useRef<Match[]>([]);
+  const streamEventsRef = useRef<StreamEvent[]>([]);
+
+  useEffect(() => {
+    liveMatchesRef.current = liveMatches;
+  }, [liveMatches]);
+
+  useEffect(() => {
+    scheduleRef.current = schedule;
+  }, [schedule]);
+
+  useEffect(() => {
+    streamEventsRef.current = streamEvents;
+  }, [streamEvents]);
+
   // Sync settings across windows (main window and detached HUD window)
   useEffect(() => {
     const handleSync = () => {
@@ -143,8 +160,8 @@ export default function App() {
     inFlight.current = true;
     setIsRefreshing(true);
     const now = Date.now();
-    const wantSchedule = force || now - lastSchedule.current >= SCHEDULE_POLL_MS - 1000;
-    const wantStream = force || now - lastStream.current >= STREAM_POLL_MS - 1000;
+    const wantSchedule = force || scheduleRef.current.length === 0 || now - lastSchedule.current >= SCHEDULE_POLL_MS - 1000;
+    const wantStream = force || streamEventsRef.current.length === 0 || now - lastStream.current >= STREAM_POLL_MS - 1000;
 
     try {
       // allSettled: one source failing must never wipe the data we already have
@@ -154,24 +171,27 @@ export default function App() {
         wantStream ? fetchStreamSchedule() : Promise.resolve(null),
       ]);
 
-      let nextLive = liveMatches;
-      let nextSched = schedule;
+      let nextLive = liveMatchesRef.current;
+      let nextSched = scheduleRef.current;
 
       if (live.status === "fulfilled") {
         nextLive = live.value.matches;
       }
-      if (sched.status === "fulfilled" && sched.value) {
+      if (sched.status === "fulfilled" && sched.value && sched.value.length > 0) {
         nextSched = sched.value;
         lastSchedule.current = now;
       }
 
       // Correlate live broadcasts with scheduled matches to surface live tournament slates
       const { finalLive, finalSchedule } = reconcileLiveAndSchedule(nextLive, nextSched);
+      liveMatchesRef.current = finalLive;
+      scheduleRef.current = finalSchedule;
       setLiveMatches(finalLive);
       setSchedule(finalSchedule);
       liveCount.current = finalLive.filter((m) => m.state === "inProgress").length;
 
-      if (stream.status === "fulfilled" && stream.value) {
+      if (stream.status === "fulfilled" && stream.value && stream.value.length > 0) {
+        streamEventsRef.current = stream.value;
         setStreamEvents(stream.value);
         lastStream.current = now;
       }

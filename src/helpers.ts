@@ -235,9 +235,22 @@ export function isMatchFollowed(
 }
 
 /**
+ * Helper to determine if a match has reached completion,
+ * either by state === "completed" or by one team reaching the wins threshold (e.g. 3 in Bo5, 2 in Bo3).
+ */
+export function isMatchCompleted(m: Match): boolean {
+  if (m.state === "completed") return true;
+  const bestOf = m.bestOf || 1;
+  const winsNeeded = Math.ceil(bestOf / 2);
+  const t1Score = m.team1Score ?? 0;
+  const t2Score = m.team2Score ?? 0;
+  return t1Score >= winsNeeded || t2Score >= winsNeeded;
+}
+
+/**
  * Reconciles Riot's live matches (/getLive) with scheduled matches (/getSchedule).
  * Ensures legitimate inProgress matches from either source are captured,
- * while preventing fake/synthetic placeholders from ever appearing in liveMatches.
+ * while preventing completed matches or fake/synthetic placeholders from ever appearing in liveMatches.
  */
 export function reconcileLiveAndSchedule(
   liveMatches: Match[],
@@ -246,18 +259,48 @@ export function reconcileLiveAndSchedule(
   const finalLive: Match[] = [];
   const liveById = new Set<string>();
 
-  // Add all legitimate live matches from getLive
+  // Map schedule matches by matchId
+  const scheduleById = new Map<string, Match>();
+  for (const sm of scheduleMatches) {
+    scheduleById.set(sm.matchId, sm);
+  }
+
+  // 1. Process matches from getLive
   for (const lm of liveMatches) {
     if (lm.team1Code === "LIVE" || lm.team2Code === "AIR") continue;
+
+    // Check if match is finished (by score threshold or marked completed in schedule)
+    const sm = scheduleById.get(lm.matchId);
+    const isDone = isMatchCompleted(lm) || (sm && isMatchCompleted(sm));
+
+    if (isDone) {
+      // Synchronize completion and latest scores onto schedule match
+      if (sm) {
+        sm.state = "completed";
+        sm.team1Score = Math.max(sm.team1Score ?? 0, lm.team1Score ?? 0);
+        sm.team2Score = Math.max(sm.team2Score ?? 0, lm.team2Score ?? 0);
+        if (!sm.winner) {
+          sm.winner = sm.team1Score > sm.team2Score ? sm.team1Code : sm.team2Code;
+        }
+      }
+      continue; // NEVER add completed matches to finalLive
+    }
+
     if (!liveById.has(lm.matchId)) {
       liveById.add(lm.matchId);
       finalLive.push(lm);
     }
   }
 
-  // Also check if schedule has any matches legitimately marked inProgress by Riot
+  // 2. Process schedule matches
   const updatedSchedule = scheduleMatches.map((sm) => {
-    if (sm.state === "inProgress" && !liveById.has(sm.matchId)) {
+    // If schedule match reached winning threshold, ensure marked completed
+    if (isMatchCompleted(sm)) {
+      sm.state = "completed";
+      if (!sm.winner) {
+        sm.winner = (sm.team1Score ?? 0) > (sm.team2Score ?? 0) ? sm.team1Code : sm.team2Code;
+      }
+    } else if (sm.state === "inProgress" && !liveById.has(sm.matchId)) {
       liveById.add(sm.matchId);
       finalLive.push(sm);
     }
