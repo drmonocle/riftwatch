@@ -187,7 +187,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 const isT2Followed = settings.followedTeams.includes(m.team2Code);
                 const isRevealed = !!revealedMatchIds[m.matchId];
                 const showScore = m.state === "completed" && (!settings.spoilerMode || isRevealed);
-                const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule);
+                const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule, m.matchId);
 
                 return (
                   <div
@@ -267,12 +267,12 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                             <span className="text-[#9bb3c9] font-medium">VS</span>
                           )}
                         </div>
-                        {h2h && h2h.totalMeetings > 0 && (
+                        {(showScore || m.state !== "completed") && h2h && (
                           <span
                             className="text-[9px] font-mono text-[#9bb3c9] mt-0.5"
-                            title={`Head-to-head record in recent results: ${m.team1Code} ${h2h.team1Wins}-${h2h.team2Wins} ${m.team2Code}`}
+                            title={`All-Time Head-to-Head: ${m.team1Code} ${h2h.team1Wins}-${h2h.team2Wins} ${m.team2Code} (${h2h.totalGames} games)`}
                           >
-                            H2H {h2h.team1Wins}:{h2h.team2Wins}
+                            All-Time H2H {h2h.team1Wins}:{h2h.team2Wins}
                           </span>
                         )}
                       </div>

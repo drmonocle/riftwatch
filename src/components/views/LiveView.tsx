@@ -577,13 +577,13 @@ export const LiveView: React.FC<LiveViewProps> = ({
 
               {/* Head-to-Head Record Banner */}
               {(() => {
-                const h2h = computeHeadToHead(nextMatch.team1Code, nextMatch.team2Code, schedule);
-                if (h2h && h2h.totalMatches > 0) {
+                const h2h = computeHeadToHead(nextMatch.team1Code, nextMatch.team2Code, schedule, nextMatch.matchId);
+                if (h2h) {
                   return (
                     <div className="flex items-center justify-center gap-2 mt-2 px-3 py-1 rounded-full bg-[#091428] border border-[#c8aa6e]/40 text-[#c8aa6e] text-xs font-medium">
                       <Swords className="w-3.5 h-3.5 text-[#0ac8b9]" />
                       <span>
-                        H2H Record: <strong className="text-[#f0e6d2]">{nextMatch.team1Code} {h2h.team1Wins} - {h2h.team2Wins} {nextMatch.team2Code}</strong> ({h2h.totalMatches} series, {h2h.team1GameWins}-{h2h.team2GameWins} games)
+                        All-Time H2H: <strong className="text-[#f0e6d2]">{nextMatch.team1Code} {h2h.team1Wins} - {h2h.team2Wins} {nextMatch.team2Code}</strong> ({h2h.totalGames} all-time games)
                       </span>
                     </div>
                   );

@@ -1,4 +1,19 @@
 import { Match, StreamEvent, AppSettings, League } from "./types";
+import allTimeH2HJson from "./all_time_h2h.json";
+
+const ALL_TIME_H2H: Record<string, [number, number]> = (allTimeH2HJson as unknown) as Record<string, [number, number]>;
+
+const CODE_ALIASES: Record<string, string> = {
+  TLAW: "TL",
+  MKOI: "MDK",
+  KBM: "KBM",
+};
+
+export function normalizeTeamCode(code: string): string {
+  if (!code) return "";
+  const upper = code.trim().toUpperCase();
+  return CODE_ALIASES[upper] || upper;
+}
 
 /** If the schedule's latest started entry is older than this, the stream is treated as offline. */
 const MAX_AIRING_GAP_MS = 10 * 60 * 60 * 1000;
@@ -313,6 +328,7 @@ export function reconcileLiveAndSchedule(
 export interface HeadToHeadStats {
   team1Wins: number;
   team2Wins: number;
+  totalGames: number;
   totalMeetings: number;
   totalMatches: number;
   team1GameWins: number;
@@ -324,55 +340,99 @@ export interface HeadToHeadStats {
 export function computeHeadToHead(
   team1Code: string,
   team2Code: string,
-  schedule: Match[]
+  schedule?: Match[],
+  excludeMatchId?: string
 ): HeadToHeadStats | null {
-  const c1 = (team1Code || "").trim().toUpperCase();
-  const c2 = (team2Code || "").trim().toUpperCase();
+  const c1 = normalizeTeamCode(team1Code);
+  const c2 = normalizeTeamCode(team2Code);
   if (!c1 || !c2 || c1 === c2 || c1 === "TBD" || c2 === "TBD") return null;
 
-  const pastMatches = schedule
-    .filter((m) => {
-      if (m.state !== "completed") return false;
-      const m1 = (m.team1Code || "").trim().toUpperCase();
-      const m2 = (m.team2Code || "").trim().toUpperCase();
-      return (m1 === c1 && m2 === c2) || (m1 === c2 && m2 === c1);
-    })
-    .sort((a, b) => new Date(b.startTimeUtc).getTime() - new Date(a.startTimeUtc).getTime());
+  // 1. All-time games from all_time_h2h.json
+  let t1AllTimeWins = 0;
+  let t2AllTimeWins = 0;
+  let hasAllTimeRecord = false;
 
-  if (pastMatches.length === 0) return null;
+  const key1 = `${c1}__${c2}`;
+  const key2 = `${c2}__${c1}`;
 
-  let team1Wins = 0;
-  let team2Wins = 0;
-  let team1GameWins = 0;
-  let team2GameWins = 0;
-
-  for (const m of pastMatches) {
-    const isC1Team1 = (m.team1Code || "").trim().toUpperCase() === c1;
-    const c1Score = isC1Team1 ? m.team1Score : m.team2Score;
-    const c2Score = isC1Team1 ? m.team2Score : m.team1Score;
-
-    team1GameWins += c1Score;
-    team2GameWins += c2Score;
-
-    if (c1Score > c2Score) team1Wins++;
-    else if (c2Score > c1Score) team2Wins++;
+  if (ALL_TIME_H2H[key1]) {
+    t1AllTimeWins = ALL_TIME_H2H[key1][0];
+    t2AllTimeWins = ALL_TIME_H2H[key1][1];
+    hasAllTimeRecord = true;
+  } else if (ALL_TIME_H2H[key2]) {
+    t1AllTimeWins = ALL_TIME_H2H[key2][1];
+    t2AllTimeWins = ALL_TIME_H2H[key2][0];
+    hasAllTimeRecord = true;
   }
 
-  const last = pastMatches[0];
-  const isLastC1Team1 = (last.team1Code || "").trim().toUpperCase() === c1;
-  const lastC1Score = isLastC1Team1 ? last.team1Score : last.team2Score;
-  const lastC2Score = isLastC1Team1 ? last.team2Score : last.team1Score;
-  const lastWinner = lastC1Score > lastC2Score ? c1 : c2;
+  // 2. Schedule additions: only count matches AFTER database cutoff (2026-09-26)
+  // or count all completed matches if not in all_time_h2h, and strictly exclude `excludeMatchId`
+  let scheduleT1Wins = 0;
+  let scheduleT2Wins = 0;
+  let recentMeetingsCount = 0;
+  let lastWinner: string | undefined;
+  let lastDate: string | undefined;
+
+  const CUTOFF_MS = new Date("2026-09-26T00:00:00Z").getTime();
+
+  if (schedule && schedule.length > 0) {
+    const pastMatches = schedule
+      .filter((m) => {
+        if (m.state !== "completed") return false;
+        if (excludeMatchId && m.matchId === excludeMatchId) return false;
+        const m1 = normalizeTeamCode(m.team1Code);
+        const m2 = normalizeTeamCode(m.team2Code);
+        const isMatchup = (m1 === c1 && m2 === c2) || (m1 === c2 && m2 === c1);
+        if (!isMatchup) return false;
+
+        if (hasAllTimeRecord) {
+          const matchTime = new Date(m.startTimeUtc).getTime();
+          return !isNaN(matchTime) && matchTime >= CUTOFF_MS;
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.startTimeUtc).getTime() - new Date(a.startTimeUtc).getTime());
+
+    recentMeetingsCount = pastMatches.length;
+
+    for (const m of pastMatches) {
+      const isC1Team1 = normalizeTeamCode(m.team1Code) === c1;
+      const c1Score = isC1Team1 ? m.team1Score : m.team2Score;
+      const c2Score = isC1Team1 ? m.team2Score : m.team1Score;
+      scheduleT1Wins += c1Score;
+      scheduleT2Wins += c2Score;
+    }
+
+    if (pastMatches.length > 0) {
+      const last = pastMatches[0];
+      const isLastC1Team1 = normalizeTeamCode(last.team1Code) === c1;
+      const lastC1Score = isLastC1Team1 ? last.team1Score : last.team2Score;
+      const lastC2Score = isLastC1Team1 ? last.team2Score : last.team1Score;
+      lastWinner = lastC1Score > lastC2Score ? c1 : c2;
+      lastDate = last.startTimeUtc;
+    }
+  }
+
+  const team1Wins = t1AllTimeWins + scheduleT1Wins;
+  const team2Wins = t2AllTimeWins + scheduleT2Wins;
+  const totalGames = team1Wins + team2Wins;
+
+  // Strict user requirement:
+  // "if teams have played each other more then 5 games it should show the h2h of all time between the 2 teams"
+  if (totalGames <= 5) {
+    return null;
+  }
 
   return {
     team1Wins,
     team2Wins,
-    totalMeetings: pastMatches.length,
-    totalMatches: pastMatches.length,
-    team1GameWins,
-    team2GameWins,
+    totalGames,
+    totalMeetings: recentMeetingsCount,
+    totalMatches: recentMeetingsCount,
+    team1GameWins: team1Wins,
+    team2GameWins: team2Wins,
     lastWinner,
-    lastDate: last.startTimeUtc,
+    lastDate,
   };
 }
 
