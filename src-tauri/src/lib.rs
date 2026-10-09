@@ -146,14 +146,12 @@ fn apply_app_update(app: tauri::AppHandle, download_url: String, checksum_url: S
         }
 
         let current_exe = std::env::current_exe().map_err(|e| format!("Failed to locate current executable: {}", e))?;
-        let pid = std::process::id();
 
         let temp_dir = std::env::temp_dir();
         let new_exe = temp_dir.join("RiftWatch_update.exe");
         let sum_file = temp_dir.join("RiftWatch_update.sha256");
 
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        const DETACHED_PROCESS: u32 = 0x00000008;
 
         // Download via Windows native curl.exe: https only (including redirects), size- and time-limited.
         let download = |url: &str, dest: &std::path::Path, max_bytes: u64| -> Result<(), String> {
@@ -201,85 +199,31 @@ fn apply_app_update(app: tauri::AppHandle, download_url: String, checksum_url: S
         drop(bytes);
         let _ = std::fs::remove_file(&sum_file);
 
-        let script_path = temp_dir.join("riftwatch_apply_update.ps1");
-        let current_exe_str = current_exe.to_string_lossy().replace(r"\\?\", "");
-        let new_exe_str = new_exe.to_string_lossy().replace(r"\\?\", "");
+        // Swap in place, without a helper script: Windows lets a running .exe be renamed (not
+        // overwritten), so move ourselves aside, copy the verified update into our path, start it,
+        // and exit. No PowerShell means nothing for script policies or antivirus to block, and a
+        // folder we can't write to is reported here instead of the app just closing.
+        let old_exe = update::old_exe_path(&current_exe);
+        let _ = std::fs::remove_file(&old_exe); // leftover from an earlier update
+        if let Err(e) = std::fs::rename(&current_exe, &old_exe) {
+            cleanup();
+            return Err(format!(
+                "Couldn't replace RiftWatch in {} ({}). Move RiftWatch.exe to a folder you can write to (for example Documents) or download the update from GitHub.",
+                current_exe.parent().map(|d| d.display().to_string()).unwrap_or_default(),
+                e
+            ));
+        }
+        if let Err(e) = std::fs::copy(&new_exe, &current_exe) {
+            let _ = std::fs::rename(&old_exe, &current_exe); // put the working version back
+            cleanup();
+            return Err(format!("Couldn't install the update ({}). Nothing was changed.", e));
+        }
+        let _ = std::fs::remove_file(&new_exe);
 
-        let script_content = format!(
-            "$oldPid = {pid}\r\n\
-$target = '{target}'\r\n\
-$source = '{source}'\r\n\
-$expected = '{expected}'\r\n\
-\r\n\
-try {{\r\n\
-    $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue\r\n\
-    if ($proc) {{\r\n\
-        $proc.WaitForExit(4000)\r\n\
-        if (-not $proc.HasExited) {{\r\n\
-            Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue\r\n\
-            Start-Sleep -Milliseconds 500\r\n\
-        }}\r\n\
-    }}\r\n\
-}} catch {{}}\r\n\
-\r\n\
-Start-Sleep -Milliseconds 600\r\n\
-if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLower() -ne $expected) {{ Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue; exit 1 }}\r\n\
-try {{ Unblock-File -LiteralPath $source -ErrorAction SilentlyContinue }} catch {{}}\r\n\
-\r\n\
-$swapped = $false\r\n\
-for ($i = 0; $i -lt 25; $i++) {{\r\n\
-    try {{\r\n\
-        if (Test-Path -LiteralPath \"$target.bak\") {{\r\n\
-            Remove-Item -LiteralPath \"$target.bak\" -Force -ErrorAction SilentlyContinue\r\n\
-        }}\r\n\
-        Move-Item -LiteralPath $target -Destination \"$target.bak\" -Force\r\n\
-        Copy-Item -LiteralPath $source -Destination $target -Force\r\n\
-        if ((Test-Path -LiteralPath $target) -and ((Get-Item $target).Length -ge 500000)) {{\r\n\
-            $swapped = $true\r\n\
-            Remove-Item -LiteralPath \"$target.bak\" -Force -ErrorAction SilentlyContinue\r\n\
-            break\r\n\
-        }}\r\n\
-    }} catch {{\r\n\
-        Start-Sleep -Milliseconds 500\r\n\
-    }}\r\n\
-}}\r\n\
-\r\n\
-if (-not $swapped -and (Test-Path -LiteralPath \"$target.bak\")) {{\r\n\
-    try {{ Move-Item -LiteralPath \"$target.bak\" -Destination $target -Force -ErrorAction SilentlyContinue }} catch {{}}\r\n\
-}}\r\n\
-\r\n\
-$desktopCopy = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'RiftWatch.exe')\r\n\
-if ((Test-Path -LiteralPath $desktopCopy) -and ($desktopCopy -ne $target)) {{\r\n\
-    try {{ Copy-Item -LiteralPath $target -Destination $desktopCopy -Force -ErrorAction SilentlyContinue }} catch {{}}\r\n\
-}}\r\n\
-\r\n\
-if ($swapped) {{\r\n\
-    Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue\r\n\
-    Start-Sleep -Seconds 1\r\n\
-    Start-Process -FilePath $target -ArgumentList '--updated'\r\n\
-}}\r\n\
-\r\n\
-try {{ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue }} catch {{}}\r\n",
-            pid = pid,
-            target = current_exe_str.replace("'", "''"),
-            source = new_exe_str.replace("'", "''"),
-            expected = expected
-        );
-
-        std::fs::write(&script_path, script_content).map_err(|e| format!("Failed to write update script: {}", e))?;
-
-        Command::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-WindowStyle", "Hidden",
-                "-ExecutionPolicy", "Bypass",
-                "-File", script_path.to_str().unwrap(),
-            ])
-            .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
-            .spawn()
-            .map_err(|e| format!("Failed to start update helper: {}", e))?;
-
+        // The new version is started by a helper once this process has fully exited (see run()).
+        if let Ok(mut slot) = RELAUNCH_AFTER_EXIT.lock() {
+            *slot = Some((old_exe.clone(), current_exe.clone()));
+        }
         app.exit(0);
         Ok(())
     }
@@ -315,12 +259,20 @@ fn is_another_instance_running() -> bool {
         .collect();
 
     let is_updated = std::env::args().any(|a| a == "--updated");
-    let max_attempts = if is_updated { 15 } else { 4 };
+    let max_attempts = if is_updated { 40 } else { 4 };
 
     for attempt in 0..max_attempts {
         let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 0, mutex_name.as_ptr()) };
         if handle.is_null() {
             return false;
+        }
+
+        if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS && is_updated {
+            // Started by the updater: the old copy is still closing. Wait for it (up to ~12 s),
+            // never hand over to its window, then start normally.
+            unsafe { CloseHandle(handle); }
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            continue;
         }
 
         if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
@@ -424,8 +376,32 @@ fn spawn_global_hotkey_listener(app: tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "windows")]
+    {
+        let args: Vec<String> = std::env::args().collect();
+        if let Some(i) = args.iter().position(|a| a == "--relaunch-after") {
+            relaunch_helper(&args[i + 1..]);
+            return;
+        }
+    }
+
+    #[cfg(target_os = "windows")]
     if is_another_instance_running() {
         return;
+    }
+
+    // Remove the previous version left beside us by the last update (it may still be closing).
+    if let Ok(exe) = std::env::current_exe() {
+        let old = update::old_exe_path(&exe);
+        if old.exists() {
+            std::thread::spawn(move || {
+                for _ in 0..20 {
+                    if std::fs::remove_file(&old).is_ok() || !old.exists() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+            });
+        }
     }
 
     tauri::Builder::default()
@@ -613,6 +589,50 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            // After an update, start the new version only once every window is gone. Versions
+            // 0.3.12 and earlier hand over to any open "RiftWatch" window and quit, so starting
+            // it any earlier leaves nothing running.
+            if let tauri::RunEvent::Exit = event {
+                if let Some((helper, target)) = RELAUNCH_AFTER_EXIT.lock().ok().and_then(|mut p| p.take()) {
+                    // Our old binary (moved aside to *.old) waits for this process to be fully
+                    // gone, then starts the new version. See relaunch_helper().
+                    let _ = std::process::Command::new(helper)
+                        .arg("--relaunch-after")
+                        .arg(std::process::id().to_string())
+                        .arg(target)
+                        .spawn();
+                }
+            }
+        });
+}
+
+/// Set by the updater: (helper exe, freshly installed exe) to run when this process exits.
+static RELAUNCH_AFTER_EXIT: std::sync::Mutex<Option<(std::path::PathBuf, std::path::PathBuf)>> =
+    std::sync::Mutex::new(None);
+
+/// `RiftWatch.exe.old --relaunch-after <pid> <new exe>`: wait (up to 30 s) for the updating
+/// process to exit, then start the new version. Runs before any window or single-instance check.
+#[cfg(target_os = "windows")]
+fn relaunch_helper(args: &[String]) {
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut std::ffi::c_void;
+        fn WaitForSingleObject(handle: *mut std::ffi::c_void, ms: u32) -> u32;
+        fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+    }
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    let (Some(pid), Some(target)) = (args.first().and_then(|p| p.parse::<u32>().ok()), args.get(1)) else {
+        return;
+    };
+    unsafe {
+        let h = OpenProcess(SYNCHRONIZE, 0, pid);
+        if !h.is_null() {
+            WaitForSingleObject(h, 30_000);
+            CloseHandle(h);
+        }
+    }
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let _ = std::process::Command::new(target).arg("--updated").spawn();
 }
