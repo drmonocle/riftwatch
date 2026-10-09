@@ -1,11 +1,12 @@
 {
   "name": "riftwatch-tauri",
   "private": true,
-  "version": "0.3.11",
+  "version": "0.3.12",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:web": "tsc && vite build --mode web",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",

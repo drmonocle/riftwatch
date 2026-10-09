@@ -1,8 +1,9 @@
 import React from "react";
 import { AppSettings, Match, StreamEvent, AppUpdateInfo } from "../types";
-import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2 } from "lucide-react";
+import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2, Download } from "lucide-react";
 import { currentStreamEvent, formatStreamHeaderTitle } from "../helpers";
 import { APP_VERSION } from "../version";
+import { IS_DESKTOP, IS_WEB, DESKTOP_DOWNLOAD_ENABLED, DESKTOP_DOWNLOAD_URL } from "../platform";
 
 interface HeaderProps {
   settings: AppSettings;
@@ -38,15 +39,15 @@ export const Header: React.FC<HeaderProps> = ({
   const extraLive = liveMatches.length > 1 ? ` +${liveMatches.length - 1}` : "";
 
   return (
-    <header className="bg-[#0a0e17] border-b border-[#c8aa6e] px-4 py-2 flex items-center gap-3 select-none">
+    <header className="bg-[#0a0e17] border-b border-[#c8aa6e] px-3 sm:px-4 py-2 flex items-center gap-3 select-none">
       {/* Brand */}
       <div className="flex items-baseline gap-1.5 cursor-pointer flex-shrink-0" onClick={() => onSelectTab("live")}>
         <span className="text-[#c8aa6e] font-bold text-lg tracking-wider">RIFTWATCH</span>
-        <span className="text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
+        <span className="hidden sm:inline text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
       </div>
 
-      {/* Status pills: these shrink and truncate instead of wrapping */}
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      {/* Status pills: these shrink and truncate instead of wrapping; on phones the ticker shows the same info */}
+      <div className="hidden sm:flex items-center gap-2 min-w-0 flex-1">
         {updateInfo?.hasUpdate && (
           <button
             onClick={() => onSelectTab("settings")}
@@ -88,7 +89,29 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
+      <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+        {IS_WEB && (
+          <button
+            onClick={() => DESKTOP_DOWNLOAD_ENABLED && onOpenUrl(DESKTOP_DOWNLOAD_URL)}
+            disabled={!DESKTOP_DOWNLOAD_ENABLED}
+            className={`${pill} font-semibold ${
+              DESKTOP_DOWNLOAD_ENABLED
+                ? "bg-[#c8aa6e] border-[#c8aa6e] text-[#091428] hover:bg-[#f0e6d2]"
+                : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] cursor-not-allowed"
+            }`}
+            title={
+              DESKTOP_DOWNLOAD_ENABLED
+                ? "Download the RiftWatch desktop app for Windows"
+                : "The Windows desktop app is coming soon"
+            }
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">
+              {DESKTOP_DOWNLOAD_ENABLED ? "Download for Windows" : "Windows app: coming soon"}
+            </span>
+            <span className="md:hidden">{DESKTOP_DOWNLOAD_ENABLED ? "Windows" : "Soon"}</span>
+          </button>
+        )}
         <button
           onClick={() => onUpdateSettings({ spoilerMode: !settings.spoilerMode })}
           className={`${pill} font-medium ${
@@ -99,20 +122,22 @@ export const Header: React.FC<HeaderProps> = ({
           title={settings.spoilerMode ? "Spoilers hidden: scores and gold are masked. Click to show." : "Spoilers shown. Click to hide scores and gold."}
         >
           {settings.spoilerMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          <span>Spoilers</span>
+          <span className="hidden sm:inline">Spoilers</span>
         </button>
 
-        <button
-          onClick={() => onUpdateSettings({ compactMode: !settings.compactMode })}
-          className={`${iconBtn} ${
-            settings.compactMode
-              ? "bg-[#0ac8b9] border-[#0ac8b9] text-[#091428]"
-              : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
-          }`}
-          title={`${settings.compactMode ? "Expand window" : "Compact window"} (Alt+Shift+L summons/hides app anywhere)`}
-        >
-          {settings.compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-        </button>
+        {IS_DESKTOP && (
+          <button
+            onClick={() => onUpdateSettings({ compactMode: !settings.compactMode })}
+            className={`${iconBtn} ${
+              settings.compactMode
+                ? "bg-[#0ac8b9] border-[#0ac8b9] text-[#091428]"
+                : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
+            }`}
+            title={`${settings.compactMode ? "Expand window" : "Compact window"} (Alt+Shift+L summons/hides app anywhere)`}
+          >
+            {settings.compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+          </button>
+        )}
 
         <button
           onClick={onRefresh}

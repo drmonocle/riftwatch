@@ -22,6 +22,7 @@ import {
 import { APP_VERSION } from "../../version";
 import { DEFAULT_FOLLOWED_REGIONS, DEFAULT_FOLLOWED_LEAGUES } from "../../api";
 import { playKickoffChime } from "../../helpers";
+import { IS_DESKTOP, RIOT_LEGAL_NOTICE } from "../../platform";
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -87,7 +88,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="p-4 space-y-6 max-w-4xl mx-auto overflow-y-auto h-full select-none text-xs">
-      {/* 0. App Version & Software Updates */}
+      {/* 0. App Version & Software Updates (desktop app only) */}
+      {IS_DESKTOP && (
       <section className="space-y-3">
         <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center justify-between">
           <span className="flex items-center gap-1.5">
@@ -213,6 +215,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           )}
         </div>
       </section>
+      )}
       {/* 1. Display & Live Ticker Bar */}
       <section className="space-y-3">
         <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center gap-1.5">
@@ -250,7 +253,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
             <div className="flex items-center gap-1 bg-[#091428] p-1 rounded border border-[#1e282d]">
-              {(["docked", "detached", "hidden"] as const).map((mode) => (
+              {(IS_DESKTOP ? (["docked", "detached", "hidden"] as const) : (["docked", "hidden"] as const)).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => {
@@ -276,6 +279,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* Detached Pin Always on Top */}
+          {IS_DESKTOP && (
           <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d]">
             <div>
               <div className="font-semibold text-[#f0e6d2]">Detached Ticker Always on Top</div>
@@ -300,6 +304,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {settings.tickerTopmost ? "ON" : "OFF"}
             </button>
           </div>
+          )}
 
           {/* Ticker Rotation Speed */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d]">
@@ -357,7 +362,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <section className="space-y-3">
         <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center gap-1.5">
           <Bell className="w-3.5 h-3.5 text-[#0ac8b9]" />
-          Desktop Notifications & Sound Alerts
+          {IS_DESKTOP ? "Desktop Notifications & Sound Alerts" : "Sound Alerts"}
         </h2>
 
         <div className="space-y-2">
@@ -393,6 +398,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
+          {IS_DESKTOP && (<>
           <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d]">
             <div>
               <div className="font-semibold text-[#f0e6d2]">Live Kickoff Desktop Alerts</div>
@@ -443,10 +449,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {settings.notifyStream ? "ON" : "OFF"}
             </button>
           </div>
+          </>)}
         </div>
       </section>
 
-      {/* 3. System Tray, Ergonomics & Startup */}
+      {/* 3. System Tray, Ergonomics & Startup (desktop app only) */}
+      {IS_DESKTOP && (
       <section className="space-y-3">
         <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center gap-1.5">
           <Minimize2 className="w-3.5 h-3.5 text-[#0ac8b9]" />
@@ -525,6 +533,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       </section>
+      )}
 
       {/* 4. Watchlist Management */}
       <section className="space-y-3">
@@ -679,7 +688,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Footer */}
       <footer className="pt-2 text-[11px] text-[#7e8e9f] space-y-1">
         <div className="flex items-center justify-between">
-          <div>RiftWatch Desktop v{APP_VERSION} · Rust & Webview2 · MIT License</div>
+          <div>
+            {IS_DESKTOP ? `RiftWatch Desktop v${APP_VERSION} · Rust & WebView2` : `RiftWatch Web v${APP_VERSION}`} · MIT License
+          </div>
           <button
             onClick={() => onOpenUrl("https://github.com/drmonocle/riftwatch")}
             className="hover:text-[#c8aa6e] underline"
@@ -688,7 +699,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </button>
         </div>
         <div className="text-[10px] text-[#536675]">
-          RiftWatch is an unofficial fan project and is not endorsed by Riot Games. League of Legends is a trademark of Riot Games, Inc.
+          {RIOT_LEGAL_NOTICE}
         </div>
       </footer>
     </div>

@@ -6,8 +6,12 @@ import process from "node:process";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
-export default defineConfig(() => ({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
+
+  // `npm run build:web` builds the browser version served at lolworlds.com/riftwatch/
+  base: mode === "web" ? "/riftwatch/" : "/",
+  build: mode === "web" ? { outDir: "dist-web", emptyOutDir: true } : undefined,
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

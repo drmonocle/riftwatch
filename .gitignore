@@ -36,3 +36,4 @@ Thumbs.db
 
 # Per-machine cargo config
 src-tauri/.cargo/config.toml
+dist-web/

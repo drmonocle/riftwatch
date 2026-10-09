@@ -5,7 +5,6 @@ A fast, lightweight Windows desktop app for League of Legends esports. Track liv
 [![Download](https://img.shields.io/github/v/release/drmonocle/riftwatch?color=0ac8b9&label=Download)](https://github.com/drmonocle/riftwatch/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)](#)
 [![Size](https://img.shields.io/badge/size-3.8%20MB-brightgreen)](#)
-[![Memory](https://img.shields.io/badge/memory-%3C40%20MB%20RAM-0ac8b9)](#)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 <p align="center">
@@ -19,9 +18,11 @@ A fast, lightweight Windows desktop app for League of Legends esports. Track liv
 Download the latest release from [**GitHub Releases**](https://github.com/drmonocle/riftwatch/releases):
 
 * 🚀 [**Download RiftWatch.exe**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch.exe) (Portable standalone, ~3.8 MB)
-* 📦 [**Download RiftWatch.zip**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch-v0.3.6-windows-x64.zip) (~1.8 MB)
+* 📦 [**Download RiftWatch.zip**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch-windows-x64.zip) (~1.9 MB)
 
-> **No installer or admin rights required.** Just download and launch. Optimized for Windows 10 and 11, sipping less than 40 MB of RAM.
+> **No installer or admin rights required.** Just download and launch. Runs on Windows 10 and 11 using the Microsoft Edge WebView2 runtime that ships with Windows.
+>
+> **"Windows protected your PC"?** RiftWatch isn't code-signed yet, so Windows SmartScreen may warn on first launch. Click **More info → Run anyway**. Every release lists the SHA-256 of `RiftWatch.exe` so you can check the file you downloaded.
 
 ---
 
@@ -77,7 +78,8 @@ Curated 24/7 LoL tournament stream guide on Twitch and YouTube. See what classic
 ### 🏆 League Standings & Head-to-Head Records
 * Dedicated League Standings tab inside Schedule view.
 * Filter by league to check regular season standings, series records (W-L), game differentials, win percentages, and hot/cold streaks (`1W`, `3L`, etc.).
-* Match cards automatically display past Head-to-Head win-loss records between the two contesting teams.
+* Match cards show an all-time Head-to-Head meter: every recorded game between the two teams since 2011, across every league and international event, with team rebrands counted together (SKT → T1, Samsung → Gen.G, …).
+* H2H data refreshes automatically every few hours, so records stay current between app updates.
 
 ### 📊 Live Game Deep Stats & Series Progression
 * Live match cards feature animated live pills showing the exact game currently on Summoner's Rift (`● Game 2 (Live)`).
@@ -144,7 +146,7 @@ npm run build
 cargo build --manifest-path src-tauri/Cargo.toml --release
 ```
 
-The resulting optimized binary is located at `src-tauri/target/release/RiftWatch.exe`.
+The resulting optimized binary is located at `src-tauri/target/release/riftwatch-tauri.exe` (`package_release.ps1` copies it to `release/RiftWatch.exe`).
 
 ### Checks & releases
 
@@ -154,7 +156,9 @@ npm run check:version  # package.json / tauri.conf.json / Cargo.toml versions mu
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-**Publishing a release:** run `package_release.ps1`, then upload both `RiftWatch.exe` **and** `RiftWatch.exe.sha256` to the GitHub release. The in-app updater verifies the SHA-256 and refuses to install a binary without a matching checksum.
+**Publishing a release:** run `package_release.ps1`, then upload `RiftWatch.exe`, `RiftWatch.exe.sha256` and `RiftWatch-windows-x64.zip` to the GitHub release. The in-app updater verifies the SHA-256 and refuses to install a binary without a matching checksum. Publish test builds as **pre-releases**: the updater only offers the release marked *Latest*.
+
+**H2H data:** `.github/workflows/h2h-data.yml` runs `scripts/h2h/refresh.py` every 6 hours and publishes `h2h.json` to the `h2h-data` branch, which the app downloads. It starts from the bundled `src/all_time_h2h.json` and adds every completed series since that file's cutoff.
 
 Cross-compiling with xwin? Copy `src-tauri/.cargo/config.toml.example` to `config.toml` and set your local paths (it is git-ignored).
 
@@ -170,4 +174,6 @@ RiftWatch is 100% free and open source. If you find it useful and want to suppor
 
 ## 📜 Disclaimer
 
-RiftWatch is an unofficial fan project by Monocle Productions LLC. It is not endorsed by or affiliated with Riot Games. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc.
+RiftWatch is an unofficial fan project by Monocle Productions LLC.
+
+RiftWatch isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.

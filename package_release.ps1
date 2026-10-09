@@ -37,7 +37,7 @@ $hash = (Get-FileHash -LiteralPath $outExe -Algorithm SHA256).Hash.ToLower()
 Set-Content -LiteralPath "$outExe.sha256" -Value "$hash  RiftWatch.exe" -Encoding ascii
 
 Write-Host "5. Creating release zip..."
-Compress-Archive -Path $outExe -DestinationPath (Join-Path $releaseDir "RiftWatch-v$version-windows-x64.zip") -Force
+Compress-Archive -Path $outExe -DestinationPath (Join-Path $releaseDir "RiftWatch-windows-x64.zip") -Force
 
 $sizeMb = [math]::Round(((Get-Item $outExe).Length / 1MB), 2)
 Write-Host "Done. RiftWatch v$version, $sizeMb MB, sha256 $hash"

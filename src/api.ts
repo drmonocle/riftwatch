@@ -1,4 +1,5 @@
 import { Match, LiveStats, StreamEvent, AppSettings, Team, Region, League, PlayerEntry, AppUpdateInfo } from "./types";
+import type { H2HData } from "./helpers";
 
 // Public key used by the lolesports.com web client (not a private secret). Riot may rotate it; if the
 // app suddenly shows "sync failed" with HTTP 401/403, look up the current key from lolesports.com.
@@ -438,6 +439,38 @@ export async function fetchSchedule(extraNewerPages = 2): Promise<Match[]> {
   const unique = all.filter((m) => (seen.has(m.matchId) ? false : (seen.add(m.matchId), true)));
   unique.sort((a, b) => a.startTimeUtc.localeCompare(b.startTimeUtc));
   return unique;
+}
+
+/**
+ * All-time H2H table rebuilt every few hours by the h2h-data GitHub Action
+ * (scripts/h2h/refresh.py), so records stay current between app releases.
+ */
+const H2H_DATA_URL = "https://raw.githubusercontent.com/drmonocle/riftwatch/h2h-data/h2h.json";
+const H2H_CACHE_KEY = "riftwatch_h2h_data";
+
+function isH2HData(d: any): d is H2HData {
+  return !!d && typeof d.cutoff === "string" && !!d.pairs && typeof d.pairs === "object" && !Array.isArray(d.pairs);
+}
+
+export function loadCachedH2HData(): H2HData | null {
+  try {
+    const raw = localStorage.getItem(H2H_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return isH2HData(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchH2HData(): Promise<H2HData> {
+  const data = await fetchJson(H2H_DATA_URL, undefined, 20000);
+  if (!isH2HData(data)) throw new Error("Malformed H2H data");
+  try {
+    localStorage.setItem(H2H_CACHE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn("Failed to cache H2H data:", e);
+  }
+  return data;
 }
 
 const STREAM_CACHE_KEY = "riftwatch_stream_schedule";

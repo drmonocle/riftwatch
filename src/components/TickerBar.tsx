@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { AppSettings, Match, StreamEvent } from "../types";
 import { ChevronLeft, ChevronRight, Pin, PinOff, Minimize2, Maximize2, X } from "lucide-react";
 import { currentStreamEvent, nextUpcomingMatches, computeHeadToHead } from "../helpers";
+import { IS_DESKTOP } from "../platform";
 
 interface TickerBarProps {
   settings: AppSettings;
@@ -220,7 +221,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 
         {/* Detach / Dock Mode Button */}
         {!isDetached ? (
-          <button
+          IS_DESKTOP && <button
             onClick={handleDetach}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:text-[#0ac8b9] hover:bg-[#1e282d] text-[10px]"
             title="Detach to floating desktop HUD overlay"

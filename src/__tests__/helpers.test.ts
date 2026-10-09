@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead } from "../helpers";
+import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, applyH2HData } from "../helpers";
 import type { Match } from "../types";
 
 const match = (over: Partial<Match> = {}): Match => ({
@@ -106,5 +106,19 @@ describe("computeHeadToHead", () => {
     expect(computeHeadToHead("AAA", "BBB", [done("1")])).toMatchObject({ team1Wins: 2, team2Wins: 1, totalGames: 3 });
     // The match itself never counts towards its own H2H.
     expect(computeHeadToHead("AAA", "BBB", [done("1")], "1")).toBeNull();
+  });
+
+  it("takes a match back out of downloaded data that already includes it", () => {
+    const before = computeHeadToHead("T1", "GEN")!;
+    expect(
+      applyH2HData({ cutoff: "2030-01-01T00:00:00Z", pairs: { GEN__T1: [before.team2Wins + 1, before.team1Wins + 2] } }),
+    ).toBe(true);
+    const played = match({ matchId: "final", state: "completed", startTimeUtc: "2029-06-01T10:00:00Z", team1Score: 2, team2Score: 1 });
+    // T1 2-1 GEN is inside the downloaded table; on its own card it must not count.
+    expect(computeHeadToHead("T1", "GEN", [played], "final")).toMatchObject({
+      team1Wins: before.team1Wins,
+      team2Wins: before.team2Wins,
+    });
+    expect(computeHeadToHead("T1", "GEN", [played])?.totalGames).toBe(before.totalGames + 3);
   });
 });

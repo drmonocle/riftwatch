@@ -47,7 +47,25 @@ export function buildAllTimeH2H(raw: Record<string, [number, number]>): Record<s
   return out;
 }
 
-const ALL_TIME_H2H = buildAllTimeH2H((allTimeH2HJson as unknown) as Record<string, [number, number]>);
+/** Games up to this moment are in the bundled all_time_h2h.json; later results come from the schedule. */
+export const BUNDLED_H2H_CUTOFF = "2026-09-26T00:00:00Z";
+
+let ALL_TIME_H2H = buildAllTimeH2H((allTimeH2HJson as unknown) as Record<string, [number, number]>);
+let H2H_CUTOFF_MS = new Date(BUNDLED_H2H_CUTOFF).getTime();
+
+/** Downloaded H2H data (see fetchH2HData). Only replaces the bundled table when it is newer. */
+export interface H2HData {
+  cutoff: string;
+  pairs: Record<string, [number, number]>;
+}
+
+export function applyH2HData(data: H2HData): boolean {
+  const cutoffMs = new Date(data.cutoff).getTime();
+  if (isNaN(cutoffMs) || cutoffMs <= H2H_CUTOFF_MS) return false;
+  ALL_TIME_H2H = buildAllTimeH2H(data.pairs);
+  H2H_CUTOFF_MS = cutoffMs;
+  return true;
+}
 
 /** If the schedule's latest started entry is older than this, the stream is treated as offline. */
 const MAX_AIRING_GAP_MS = 10 * 60 * 60 * 1000;
@@ -412,7 +430,19 @@ function rawHeadToHead(
     hasAllTimeRecord = true;
   }
 
-  // 2. Schedule additions: only count matches AFTER database cutoff (2026-09-26)
+  // A match played before the cutoff is already inside the all-time table. When it is the match
+  // being shown, take its own result back out so it never counts as its own H2H history.
+  const self = excludeMatchId ? schedule?.find((m) => m.matchId === excludeMatchId) : undefined;
+  if (hasAllTimeRecord && self && self.state === "completed") {
+    const selfTime = new Date(self.startTimeUtc).getTime();
+    if (!isNaN(selfTime) && selfTime < H2H_CUTOFF_MS) {
+      const selfIsC1Team1 = normalizeTeamCode(self.team1Code) === c1;
+      t1AllTimeWins = Math.max(0, t1AllTimeWins - ((selfIsC1Team1 ? self.team1Score : self.team2Score) || 0));
+      t2AllTimeWins = Math.max(0, t2AllTimeWins - ((selfIsC1Team1 ? self.team2Score : self.team1Score) || 0));
+    }
+  }
+
+  // 2. Schedule additions: only count matches AFTER the H2H data's cutoff
   // or count all completed matches if not in all_time_h2h, and strictly exclude `excludeMatchId`
   let scheduleT1Wins = 0;
   let scheduleT2Wins = 0;
@@ -420,7 +450,7 @@ function rawHeadToHead(
   let lastWinner: string | undefined;
   let lastDate: string | undefined;
 
-  const CUTOFF_MS = new Date("2026-09-26T00:00:00Z").getTime();
+  const CUTOFF_MS = H2H_CUTOFF_MS;
 
   if (schedule && schedule.length > 0) {
     const pastMatches = schedule

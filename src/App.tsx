@@ -12,11 +12,14 @@ import {
   loadBundledCatalog,
   fetchLiveCatalog,
   checkForAppUpdate,
+  loadCachedH2HData,
+  fetchH2HData,
   EMPTY_CATALOG,
 } from "./api";
 import { APP_VERSION } from "./version";
 import { ArrowDownToLine } from "lucide-react";
-import { reconcileLiveAndSchedule, playKickoffChime } from "./helpers";
+import { IS_DESKTOP } from "./platform";
+import { reconcileLiveAndSchedule, playKickoffChime, applyH2HData } from "./helpers";
 import { Header } from "./components/Header";
 import { Navigation, TabKey } from "./components/Navigation";
 import { TickerBar } from "./components/TickerBar";
@@ -36,6 +39,7 @@ const LIVE_POLL_MS = 60_000;
 const LIVE_POLL_ACTIVE_MS = 30_000; // faster while a match is in progress
 const SCHEDULE_POLL_MS = 5 * 60_000;
 const STREAM_POLL_MS = 15 * 60_000;
+const H2H_POLL_MS = 6 * 60 * 60_000;
 
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
@@ -87,6 +91,22 @@ export default function App() {
   useEffect(() => {
     streamEventsRef.current = streamEvents;
   }, [streamEvents]);
+
+  // Keep the all-time H2H table current between releases: cached copy first, then the latest download.
+  const [, setH2hVersion] = useState(0);
+  useEffect(() => {
+    const cached = loadCachedH2HData();
+    if (cached && applyH2HData(cached)) setH2hVersion((v) => v + 1);
+    const refresh = () =>
+      fetchH2HData()
+        .then((data) => {
+          if (applyH2HData(data)) setH2hVersion((v) => v + 1);
+        })
+        .catch(() => {}); // offline or not published yet: keep what we have
+    refresh();
+    const timer = window.setInterval(refresh, H2H_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Sync settings across windows (main window and detached HUD window)
   useEffect(() => {
@@ -241,7 +261,7 @@ export default function App() {
       } else if (e.ctrlKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         handleUpdateSettings({ spoilerMode: !settingsRef.current.spoilerMode });
-      } else if (e.ctrlKey && e.key.toLowerCase() === "d") {
+      } else if (IS_DESKTOP && e.ctrlKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
         handleUpdateSettings({
           tickerMode: settingsRef.current.tickerMode === "detached" ? "docked" : "detached",
@@ -255,6 +275,7 @@ export default function App() {
 
   // Software update check
   const handleCheckForUpdate = useCallback(async () => {
+    if (!IS_DESKTOP) return; // the web version is always current
     setIsCheckingUpdate(true);
     try {
       const info = await checkForAppUpdate(APP_VERSION);
@@ -467,11 +488,11 @@ export default function App() {
       .then(({ invoke }) => {
         invoke("open_external_url", { url }).catch(() => {
           // Native side refused (not an http/https link) or isn't available (browser dev mode)
-          if (/^https?:\/\//i.test(url)) window.open(url, "_blank");
+          if (/^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener");
         });
       })
       .catch(() => {
-        if (/^https?:\/\//i.test(url)) window.open(url, "_blank");
+        if (/^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener");
       });
   };
 
@@ -519,7 +540,7 @@ export default function App() {
       <Navigation activeTab={activeTab} onSelectTab={setActiveTab} liveCount={liveMatches.length} />
 
       {/* Docked Ticker Bar */}
-      {settings.tickerMode === "docked" && (
+      {(settings.tickerMode === "docked" || (!IS_DESKTOP && settings.tickerMode === "detached")) && (
         <TickerBar
           settings={settings}
           liveMatches={liveMatches}
@@ -630,7 +651,7 @@ export default function App() {
           >
             Monocle Productions LLC
           </span>
-          <button
+          {IS_DESKTOP && <button
             onClick={() =>
               import("@tauri-apps/api/core")
                 .then(({ invoke }) => invoke("hide_main"))
@@ -641,7 +662,7 @@ export default function App() {
           >
             <ArrowDownToLine className="w-3 h-3" />
             <span>Hide to tray</span>
-          </button>
+          </button>}
         </div>
       </footer>
     </div>
