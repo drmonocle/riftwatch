@@ -53,6 +53,16 @@ export const Header: React.FC<HeaderProps> = ({
         <span className="hidden sm:inline text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
       </div>
 
+      {/* Support: sits just left of the live pills */}
+      <button
+        onClick={() => onOpenUrl("https://ko-fi.com/monocle")}
+        className={`${iconBtn} flex-shrink-0 bg-[#720e9e] border-[#720e9e] hover:bg-[#8c19bd] text-white`}
+        aria-label="Support RiftWatch on Ko-fi"
+        title="Support RiftWatch development on Ko-fi"
+      >
+        <Heart className="w-3.5 h-3.5 fill-current" />
+      </button>
+
       {/* Status pills: these shrink and truncate instead of wrapping; on phones the ticker shows the same info */}
       <div className="hidden sm:flex items-center gap-2 min-w-0 flex-1">
         {updateInfo?.hasUpdate && (
@@ -175,15 +185,6 @@ export const Header: React.FC<HeaderProps> = ({
           title="Refresh match data"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-[#c8aa6e]" : ""}`} />
-        </button>
-
-        <button
-          onClick={() => onOpenUrl("https://ko-fi.com/monocle")}
-          className={`${iconBtn} bg-[#720e9e] border-[#720e9e] hover:bg-[#8c19bd] text-white`}
-          aria-label="Support RiftWatch on Ko-fi"
-          title="Support RiftWatch development on Ko-fi"
-        >
-          <Heart className="w-3.5 h-3.5 fill-current" />
         </button>
       </div>
     </header>
