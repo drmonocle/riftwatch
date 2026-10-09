@@ -473,6 +473,189 @@ export async function fetchH2HData(): Promise<H2HData> {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Official standings (Riot's getStandingsV3: the same feed lolesports.com shows)
+// ---------------------------------------------------------------------------
+
+export interface TournamentInfo {
+  id: string;
+  slug: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface StandingsTeam {
+  code: string;
+  name: string;
+  image?: string;
+  wins: number;
+  losses: number;
+  ties: number;
+}
+
+export interface StandingsRow {
+  rank: number;
+  /** Several teams when they are tied on the same rank. */
+  teams: StandingsTeam[];
+}
+
+export interface BracketTeam {
+  code: string;
+  name: string;
+  image?: string;
+  gameWins: number;
+  outcome: "win" | "loss" | null;
+}
+
+export interface BracketMatch {
+  id: string;
+  state: "unstarted" | "inProgress" | "completed";
+  teams: BracketTeam[];
+}
+
+export interface BracketRound {
+  name: string;
+  matches: BracketMatch[];
+}
+
+export interface StandingsSection {
+  name: string;
+  type: "group" | "bracket";
+  rows: StandingsRow[];
+  rounds: BracketRound[];
+}
+
+export interface StandingsStage {
+  name: string;
+  slug: string;
+  sections: StandingsSection[];
+}
+
+export interface TournamentStandings {
+  tournamentId: string;
+  name: string;
+  stages: StandingsStage[];
+  fetchedAt: number;
+}
+
+const TOURNAMENTS_TTL_MS = 24 * 60 * 60_000;
+const STANDINGS_TTL_MS = 10 * 60_000;
+
+function readCache<T>(key: string, ttlMs: number): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { at, data } = JSON.parse(raw);
+    return typeof at === "number" && Date.now() - at < ttlMs ? (data as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(key: string, data: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+  } catch {
+    /* storage full or unavailable: the fetch still worked */
+  }
+}
+
+/** All leagues Riot lists, slug -> id (needed to look up a league's tournaments). Cached a day. */
+export async function fetchLeagueIds(): Promise<Record<string, { id: string; name: string; region: string }>> {
+  const key = "riftwatch_league_ids";
+  const cached = readCache<Record<string, { id: string; name: string; region: string }>>(key, TOURNAMENTS_TTL_MS);
+  if (cached) return cached;
+  const data = await fetchJson(`${RIOT_BASE}/getLeagues?hl=en-US`, { headers: riotHeaders });
+  const out: Record<string, { id: string; name: string; region: string }> = {};
+  for (const l of data?.data?.leagues || []) {
+    if (l?.slug && l?.id) out[String(l.slug).toLowerCase()] = { id: String(l.id), name: l.name || l.slug, region: l.region || "" };
+  }
+  writeCache(key, out);
+  return out;
+}
+
+/** A league's tournaments (splits, playoffs, cups), newest first. Cached a day. */
+export async function fetchLeagueTournaments(leagueId: string): Promise<TournamentInfo[]> {
+  const key = `riftwatch_tournaments_${leagueId}`;
+  const cached = readCache<TournamentInfo[]>(key, TOURNAMENTS_TTL_MS);
+  if (cached) return cached;
+  const data = await fetchJson(`${RIOT_BASE}/getTournamentsForLeague?hl=en-US&leagueId=${encodeURIComponent(leagueId)}`, {
+    headers: riotHeaders,
+  });
+  const raw: any[] = data?.data?.leagues?.[0]?.tournaments || [];
+  const list: TournamentInfo[] = raw
+    .filter((t) => t?.id && t?.startDate && t?.endDate)
+    .map((t) => ({ id: String(t.id), slug: t.slug || "", startDate: t.startDate, endDate: t.endDate }))
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+  writeCache(key, list);
+  return list;
+}
+
+/** The tournament to show by default: the one running today, else the most recent, else the next. */
+export function pickCurrentTournament(tournaments: TournamentInfo[], today = new Date().toISOString().slice(0, 10)): TournamentInfo | undefined {
+  const running = tournaments.find((t) => t.startDate <= today && today <= t.endDate);
+  if (running) return running;
+  const finished = tournaments.find((t) => t.endDate < today); // list is newest first
+  return finished || tournaments[tournaments.length - 1];
+}
+
+/** A tournament's official standings: group tables and brackets per stage. Cached 10 minutes. */
+export async function fetchTournamentStandings(tournamentId: string): Promise<TournamentStandings> {
+  const key = `riftwatch_standings_${tournamentId}`;
+  const cached = readCache<TournamentStandings>(key, STANDINGS_TTL_MS);
+  if (cached) return cached;
+  const data = await fetchJson(`${RIOT_BASE}/getStandingsV3?hl=en-US&tournamentId=${encodeURIComponent(tournamentId)}`, {
+    headers: riotHeaders,
+  });
+  const s = data?.data?.standings?.[0];
+  const stages: StandingsStage[] = (s?.stages || []).map((st: any) => ({
+    name: st.name || st.slug || "Stage",
+    slug: st.slug || "",
+    sections: (st.sections || []).map((sec: any): StandingsSection => {
+      const rows: StandingsRow[] = (sec.rankings || []).map((r: any) => ({
+        rank: Number(r.ordinal) || 0,
+        teams: (r.teams || []).map(
+          (t: any): StandingsTeam => ({
+            code: t.code || t.name || "TBD",
+            name: t.name || t.code || "TBD",
+            image: t.image,
+            wins: t.record?.wins ?? 0,
+            losses: t.record?.losses ?? 0,
+            ties: t.record?.ties ?? 0,
+          }),
+        ),
+      }));
+      const rounds: BracketRound[] = [];
+      for (const col of sec.columns || []) {
+        for (const cell of col.cells || []) {
+          rounds.push({
+            name: cell.name || "",
+            matches: (cell.matches || []).map(
+              (m: any): BracketMatch => ({
+                id: String(m.id || ""),
+                state: m.state === "completed" || m.state === "inProgress" ? m.state : "unstarted",
+                teams: (m.teams || []).map(
+                  (t: any): BracketTeam => ({
+                    code: t.code || "TBD",
+                    name: t.name || "TBD",
+                    image: t.image,
+                    gameWins: t.result?.gameWins ?? 0,
+                    outcome: t.result?.outcome === "win" ? "win" : t.result?.outcome === "loss" ? "loss" : null,
+                  }),
+                ),
+              }),
+            ),
+          });
+        }
+      }
+      return { name: sec.name || "", type: rows.length > 0 ? "group" : "bracket", rows, rounds };
+    }),
+  }));
+  const out: TournamentStandings = { tournamentId, name: s?.name || "", stages, fetchedAt: Date.now() };
+  writeCache(key, out);
+  return out;
+}
+
 /** Series history for the H2H details view, published next to h2h.json in 26 shards by first letter. */
 export interface H2HSeriesEntry {
   /** Game wins at Worlds / MSI / First Stand, from the alphabetically-first team's side. */

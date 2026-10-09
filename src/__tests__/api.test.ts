@@ -1,4 +1,22 @@
 import { describe, expect, it } from "vitest";
+import { pickCurrentTournament } from "../api";
+
+describe("pickCurrentTournament", () => {
+  const t = (id: string, start: string, end: string) => ({ id, slug: id, startDate: start, endDate: end });
+  // newest first, as fetchLeagueTournaments returns them
+  const list = [t("next", "2026-11-01", "2026-11-20"), t("now", "2026-10-01", "2026-10-15"), t("old", "2026-07-01", "2026-09-10")];
+  it("prefers the tournament running today", () => {
+    expect(pickCurrentTournament(list, "2026-10-09")?.id).toBe("now");
+  });
+  it("falls back to the most recently finished one between splits", () => {
+    expect(pickCurrentTournament(list, "2026-10-20")?.id).toBe("now");
+    expect(pickCurrentTournament(list.filter((x) => x.id !== "now"), "2026-10-20")?.id).toBe("old");
+  });
+  it("shows the next tournament when nothing has been played yet", () => {
+    expect(pickCurrentTournament([t("only", "2026-12-01", "2026-12-10")], "2026-10-09")?.id).toBe("only");
+    expect(pickCurrentTournament([], "2026-10-09")).toBeUndefined();
+  });
+});
 import { buildStreamUrl, compareSemver } from "../api";
 
 describe("compareSemver", () => {
