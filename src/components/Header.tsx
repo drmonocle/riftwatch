@@ -16,6 +16,10 @@ interface HeaderProps {
   updateInfo?: AppUpdateInfo | null;
 }
 
+// Shared look for the small header controls: one line, never wrapping.
+const pill = "flex items-center gap-1.5 h-7 px-2.5 rounded text-xs whitespace-nowrap border transition-colors";
+const iconBtn = "flex items-center justify-center h-7 w-7 rounded border transition-colors";
+
 export const Header: React.FC<HeaderProps> = ({
   settings,
   onUpdateSettings,
@@ -31,21 +35,22 @@ export const Header: React.FC<HeaderProps> = ({
   const firstLive = hasLive ? liveMatches[0] : null;
   const currStream = currentStreamEvent(streamEvents);
   const streamInfo = formatStreamHeaderTitle(currStream);
+  const extraLive = liveMatches.length > 1 ? ` +${liveMatches.length - 1}` : "";
 
   return (
-    <header className="bg-[#0a0e17] border-b border-[#c8aa6e] px-4 py-2 flex items-center justify-between select-none">
-      {/* Brand & Live Status Pills */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-baseline gap-1.5 cursor-pointer" onClick={() => onSelectTab("live")}>
-          <span className="text-[#c8aa6e] font-bold text-lg tracking-wider">RIFTWATCH</span>
-          <span className="text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
-        </div>
+    <header className="bg-[#0a0e17] border-b border-[#c8aa6e] px-4 py-2 flex items-center gap-3 select-none">
+      {/* Brand */}
+      <div className="flex items-baseline gap-1.5 cursor-pointer flex-shrink-0" onClick={() => onSelectTab("live")}>
+        <span className="text-[#c8aa6e] font-bold text-lg tracking-wider">RIFTWATCH</span>
+        <span className="text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
+      </div>
 
-        {/* Update Notification Pill */}
+      {/* Status pills: these shrink and truncate instead of wrapping */}
+      <div className="flex items-center gap-2 min-w-0 flex-1">
         {updateInfo?.hasUpdate && (
           <button
             onClick={() => onSelectTab("settings")}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#0ac8b9] text-[#091428] hover:bg-[#0ac8b9]/80 transition-all animate-pulse"
+            className={`${pill} flex-shrink-0 font-bold bg-[#0ac8b9] border-[#0ac8b9] text-[#091428] hover:bg-[#0ac8b9]/80 animate-pulse`}
             title={`New version v${updateInfo.latestVersion} available! Click to update.`}
           >
             <Sparkles className="w-3 h-3" />
@@ -53,97 +58,77 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Pro Matches Pill */}
-        <div
+        <button
           onClick={() => onSelectTab("live")}
-          className={`flex items-center gap-2 px-2.5 py-1 rounded text-xs cursor-pointer border transition-colors ${
+          className={`${pill} flex-shrink-0 ${
             hasLive
-              ? "bg-[#1e131d] border-[#e84057] text-[#e84057]"
+              ? "bg-[#1e131d] border-[#e84057] text-[#e84057] font-semibold"
               : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] hover:border-[#c8aa6e]"
           }`}
-          title="Click to view Live Pro Matches"
+          title={hasLive ? `${liveMatches.length} live pro match(es). Click to view.` : "No pro matches live right now"}
         >
           <span className={`w-2 h-2 rounded-full ${hasLive ? "bg-[#e84057] animate-pulse" : "bg-[#7e8e9f]"}`} />
-          <span className="font-semibold">
-            {hasLive
-              ? `LIVE: ${firstLive?.team1Code} vs ${firstLive?.team2Code} (${firstLive?.leagueName})`
-              : "Pro Matches: Idle"}
+          <span>
+            {hasLive ? `LIVE ${firstLive?.team1Code} vs ${firstLive?.team2Code}${extraLive}` : "No live matches"}
           </span>
-        </div>
+        </button>
 
-        {/* 24/7 Twitch Stream Pill */}
-        <div
+        <button
           onClick={() => onSelectTab("stream")}
-          className={`flex items-center gap-2 px-2.5 py-1 rounded text-xs cursor-pointer border transition-colors max-w-sm ${
+          className={`${pill} min-w-0 ${
             streamInfo.isLive
               ? "bg-[#0a1420] border-[#0ac8b9]/60 text-[#0ac8b9] hover:border-[#0ac8b9] hover:bg-[#121e2d]"
               : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] hover:border-[#7e8e9f]"
           }`}
-          title={
-            streamInfo.isLive
-              ? `${streamInfo.title} · Click to view stream`
-              : "Twitch 24/7 Stream is currently offline"
-          }
+          title={streamInfo.isLive ? `${streamInfo.title} · Click to view stream` : "Twitch 24/7 Stream is currently offline"}
         >
-          <span
-            className={`w-2 h-2 rounded-full ${
-              streamInfo.isLive ? "bg-[#0ac8b9] animate-pulse" : "bg-[#7e8e9f]"
-            }`}
-          />
-          <Radio className={`w-3.5 h-3.5 flex-shrink-0 ${streamInfo.isLive ? "text-[#0ac8b9]" : "text-[#7e8e9f]"}`} />
+          <Radio className={`w-3.5 h-3.5 flex-shrink-0 ${streamInfo.isLive ? "text-[#0ac8b9] animate-pulse" : ""}`} />
           <span className="font-semibold truncate">{streamInfo.title}</span>
-        </div>
+        </button>
       </div>
 
-      {/* Quick Action Buttons */}
-      <div className="flex items-center gap-2">
-        {/* Compact Mode Toggle */}
-        <button
-          onClick={() => onUpdateSettings({ compactMode: !settings.compactMode })}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-            settings.compactMode
-              ? "bg-[#0ac8b9] border-[#0ac8b9] text-[#091428]"
-              : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
-          }`}
-          title="Toggle Compact Mode (Alt+Shift+L summons/hides app anywhere)"
-        >
-          {settings.compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-          <span>{settings.compactMode ? "Expand" : "Compact"}</span>
-        </button>
-
-        {/* Spoiler Mode Toggle */}
+      {/* Actions */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
         <button
           onClick={() => onUpdateSettings({ spoilerMode: !settings.spoilerMode })}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+          className={`${pill} font-medium ${
             settings.spoilerMode
               ? "bg-[#c8aa6e] border-[#c8aa6e] text-[#091428]"
               : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
           }`}
-          title="Spoiler mode hides match scores and in-game gold"
+          title={settings.spoilerMode ? "Spoilers hidden: scores and gold are masked. Click to show." : "Spoilers shown. Click to hide scores and gold."}
         >
           {settings.spoilerMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          <span>{settings.spoilerMode ? "Spoilers Hidden" : "Spoilers Shown"}</span>
+          <span>Spoilers</span>
         </button>
 
-        {/* Support Ko-Fi */}
         <button
-          onClick={() => onOpenUrl("https://ko-fi.com/monocle")}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[#720e9e] hover:bg-[#8c19bd] text-white transition-colors"
-          title="Support RiftWatch development on Ko-fi"
+          onClick={() => onUpdateSettings({ compactMode: !settings.compactMode })}
+          className={`${iconBtn} ${
+            settings.compactMode
+              ? "bg-[#0ac8b9] border-[#0ac8b9] text-[#091428]"
+              : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
+          }`}
+          title={`${settings.compactMode ? "Expand window" : "Compact window"} (Alt+Shift+L summons/hides app anywhere)`}
         >
-          <Heart className="w-3.5 h-3.5 fill-current" />
-          <span>Support</span>
+          {settings.compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
         </button>
 
-        {/* Refresh Button */}
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[#0a1420] hover:bg-[#121e2d] border border-[#1e282d] text-[#f0e6d2] transition-colors"
+          className={`${iconBtn} bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]`}
           title="Refresh match data"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-[#c8aa6e]" : ""}`} />
-          <span>Refresh</span>
+        </button>
+
+        <button
+          onClick={() => onOpenUrl("https://ko-fi.com/monocle")}
+          className={`${iconBtn} bg-[#720e9e] border-[#720e9e] hover:bg-[#8c19bd] text-white`}
+          title="Support RiftWatch development on Ko-fi"
+        >
+          <Heart className="w-3.5 h-3.5 fill-current" />
         </button>
       </div>
     </header>

@@ -1,6 +1,8 @@
 import React, { useEffect } from "react";
 import { CatalogData, Match, AppSettings, PlayerEntry } from "../types";
 import { X, Star, Calendar, Shield, ExternalLink, User } from "lucide-react";
+import { computeHeadToHead } from "../helpers";
+import { H2HMeter } from "./H2HMeter";
 
 interface TeamRosterModalProps {
   teamCode: string | null;
@@ -228,6 +230,7 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
                   {upcomingMatches.map((m) => {
                     const opp = m.team1Code.toUpperCase() === upperCode ? m.team2Name : m.team1Name;
                     const oppCode = m.team1Code.toUpperCase() === upperCode ? m.team2Code : m.team1Code;
+                    const h2h = computeHeadToHead(teamCode, oppCode, schedule, m.matchId);
                     return (
                       <div
                         key={m.matchId}
@@ -240,6 +243,7 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
                           <div className="text-[10px] text-[#9bb3c9]">
                             {m.leagueName} · Bo{m.bestOf}
                           </div>
+                          {h2h && <H2HMeter team1Code={teamCode} team2Code={oppCode} h2h={h2h} />}
                         </div>
                         <div className="text-right font-mono text-[11px] text-[#0ac8b9]">
                           {new Date(m.startTimeUtc).toLocaleDateString([], {

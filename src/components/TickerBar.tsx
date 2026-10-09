@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AppSettings, Match, StreamEvent } from "../types";
 import { ChevronLeft, ChevronRight, Pin, PinOff, Minimize2, Maximize2, X } from "lucide-react";
-import { currentStreamEvent, nextUpcomingMatches } from "../helpers";
+import { currentStreamEvent, nextUpcomingMatches, computeHeadToHead } from "../helpers";
 
 interface TickerBarProps {
   settings: AppSettings;
@@ -106,13 +106,16 @@ export const TickerBar: React.FC<TickerBarProps> = ({
     const relTime = m.startTimeUtc
       ? new Date(m.startTimeUtc).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
       : "Soon";
+    const h2h = computeHeadToHead(m.team1Code, m.team2Code, upcomingMatches, m.matchId);
     items.push({
       id: `up-${m.matchId}`,
       badge: "⏰ UPCOMING",
       badgeBg: "bg-[#c8aa6e]",
       badgeFg: "text-[#091428]",
       headline: `${m.leagueName} · ${m.team1Code} vs ${m.team2Code}`,
-      details: `Starts at ${relTime}`,
+      details: h2h
+        ? `Starts at ${relTime} · H2H ${m.team1Code} ${h2h.team1Wins}-${h2h.team2Wins} ${m.team2Code}`
+        : `Starts at ${relTime}`,
       targetTab: "schedule",
     });
   }
