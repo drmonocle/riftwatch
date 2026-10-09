@@ -1,6 +1,6 @@
 import React from "react";
 import { AppSettings, Match, StreamEvent, AppUpdateInfo } from "../types";
-import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2, Download } from "lucide-react";
+import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2, Download, Smartphone } from "lucide-react";
 import { currentStreamEvent, formatStreamHeaderTitle } from "../helpers";
 import { APP_VERSION } from "../version";
 import { IS_DESKTOP, IS_WEB, DESKTOP_DOWNLOAD_ENABLED, DESKTOP_DOWNLOAD_URL } from "../platform";
@@ -15,6 +15,8 @@ interface HeaderProps {
   onSelectTab: (tab: any) => void;
   onOpenUrl: (url: string) => void;
   updateInfo?: AppUpdateInfo | null;
+  /** Web only: present when the browser offers to install the page as an app. */
+  onInstall?: () => void;
 }
 
 // Shared look for the small header controls: one line, never wrapping.
@@ -31,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectTab,
   onOpenUrl,
   updateInfo,
+  onInstall,
 }) => {
   const hasLive = liveMatches.length > 0;
   const firstLive = hasLive ? liveMatches[0] : null;
@@ -90,6 +93,17 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+        {onInstall && (
+          <button
+            onClick={onInstall}
+            className={`${pill} font-semibold bg-[#0a1420] border-[#0ac8b9]/60 text-[#0ac8b9] hover:bg-[#121e2d]`}
+            aria-label="Install RiftWatch on this device"
+            title="Add RiftWatch to your home screen or desktop"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Install</span>
+          </button>
+        )}
         {IS_WEB && (
           <button
             onClick={() => DESKTOP_DOWNLOAD_ENABLED && onOpenUrl(DESKTOP_DOWNLOAD_URL)}
@@ -119,6 +133,8 @@ export const Header: React.FC<HeaderProps> = ({
               ? "bg-[#c8aa6e] border-[#c8aa6e] text-[#091428]"
               : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
           }`}
+          aria-label={settings.spoilerMode ? "Show spoilers" : "Hide spoilers"}
+          aria-pressed={settings.spoilerMode}
           title={settings.spoilerMode ? "Spoilers hidden: scores and gold are masked. Click to show." : "Spoilers shown. Click to hide scores and gold."}
         >
           {settings.spoilerMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -133,6 +149,7 @@ export const Header: React.FC<HeaderProps> = ({
                 ? "bg-[#0ac8b9] border-[#0ac8b9] text-[#091428]"
                 : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
             }`}
+            aria-label={settings.compactMode ? "Expand window" : "Compact window"}
             title={`${settings.compactMode ? "Expand window" : "Compact window"} (Alt+Shift+L summons/hides app anywhere)`}
           >
             {settings.compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
@@ -143,6 +160,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onRefresh}
           disabled={isRefreshing}
           className={`${iconBtn} bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]`}
+          aria-label="Refresh match data"
           title="Refresh match data"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-[#c8aa6e]" : ""}`} />
@@ -151,6 +169,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={() => onOpenUrl("https://ko-fi.com/monocle")}
           className={`${iconBtn} bg-[#720e9e] border-[#720e9e] hover:bg-[#8c19bd] text-white`}
+          aria-label="Support RiftWatch on Ko-fi"
           title="Support RiftWatch development on Ko-fi"
         >
           <Heart className="w-3.5 h-3.5 fill-current" />

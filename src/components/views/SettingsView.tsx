@@ -33,6 +33,8 @@ interface SettingsViewProps {
   updateInfo?: AppUpdateInfo | null;
   onCheckForUpdate?: () => Promise<void>;
   isCheckingUpdate?: boolean;
+  /** Result of the most recent update check, so the button visibly did something. */
+  lastUpdateCheck?: { at: number; error: string | null } | null;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -44,6 +46,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   updateInfo,
   onCheckForUpdate,
   isCheckingUpdate = false,
+  lastUpdateCheck,
 }) => {
   const [cacheCleared, setCacheCleared] = useState(false);
   const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
@@ -186,8 +189,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     RiftWatch is up to date (v{APP_VERSION})
                   </span>
                 </div>
-                <div className="text-[11px] text-[#7e8e9f] mt-0.5 ml-6">
-                  You are running the latest version with native single-instance mutex and hotkeys.
+                <div
+                  className={`text-[11px] mt-0.5 ml-6 ${lastUpdateCheck?.error ? "text-[#e84057]" : "text-[#7e8e9f]"}`}
+                  role="status"
+                >
+                  {isCheckingUpdate
+                    ? "Checking GitHub for a newer release…"
+                    : lastUpdateCheck?.error
+                      ? lastUpdateCheck.error
+                      : lastUpdateCheck
+                        ? `Checked at ${new Date(lastUpdateCheck.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · latest release is v${updateInfo?.latestVersion || APP_VERSION}`
+                        : "Updates are checked automatically a few seconds after launch."}
                 </div>
               </div>
 

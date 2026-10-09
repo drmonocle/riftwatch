@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Match, AppSettings, CatalogData } from "../../types";
 import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star, Swords } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
+import { ShareMatchButton } from "../ShareMatchButton";
 import { getLeagueBroadcastStreams, isMatchFollowed, computeHeadToHead } from "../../helpers";
 import { H2HMeter } from "../H2HMeter";
 
@@ -14,6 +15,8 @@ interface LiveViewProps {
   onSelectTab: (tab: any) => void;
   onUpdateSettings?: (s: Partial<AppSettings>) => void;
   onSelectTeam?: (teamCode: string, teamName?: string) => void;
+  /** From a #match/<id> link: scroll to this live match and flash it. */
+  highlightMatchId?: string | null;
 }
 
 // Live ticking countdown hook
@@ -107,12 +110,29 @@ export const LiveView: React.FC<LiveViewProps> = ({
   onSelectTab,
   onUpdateSettings,
   onSelectTeam,
+  highlightMatchId,
 }) => {
   const [revealedMatchIds, setRevealedMatchIds] = useState<Record<string, boolean>>({});
 
   const toggleReveal = (matchId: string) => {
     setRevealedMatchIds((prev) => ({ ...prev, [matchId]: !prev[matchId] }));
   };
+
+  // A shared link to a live match: scroll to its card and flash it.
+  const [flashMatchId, setFlashMatchId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlightMatchId) return;
+    setFlashMatchId(highlightMatchId);
+    const scroll = window.setTimeout(
+      () => document.getElementById(`match-${highlightMatchId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }),
+      50,
+    );
+    const clear = window.setTimeout(() => setFlashMatchId(null), 6000);
+    return () => {
+      window.clearTimeout(scroll);
+      window.clearTimeout(clear);
+    };
+  }, [highlightMatchId]);
 
   const toggleTeamFollow = (code: string) => {
     if (!onUpdateSettings || !code) return;
@@ -194,17 +214,23 @@ export const LiveView: React.FC<LiveViewProps> = ({
             return (
               <div
                 key={m.matchId}
+                id={`match-${m.matchId}`}
                 className={`bg-[#0a1420] border rounded-lg p-4 transition-all hover:border-[#c8aa6e] ${
-                  isT1Followed || isT2Followed
-                    ? "border-[#c8aa6e] shadow-lg shadow-[#c8aa6e]/5"
-                    : "border-[#1e282d]"
+                  flashMatchId === m.matchId
+                    ? "border-[#0ac8b9] ring-2 ring-[#0ac8b9]/40"
+                    : isT1Followed || isT2Followed
+                      ? "border-[#c8aa6e] shadow-lg shadow-[#c8aa6e]/5"
+                      : "border-[#1e282d]"
                 }`}
               >
                 {/* Card Header: League & Best-of */}
                 <div className="flex items-center justify-between text-xs text-[#9bb3c9] mb-3 font-medium">
                   <span className="font-bold text-[#0ac8b9]">{m.leagueName}</span>
-                  <span className="font-medium bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]">
-                    Best of {m.bestOf}
+                  <span className="flex items-center gap-1.5">
+                    <ShareMatchButton match={m} />
+                    <span className="font-medium bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]">
+                      Best of {m.bestOf}
+                    </span>
                   </span>
                 </div>
 
@@ -223,6 +249,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
                             isT1Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                           }`}
+                          aria-label={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
                           title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
                         >
                           <Star className={`w-3.5 h-3.5 ${isT1Followed ? "fill-[#c8aa6e]" : ""}`} />
@@ -290,7 +317,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                     )}
                     {(() => {
                       const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule, m.matchId);
-                      return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} /> : null;
+                      return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} matchId={m.matchId} /> : null;
                     })()}
                   </div>
 
@@ -329,6 +356,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
                             isT2Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                           }`}
+                          aria-label={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
                           title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
                         >
                           <Star className={`w-3.5 h-3.5 ${isT2Followed ? "fill-[#c8aa6e]" : ""}`} />
@@ -488,6 +516,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           ? "text-[#c8aa6e]"
                           : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                       }`}
+                      aria-label={
+                        settings.followedTeams.includes(nextMatch.team1Code)
+                          ? `Unfollow ${nextMatch.team1Code}`
+                          : `Follow ${nextMatch.team1Code}`
+                      }
                       title={
                         settings.followedTeams.includes(nextMatch.team1Code)
                           ? `Unfollow ${nextMatch.team1Code}`
@@ -556,6 +589,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           ? "text-[#c8aa6e]"
                           : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                       }`}
+                      aria-label={
+                        settings.followedTeams.includes(nextMatch.team2Code)
+                          ? `Unfollow ${nextMatch.team2Code}`
+                          : `Follow ${nextMatch.team2Code}`
+                      }
                       title={
                         settings.followedTeams.includes(nextMatch.team2Code)
                           ? `Unfollow ${nextMatch.team2Code}`
@@ -586,7 +624,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                 if (h2h) {
                   return (
                     <div className="mt-3 w-full flex justify-center">
-                      <H2HMeter team1Code={nextMatch.team1Code} team2Code={nextMatch.team2Code} h2h={h2h} size="md" />
+                      <H2HMeter team1Code={nextMatch.team1Code} team2Code={nextMatch.team2Code} h2h={h2h} size="md" matchId={nextMatch.matchId} />
                     </div>
                   );
                 }
@@ -604,8 +642,9 @@ export const LiveView: React.FC<LiveViewProps> = ({
                 </div>
 
                 {/* Calendar Integration Button */}
-                <div className="mt-3.5 flex items-center justify-center">
+                <div className="mt-3.5 flex items-center justify-center gap-2">
                   <AddToCalendarMenu match={nextMatch} onOpenUrl={onOpenUrl} />
+                  <ShareMatchButton match={nextMatch} className="border border-[#1e282d] bg-[#091428] p-1.5" />
                 </div>
 
                 {/* Official League Broadcast Stream Channels */}
@@ -730,6 +769,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           className={`p-0.5 rounded hover:bg-[#1e282d] ${
                             settings.followedTeams.includes(m.team1Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                           }`}
+                          aria-label={
+                            settings.followedTeams.includes(m.team1Code)
+                              ? `Unfollow ${m.team1Code}`
+                              : `Follow ${m.team1Code}`
+                          }
                           title={
                             settings.followedTeams.includes(m.team1Code)
                               ? `Unfollow ${m.team1Code}`
@@ -759,6 +803,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           className={`p-0.5 rounded hover:bg-[#1e282d] ${
                             settings.followedTeams.includes(m.team2Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                           }`}
+                          aria-label={
+                            settings.followedTeams.includes(m.team2Code)
+                              ? `Unfollow ${m.team2Code}`
+                              : `Follow ${m.team2Code}`
+                          }
                           title={
                             settings.followedTeams.includes(m.team2Code)
                               ? `Unfollow ${m.team2Code}`
@@ -840,6 +889,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       className={`p-0.5 rounded hover:bg-[#1e282d] ${
                         settings.followedTeams.includes(m.team1Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                       }`}
+                      aria-label={
+                        settings.followedTeams.includes(m.team1Code)
+                          ? `Unfollow ${m.team1Code}`
+                          : `Follow ${m.team1Code}`
+                      }
                       title={
                         settings.followedTeams.includes(m.team1Code)
                           ? `Unfollow ${m.team1Code}`
@@ -869,6 +923,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       className={`p-0.5 rounded hover:bg-[#1e282d] ${
                         settings.followedTeams.includes(m.team2Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                       }`}
+                      aria-label={
+                        settings.followedTeams.includes(m.team2Code)
+                          ? `Unfollow ${m.team2Code}`
+                          : `Follow ${m.team2Code}`
+                      }
                       title={
                         settings.followedTeams.includes(m.team2Code)
                           ? `Unfollow ${m.team2Code}`
@@ -914,5 +973,5 @@ export const LiveView: React.FC<LiveViewProps> = ({
 /** H2H meter for a compact match row, when the teams have any recorded history. */
 const RowH2H: React.FC<{ m: Match; schedule: Match[] }> = ({ m, schedule }) => {
   const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule, m.matchId);
-  return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} /> : null;
+  return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} matchId={m.matchId} /> : null;
 };

@@ -12,6 +12,19 @@ export const RIOT_LEGAL_NOTICE =
   "officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties " +
   "are trademarks or registered trademarks of Riot Games, Inc.";
 
+/** The web version. Shared links always point here so they open without installing anything. */
+export const WEB_APP_URL = "https://lolworlds.com/riftwatch/";
+
+export function matchShareUrl(matchId: string): string {
+  return `${WEB_APP_URL}#match/${encodeURIComponent(matchId)}`;
+}
+
+/** The match id in a `#match/<id>` link, if the page was opened with one. */
+export function matchIdFromHash(hash: string = window.location.hash): string | null {
+  const m = /^#match\/([^/?#]+)/.exec(hash);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 /** Download for the desktop app. Disabled on the web page until the public release is ready. */
 export const DESKTOP_DOWNLOAD_ENABLED = false;
 export const DESKTOP_DOWNLOAD_URL = "https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch.exe";

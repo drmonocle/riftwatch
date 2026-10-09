@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Match, AppSettings, CatalogData } from "../../types";
 import { Search, Calendar, Star, Trophy } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
+import { ShareMatchButton } from "../ShareMatchButton";
 import { isMatchFollowed, computeHeadToHead } from "../../helpers";
 import { H2HMeter } from "../H2HMeter";
 import { StandingsView } from "./StandingsView";
@@ -13,6 +14,8 @@ interface ScheduleViewProps {
   onOpenUrl: (url: string) => void;
   onUpdateSettings?: (s: Partial<AppSettings>) => void;
   onSelectTeam?: (teamCode: string, teamName?: string) => void;
+  /** From a #match/<id> link: switch filters to show this match, scroll to it and flash it. */
+  highlightMatchId?: string | null;
 }
 
 export const ScheduleView: React.FC<ScheduleViewProps> = ({
@@ -22,6 +25,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onOpenUrl,
   onUpdateSettings,
   onSelectTeam,
+  highlightMatchId,
 }) => {
   const [mainSubTab, setMainSubTab] = useState<"matches" | "standings">("matches");
   const [filterRange, setFilterRange] = useState<"today" | "upcoming" | "results">(() => {
@@ -39,6 +43,29 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   const toggleReveal = (matchId: string) => {
     setRevealedMatchIds((prev) => ({ ...prev, [matchId]: !prev[matchId] }));
   };
+
+  // A shared link: show the filter the match lives in, then scroll to it.
+  const [flashMatchId, setFlashMatchId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlightMatchId) return;
+    const m = schedule.find((x) => x.matchId === highlightMatchId);
+    if (!m) return;
+    const isToday = !!m.startTimeUtc && new Date(m.startTimeUtc).toDateString() === new Date().toDateString();
+    setMainSubTab("matches");
+    setFollowedOnly(false);
+    setSearchQuery("");
+    setFilterRange(m.state === "completed" ? "results" : isToday ? "today" : "upcoming");
+    setFlashMatchId(highlightMatchId);
+    const scroll = window.setTimeout(
+      () => document.getElementById(`match-${highlightMatchId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }),
+      50,
+    );
+    const clear = window.setTimeout(() => setFlashMatchId(null), 6000);
+    return () => {
+      window.clearTimeout(scroll);
+      window.clearTimeout(clear);
+    };
+  }, [highlightMatchId, schedule]);
 
   const toggleTeamFollow = (code: string) => {
     if (!onUpdateSettings || !code) return;
@@ -193,10 +220,15 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 return (
                   <div
                     key={m.matchId}
-                    className="flex items-center justify-between bg-[#0a1420] border border-[#1e282d] hover:border-[#c8aa6e]/80 px-4 py-2.5 rounded-lg transition-all"
+                    id={`match-${m.matchId}`}
+                    className={`flex items-center justify-between bg-[#0a1420] border px-4 py-2.5 rounded-lg transition-all ${
+                      flashMatchId === m.matchId
+                        ? "border-[#0ac8b9] ring-2 ring-[#0ac8b9]/40 shadow-lg shadow-[#0ac8b9]/10"
+                        : "border-[#1e282d] hover:border-[#c8aa6e]/80"
+                    }`}
                   >
                     {/* Time, Calendar & League */}
-                    <div className="flex items-center gap-2 w-44">
+                    <div className="flex items-center gap-2 w-24 sm:w-44 shrink-0">
                       <span className="font-mono text-xs text-[#0ac8b9] font-bold shrink-0">{timeStr}</span>
                       {m.state !== "completed" && (
                         <AddToCalendarMenu match={m} onOpenUrl={onOpenUrl} compact={true} />
@@ -207,7 +239,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                     {/* Teams & Score */}
                     <div className="flex items-center justify-center gap-3 sm:gap-4 flex-1">
                       {/* Team 1 */}
-                      <div className="flex items-center gap-1.5 w-36 justify-end text-right">
+                      <div className="flex items-center gap-1.5 w-24 sm:w-36 justify-end text-right">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -217,6 +249,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                           className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
                             isT1Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                           }`}
+                          aria-label={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
                           title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
                         >
                           <Star className={`w-3.5 h-3.5 ${isT1Followed ? "fill-[#c8aa6e]" : ""}`} />
@@ -269,12 +302,12 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                           )}
                         </div>
                         {(showScore || m.state !== "completed") && h2h && (
-                          <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} />
+                          <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} matchId={m.matchId} />
                         )}
                       </div>
 
                       {/* Team 2 */}
-                      <div className="flex items-center gap-1.5 w-36 justify-start text-left">
+                      <div className="flex items-center gap-1.5 w-24 sm:w-36 justify-start text-left">
                         {m.team2Image && (
                           <img
                             src={m.team2Image}
@@ -299,6 +332,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                           className={`p-0.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
                             isT2Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                           }`}
+                          aria-label={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
                           title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
                         >
                           <Star className={`w-3.5 h-3.5 ${isT2Followed ? "fill-[#c8aa6e]" : ""}`} />
@@ -307,7 +341,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                     </div>
 
                     {/* Status / Best Of */}
-                    <div className="flex items-center gap-2 w-28 justify-end">
+                    <div className="flex items-center gap-2 w-20 sm:w-32 justify-end shrink-0">
+                      <ShareMatchButton match={m} />
                       <span className="text-[10px] text-[#9bb3c9] bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d] font-medium">
                         Bo{m.bestOf}
                       </span>

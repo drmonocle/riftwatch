@@ -183,6 +183,7 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
                                 className={`p-1 rounded hover:bg-[#1e282d] transition-colors shrink-0 ${
                                   isFollowed ? "text-[#c8aa6e]" : "text-[#7e8e9f] hover:text-[#c8aa6e]"
                                 }`}
+                                aria-label={isFollowed ? `Unfollow ${team.teamCode}` : `Follow ${team.teamCode}`}
                                 title={isFollowed ? `Unfollow ${team.teamCode}` : `Follow ${team.teamCode}`}
                               >
                                 <Star className={`w-3.5 h-3.5 ${isFollowed ? "fill-[#c8aa6e]" : ""}`} />

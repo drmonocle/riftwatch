@@ -1,5 +1,4 @@
 import { Match, StreamEvent, AppSettings, League } from "./types";
-import allTimeH2HJson from "./all_time_h2h.json";
 
 // Current schedule codes folded into the code their franchise history is stored under in
 // all_time_h2h.json (keep in sync with CODE_ALIASES in h2h-refresh/assemble.py).
@@ -50,8 +49,36 @@ export function buildAllTimeH2H(raw: Record<string, [number, number]>): Record<s
 /** Games up to this moment are in the bundled all_time_h2h.json; later results come from the schedule. */
 export const BUNDLED_H2H_CUTOFF = "2026-09-26T00:00:00Z";
 
-let ALL_TIME_H2H = buildAllTimeH2H((allTimeH2HJson as unknown) as Record<string, [number, number]>);
+// Empty until loadBundledH2H() or applyH2HData() runs; keeps the 170 KB table out of the startup bundle.
+let ALL_TIME_H2H: Record<string, [number, number]> = {};
 let H2H_CUTOFF_MS = new Date(BUNDLED_H2H_CUTOFF).getTime();
+let H2H_LOADED = false;
+
+/** True once any H2H table (bundled or downloaded) is in place. */
+export function isH2HLoaded(): boolean {
+  return H2H_LOADED;
+}
+
+/** Loads the table shipped inside the app, unless newer downloaded data is already applied. */
+export async function loadBundledH2H(): Promise<boolean> {
+  if (H2H_LOADED) return false;
+  const mod = await import("./all_time_h2h.json");
+  if (H2H_LOADED) return false; // downloaded data won the race
+  ALL_TIME_H2H = buildAllTimeH2H((mod.default ?? mod) as unknown as Record<string, [number, number]>);
+  H2H_LOADED = true;
+  return true;
+}
+
+/** Key for a pair in the H2H tables: codes normalized and sorted, joined by "__". */
+export function h2hKey(team1Code: string, team2Code: string): string {
+  const [a, b] = [normalizeTeamCode(team1Code), normalizeTeamCode(team2Code)].sort();
+  return `${a}__${b}`;
+}
+
+/** Start of the window the app fills from its own schedule (everything earlier is in the table). */
+export function h2hCutoffMs(): number {
+  return H2H_CUTOFF_MS;
+}
 
 /** Downloaded H2H data (see fetchH2HData). Only replaces the bundled table when it is newer. */
 export interface H2HData {
@@ -64,7 +91,59 @@ export function applyH2HData(data: H2HData): boolean {
   if (isNaN(cutoffMs) || cutoffMs <= H2H_CUTOFF_MS) return false;
   ALL_TIME_H2H = buildAllTimeH2H(data.pairs);
   H2H_CUTOFF_MS = cutoffMs;
+  H2H_LOADED = true;
   return true;
+}
+
+/** One past series between two teams, as shown in the H2H details view. */
+export interface H2HMeeting {
+  date: string;
+  tournament: string;
+  /** Game wins for team1 / team2 of the pair as the caller ordered them. */
+  team1Score: number;
+  team2Score: number;
+  matchId?: string;
+}
+
+/**
+ * Past meetings for the details view: the published series history (up to the data cutoff)
+ * plus completed matches from the live schedule after it, newest first.
+ */
+export function recentMeetings(
+  team1Code: string,
+  team2Code: string,
+  published: [string, string, number, number][] | undefined,
+  schedule: Match[] | undefined,
+  excludeMatchId?: string,
+  limit = 10,
+): H2HMeeting[] {
+  const c1 = normalizeTeamCode(team1Code);
+  const c2 = normalizeTeamCode(team2Code);
+  const [a] = [c1, c2].sort();
+  const flip = a !== c1; // published scores are from the alphabetically-first team's side
+
+  const out: H2HMeeting[] = [];
+  for (const m of schedule || []) {
+    if (m.state !== "completed" || m.matchId === excludeMatchId) continue;
+    const m1 = normalizeTeamCode(m.team1Code);
+    const m2 = normalizeTeamCode(m.team2Code);
+    const direct = m1 === c1 && m2 === c2;
+    if (!direct && !(m1 === c2 && m2 === c1)) continue;
+    const t = new Date(m.startTimeUtc).getTime();
+    if (isNaN(t) || t < H2H_CUTOFF_MS) continue;
+    out.push({
+      date: m.startTimeUtc.slice(0, 10),
+      tournament: m.leagueName,
+      team1Score: direct ? m.team1Score : m.team2Score,
+      team2Score: direct ? m.team2Score : m.team1Score,
+      matchId: m.matchId,
+    });
+  }
+  for (const [date, tournament, aw, bw] of published || []) {
+    out.push({ date, tournament, team1Score: flip ? bw : aw, team2Score: flip ? aw : bw });
+  }
+  out.sort((x, y) => y.date.localeCompare(x.date));
+  return out.slice(0, limit);
 }
 
 /** If the schedule's latest started entry is older than this, the stream is treated as offline. */

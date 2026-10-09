@@ -119,6 +119,7 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
                   className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
                     isTeamFollowed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                   }`}
+                  aria-label={isTeamFollowed ? `Unfollow ${upperCode}` : `Follow ${upperCode}`}
                   title={isTeamFollowed ? `Unfollow ${upperCode}` : `Follow ${upperCode}`}
                 >
                   <Star className={`w-4 h-4 ${isTeamFollowed ? "fill-[#c8aa6e]" : ""}`} />
@@ -202,6 +203,7 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
                         className={`p-1.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ml-2 ${
                           isPlayerFollowed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                         }`}
+                        aria-label={isPlayerFollowed ? `Unfollow ${p.name}` : `Follow ${p.name}`}
                         title={isPlayerFollowed ? `Unfollow ${p.name}` : `Follow ${p.name}`}
                       >
                         <Star className={`w-4 h-4 ${isPlayerFollowed ? "fill-[#c8aa6e]" : ""}`} />
@@ -243,7 +245,7 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
                           <div className="text-[10px] text-[#9bb3c9]">
                             {m.leagueName} · Bo{m.bestOf}
                           </div>
-                          {h2h && <H2HMeter team1Code={teamCode} team2Code={oppCode} h2h={h2h} />}
+                          {h2h && <H2HMeter team1Code={teamCode} team2Code={oppCode} h2h={h2h} matchId={m.matchId} />}
                         </div>
                         <div className="text-right font-mono text-[11px] text-[#0ac8b9]">
                           {new Date(m.startTimeUtc).toLocaleDateString([], {

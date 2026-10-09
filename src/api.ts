@@ -473,6 +473,29 @@ export async function fetchH2HData(): Promise<H2HData> {
   return data;
 }
 
+/** Series history for the H2H details view, published next to h2h.json in 26 shards by first letter. */
+export interface H2HSeriesEntry {
+  /** Game wins at Worlds / MSI / First Stand, from the alphabetically-first team's side. */
+  intl: [number, number];
+  /** Newest first: [date, tournament, aScore, bScore]. */
+  recent: [string, string, number, number][];
+}
+
+const H2H_SERIES_URL = "https://raw.githubusercontent.com/drmonocle/riftwatch/h2h-data/series/";
+const seriesShards = new Map<string, Promise<Record<string, H2HSeriesEntry>>>();
+
+export function fetchH2HSeries(pairKey: string): Promise<H2HSeriesEntry | null> {
+  const c = pairKey.charAt(0).toUpperCase();
+  const shard = c >= "A" && c <= "Z" ? c : "0";
+  let p = seriesShards.get(shard);
+  if (!p) {
+    p = fetchJson(`${H2H_SERIES_URL}${shard}.json`, undefined, 20000);
+    p.catch(() => seriesShards.delete(shard)); // let a later tap retry
+    seriesShards.set(shard, p);
+  }
+  return p.then((data) => data[pairKey] ?? null);
+}
+
 const STREAM_CACHE_KEY = "riftwatch_stream_schedule";
 
 /** Last 24/7 schedule fetched, so a lolworlds.com outage doesn't blank the Stream tab. */

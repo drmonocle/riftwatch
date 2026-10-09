@@ -205,6 +205,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
             <button
               onClick={() => setIndex((prev) => (prev - 1 + items.length) % items.length)}
               className="p-0.5 hover:text-[#c8aa6e] rounded hover:bg-[#1e282d]"
+              aria-label="Previous item"
               title="Previous item"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -212,6 +213,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
             <button
               onClick={() => setIndex((prev) => (prev + 1) % items.length)}
               className="p-0.5 hover:text-[#c8aa6e] rounded hover:bg-[#1e282d]"
+              aria-label="Next item"
               title="Next item"
             >
               <ChevronRight className="w-3.5 h-3.5" />
@@ -243,6 +245,8 @@ export const TickerBar: React.FC<TickerBarProps> = ({
               className={`p-1 rounded hover:bg-[#1e282d] ${
                 settings.tickerTopmost ? "text-[#c8aa6e]" : "text-[#7e8e9f]"
               }`}
+              aria-label={settings.tickerTopmost ? "Unpin from always on top" : "Pin always on top"}
+              aria-pressed={settings.tickerTopmost}
               title={settings.tickerTopmost ? "Pinned Always on Top" : "Unpinned"}
             >
               {settings.tickerTopmost ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
@@ -263,6 +267,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
         <button
           onClick={handleClose}
           className="p-1 hover:text-[#e84057] rounded hover:bg-[#1e282d]"
+          aria-label="Hide ticker bar"
           title="Hide ticker bar (can be restored in Settings)"
         >
           <X className="w-3 h-3" />

@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, applyH2HData } from "../helpers";
+import { beforeAll, describe, expect, it } from "vitest";
+import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, applyH2HData, loadBundledH2H, h2hKey, recentMeetings } from "../helpers";
+import { matchIdFromHash, matchShareUrl } from "../platform";
+
+// The bundled table is loaded on demand now (kept out of the startup bundle).
+beforeAll(async () => {
+  await loadBundledH2H();
+});
 import type { Match } from "../types";
 
 const match = (over: Partial<Match> = {}): Match => ({
@@ -120,5 +126,46 @@ describe("computeHeadToHead", () => {
       team2Wins: before.team2Wins,
     });
     expect(computeHeadToHead("T1", "GEN", [played])?.totalGames).toBe(before.totalGames + 3);
+  });
+});
+describe("h2hKey", () => {
+  it("normalizes and sorts the codes", () => {
+    expect(h2hKey("t1", "GEN")).toBe("GEN__T1");
+    expect(h2hKey("GEN", "T1")).toBe("GEN__T1");
+    expect(h2hKey("KRX", "T1")).toBe("DRX__T1");
+  });
+});
+
+describe("recentMeetings", () => {
+  it("merges published history with newer schedule results, newest first, from team1's side", () => {
+    // Published rows are from the alphabetically-first team's side (GEN), so T1-first callers get them flipped.
+    const published: [string, string, number, number][] = [["2025-10-18", "Worlds 2025", 1, 0]];
+    const played = match({
+      matchId: "new",
+      state: "completed",
+      startTimeUtc: "2031-01-01T10:00:00Z",
+      team1Code: "T1",
+      team2Code: "GEN",
+      team1Score: 3,
+      team2Score: 2,
+      leagueName: "LCK",
+    });
+    const rows = recentMeetings("T1", "GEN", published, [played]);
+    expect(rows).toEqual([
+      { date: "2031-01-01", tournament: "LCK", team1Score: 3, team2Score: 2, matchId: "new" },
+      { date: "2025-10-18", tournament: "Worlds 2025", team1Score: 0, team2Score: 1 },
+    ]);
+    // The match the view was opened from is left out.
+    expect(recentMeetings("T1", "GEN", published, [played], "new")).toHaveLength(1);
+  });
+});
+
+describe("shareable match links", () => {
+  it("round-trips a match id through the web URL hash", () => {
+    const url = matchShareUrl("115 abc/1");
+    expect(url).toBe("https://lolworlds.com/riftwatch/#match/115%20abc%2F1");
+    expect(matchIdFromHash(new URL(url).hash)).toBe("115 abc/1");
+    expect(matchIdFromHash("#other")).toBeNull();
+    expect(matchIdFromHash("")).toBeNull();
   });
 });

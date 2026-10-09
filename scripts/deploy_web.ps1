@@ -13,7 +13,6 @@ Pop-Location
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 # Old hashed bundles are no longer referenced by index.html; clear them so the folder doesn't grow forever.
 if (Test-Path "$target\assets") { Remove-Item "$target\assets" -Recurse -Force }
-Copy-Item "$root\dist-web\*" $target -Recurse -Force
-Copy-Item "$root\web\sw.js", "$root\web\web.config" $target -Force
+Copy-Item "$root\dist-web\*" $target -Recurse -Force   # includes web\* (sw.js, manifest, icons, web.config)
 
 Write-Host "Deployed to $target. Check https://lolworlds.com/riftwatch/"

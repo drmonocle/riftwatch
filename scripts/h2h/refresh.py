@@ -11,6 +11,7 @@ Run every few hours by .github/workflows/h2h-data.yml. Standard library only.
 """
 import json
 import os
+import re
 import sys
 import time
 import urllib.parse
@@ -20,6 +21,10 @@ from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BASE_PATH = os.path.join(ROOT, "src", "all_time_h2h.json")
+# Per-pair series history from the catalog (h2h-refresh/series_from_catalog.py), same cutoff.
+BASE_SERIES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "base_series.json")
+RECENT_N = 10
+INTL_LEAGUE = re.compile(r"world|msi|mid-season|first stand", re.I)
 BASE_CUTOFF = "2026-09-26T00:00:00Z"  # keep in sync with BUNDLED_H2H_CUTOFF in src/helpers.ts
 # keep in sync with CODE_ALIASES in src/helpers.ts
 CODE_ALIASES = {"TLAW": "TL", "MKOI": "MDK", "KRX": "DRX", "DNS": "KDF", "DNF": "KDF"}
@@ -90,6 +95,12 @@ def main(out_path):
         pairs[(a, b)][0] += aw
         pairs[(a, b)][1] += bw
 
+    # Series history for the H2H details view: catalog history plus the new series.
+    series = {}
+    if os.path.exists(BASE_SERIES_PATH):
+        series = json.load(open(BASE_SERIES_PATH, encoding="utf-8"))
+    new_series = []
+
     added = 0
     for e in events.values():
         start = parse_time(e["startTime"])
@@ -106,20 +117,47 @@ def main(out_path):
         pairs[(a, b)][0] += aw
         pairs[(a, b)][1] += bw
         added += 1
+        league = (e.get("league") or {}).get("name") or ""
+        new_series.append((f"{a}__{b}", start.strftime("%Y-%m-%d"), league, aw, bw))
+
+    for key, date, league, aw, bw in sorted(new_series, key=lambda s: s[1], reverse=True):
+        entry = series.setdefault(key, {"intl": [0, 0], "recent": []})
+        if INTL_LEAGUE.search(league):
+            entry["intl"][0] += aw
+            entry["intl"][1] += bw
+        entry["recent"].insert(0, [date, league, aw, bw])
+    for entry in series.values():
+        entry["recent"].sort(key=lambda s: s[0], reverse=True)
+        del entry["recent"][RECENT_N:]
 
     out = {
-        "version": 1,
+        "version": 2,
         "generated": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "cutoff": cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "baseCutoff": BASE_CUTOFF,
         "seriesAdded": added,
         "pairs": {f"{a}__{b}": v for (a, b), v in sorted(pairs.items())},
     }
-    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    out_dir = os.path.dirname(os.path.abspath(out_path))
+    os.makedirs(os.path.join(out_dir, "series"), exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="") as f:
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
+
+    # Shard the series history by the first character of the pair key (A-Z, else "0"), so the
+    # app fetches one small file when a meter is tapped instead of the whole history.
+    shards = {}
+    for key, entry in series.items():
+        shards.setdefault(shard_of(key), {})[key] = entry
+    for name, data in shards.items():
+        with open(os.path.join(out_dir, "series", f"{name}.json"), "w", encoding="utf-8", newline="") as f:
+            json.dump(dict(sorted(data.items())), f, ensure_ascii=False, separators=(",", ":"))
     print(f"{len(events)} events since {BASE_CUTOFF}; added {added} completed series; "
-          f"{len(out['pairs'])} pairs; cutoff {out['cutoff']}")
+          f"{len(out['pairs'])} pairs; cutoff {out['cutoff']}; {len(series)} pairs with history in {len(shards)} shards")
+
+
+def shard_of(key):
+    c = key[:1].upper()
+    return c if "A" <= c <= "Z" else "0"
 
 
 if __name__ == "__main__":
