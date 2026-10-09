@@ -1,173 +1,129 @@
 # ⚡ RiftWatch
 
-A fast, lightweight Windows desktop app for League of Legends esports. Track live scores, view schedules, explore starting rosters, check standings, follow your favorite teams, and watch matches without opening a heavy browser.
+**Live League of Legends esports scores, schedules, official standings and all-time head-to-head records, in your browser or as a tiny Windows app.** Built for fans who follow more than one league, and for viewers of the 24/7 classic-tournament Twitch stream.
 
-[![Download](https://img.shields.io/github/v/release/drmonocle/riftwatch?color=0ac8b9&label=Download)](https://github.com/drmonocle/riftwatch/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows-blue)](#)
-[![Size](https://img.shields.io/badge/size-3.8%20MB-brightgreen)](#)
-[![Memory](https://img.shields.io/badge/memory-%3C40%20MB%20RAM-0ac8b9)](#)
+[![Latest release](https://img.shields.io/github/v/release/drmonocle/riftwatch?color=0ac8b9&label=Latest)](https://github.com/drmonocle/riftwatch/releases/latest)
+[![Platform](https://img.shields.io/badge/desktop-Windows%2010%20%7C%2011-blue)](#-windows-app)
+[![Size](https://img.shields.io/badge/download-~4%20MB-brightgreen)](#-windows-app)
+[![CI](https://github.com/drmonocle/riftwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/drmonocle/riftwatch/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 <p align="center">
-  <img src="screenshots/01_live_matches.png" alt="RiftWatch Live Match View & Docked Ticker HUD" width="900" style="border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+  <img src="screenshots/01_live_matches.png" alt="RiftWatch live match view" width="900">
 </p>
+
+## 🚀 Try it
+
+| | |
+|---|---|
+| 🌐 **Web version** (any device, no install) | **[lolworlds.com/riftwatch](https://lolworlds.com/riftwatch/)** |
+| 🪟 **Windows app** (floating ticker, tray, notifications) | **[Download RiftWatch.exe](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch.exe)** |
+
+On a phone, open the web version and use **Add to Home Screen** to install it like an app.
 
 ---
 
-## 📥 Download for Windows
+## ✨ What it does
 
-Download the latest release from [**GitHub Releases**](https://github.com/drmonocle/riftwatch/releases):
+### 🔴 Live matches
+Series score, game-by-game progress (`● Game 2 (Live)`) and one-tap links to the broadcast. When a match starts **late**, RiftWatch says so ("Delayed · 1h 54m late, the broadcast is on air") instead of pretending nothing is happening, and picks it up within seconds of Game 1.
 
-* 🚀 [**Download RiftWatch.exe**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch.exe) (Portable standalone, ~3.8 MB)
-* 📦 [**Download RiftWatch.zip**](https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch-v0.3.6-windows-x64.zip) (~1.8 MB)
+### 🏆 Official standings and brackets
+The same group tables, Swiss rounds and playoff brackets lolesports.com shows, for every league Riot lists (all 51). It opens on the split being played and on the stage that is underway; pick any recent split from the dropdown.
 
-> **No installer or admin rights required.** Just download and launch. Optimized for Windows 10 and 11, sipping less than 40 MB of RAM.
+<p align="center"><img src="screenshots/04_league_standings.png" alt="Official league standings" width="780"></p>
+<p align="center"><img src="screenshots/05_playoff_bracket.png" alt="Playoff bracket" width="780"></p>
 
----
+### ⚔️ All-time head-to-head (2011 to today)
+Every match card carries a head-to-head meter. Tap it for the full record: games won and lost across **every tournament and region** (rebrands are combined, so SKT counts as T1), the split between Worlds / MSI / First Stand and domestic play, and the last 10 meetings with scores. The data refreshes itself every few hours.
 
-## 📸 App Showcase
+<p align="center"><img src="screenshots/02_schedule_results_h2h.png" alt="Schedule with head-to-head meters" width="780"></p>
+<p align="center"><img src="screenshots/03_h2h_history.png" alt="Head-to-head history" width="780"></p>
 
-### 🔴 Real-Time Match Tracking & Series Progression
-Real-time series scores, in-game game progression (`● Game 2 (Live)`), head-to-head records, and direct links to live Twitch/YouTube streams.
-<p align="center">
-  <img src="screenshots/01_live_matches.png" alt="RiftWatch Live Match Dashboard" width="850">
-</p>
+### 📅 Schedule, 24/7 stream and watchlist
+- **Schedule:** Today / Upcoming / Results, a "followed only" filter, search, and one-click **Add to Calendar** (Google, Outlook, Yahoo, Apple/ICS).
+- **24/7 Stream:** what the classic-tournament marathon is airing now, what is next, and the S-tier "banger" games.
+- **Watchlist:** follow teams, players, regions and leagues. Alerts, "next match you follow" and filters all follow your list.
+- **Team pages:** click any team for its roster, recent results and next matches.
 
-### 👥 Team Rosters & Player Profiles
-Click any team code or logo to view the starting five lineup, role badges, verified Riot player headshots, head-to-head matchup history, and recent match results.
-<p align="center">
-  <img src="screenshots/02_team_roster_modal.png" alt="Team Rosters and Player Profiles Modal" width="850">
-</p>
+### 🙈 Spoiler mode
+Hides scores, winners, series progress, bracket results and head-to-head scores until you reveal a match. Toggle it any time (`Ctrl+S` in the Windows app).
 
-### 🏆 Official League Standings
-Track tournament standings across LCK, LPL, LEC, LCS, CBLOL, and international events with series records, game differentials, win percentages, and streak indicators.
-<p align="center">
-  <img src="screenshots/03_league_standings.png" alt="League Standings and Team Streaks" width="850">
-</p>
+### 🔗 Share a match
+The link icon on any match copies a link that opens it in the web version: `lolworlds.com/riftwatch/#match/<id>`.
 
-### ⭐ Custom Watchlist & Global Directory
-Follow your favorite teams, superstar players, leagues, and regions. Customize your feeds so you only see the matches you care about.
-<p align="center">
-  <img src="screenshots/04_watchlist_customization.png" alt="Custom Watchlist and Roster Directory" width="850">
-</p>
-
-### 📺 24/7 Classic Stream Marathon
-Curated 24/7 LoL tournament stream guide on Twitch and YouTube. See what classic international series is on air right now with upcoming broadcast listings.
-<p align="center">
-  <img src="screenshots/05_247_stream_marathon.png" alt="24/7 Classic Stream Marathon" width="850">
-</p>
+<p align="center"><img src="screenshots/09_team_roster.png" alt="Team roster" width="780"></p>
 
 ---
 
-## ⚡ Key Features
+## 🪟 Windows app
 
-### 📌 Floating Ticker Bar & Desktop HUD
-* Pop out a mini bar that floats on your screen while you play games or work.
-* Click and drag it anywhere on your desktop; double-click anytime to restore the main window.
-* Pin it on top of other windows so you never miss a match.
-* Shows live scores, upcoming start times, and stream info in real-time.
-* Click any match on the bar to jump straight to its details.
+Everything above, plus things a browser can't do:
 
-### 👥 Team Rosters & Player Profiles
-* Click on any team name, code, or logo across the app to open the full Team Roster flyout.
-* Shows starting active lineups with role badges (`TOP`, `JUNGLE`, `MID`, `BOT`, `SUPPORT`), full player names, and official headshot photos.
-* Star favorite players directly from the roster to follow them on your personal Watchlist.
-* Displays historical Head-to-Head (H2H) records against opponent teams and recent series results.
+- **Floating ticker:** a slim always-on-top bar you can drag anywhere, over windowed and borderless games.
+- **System tray and `Alt+Shift+L`:** summon or hide RiftWatch from anywhere in Windows.
+- **Notifications and a hextech chime** when a match you follow goes live, 15 minutes before it starts, and when a legendary game airs on the 24/7 stream.
+- **Start with Windows** (off by default), compact window mode, and **one-click updates**: the app verifies each download against its published SHA-256 before installing anything.
 
-### 🏆 League Standings & Head-to-Head Records
-* Dedicated League Standings tab inside Schedule view.
-* Filter by league to check regular season standings, series records (W-L), game differentials, win percentages, and hot/cold streaks (`1W`, `3L`, etc.).
-* Match cards automatically display past Head-to-Head win-loss records between the two contesting teams.
+**Install:** download `RiftWatch.exe` and run it. It is one portable file: no installer, no admin rights. It uses the Microsoft Edge WebView2 runtime that ships with Windows 10 and 11.
 
-### 📊 Live Game Deep Stats & Series Progression
-* Live match cards feature animated live pills showing the exact game currently on Summoner's Rift (`● Game 2 (Live)`).
-* Series progress pills allow you to track multi-game Bo3 and Bo5 momentum at a glance.
+> **"Windows protected your PC"?** RiftWatch is not code-signed yet, so Windows SmartScreen may warn the first time. Click **More info → Run anyway**. Every release publishes the SHA-256 of `RiftWatch.exe` (`RiftWatch.exe.sha256`) so you can check your download.
 
-### ⌨️ Global Summon Hotkey & LoL Kickoff Audio
-* **Global Win32 Hotkey (`Alt+Shift+L`)**: Summon RiftWatch instantly to the foreground from inside full-screen games or workflows.
-* **Hextech Kickoff Audio**: Optional procedural synthesized hextech audio chime that plays when a followed match goes live.
-* **Compact Mode**: Quick toggle in the titlebar for low-profile window sizing.
-* `F5` / `Ctrl+R` — Refresh live scores immediately.
-* `Ctrl+1..6` — Fast-switch between Live, Schedule, 24/7 Stream, Watchlist, News, and Settings.
-* `Ctrl+S` — Toggle Spoiler Mode instantly.
-* `Ctrl+D` — Toggle Detached Floating HUD mode.
+Keyboard (Windows app): `F5` / `Ctrl+R` refresh · `Ctrl+1…6` switch tabs · `Ctrl+S` spoiler mode · `Ctrl+D` detach / dock the ticker.
 
-### 🙈 Spoiler Mode & Per-Match Reveal
-* Hate spoilers? Turn on Spoiler Mode in one click to mask scores and winners.
-* Click any individual masked "VS" score to reveal just that match without spoiling other series on the slate.
-
-### ⭐ Watchlist & 1-Click Following
-* Follow your favorite **Teams** (T1, Gen.G, G2, FlyQuest, BLG, etc.) from the Watchlist or directly from match cards.
-* Follow your favorite **Players** (Faker, Chovy, Caps, Ruler, etc.).
-* Pick which **Regions** and **Leagues** you care about (LCK, LPL, LEC, LCS, Worlds, MSI, etc.).
-* Filter schedules so you only see matches for the teams you follow.
-
-### 📅 1-Click Add to Calendar
-* Click the calendar icon next to any upcoming match to export it directly:
-  - 🌐 **Google Calendar** (pre-filled web event composer)
-  - 🍏 **Apple Calendar & Outlook Desktop** (instant `.ics` download)
-  - 📧 **Outlook.com / Microsoft 365** (Outlook web event composer)
-  - 🟣 **Yahoo Calendar** (Yahoo event composer)
-* Automatically calculates match durations based on format (Bo1 = 1 hr, Bo3 = 2.5 hrs, Bo5 = 4 hrs).
-
-### 📺 Broadcast Channels & Riot Live Streams
-* Instant links to official broadcast streams:
-  - **Twitch** official channels (LCK, LPL, LEC, LCS, RiotGames)
-  - **YouTube Live** official channels (@LCKglobal, @lolesports, etc.)
-  - **LoLEsports.com** official viewer portal with rewards & drops
-  - Direct live feed stream URLs automatically provided when games are in progress.
-
-### 🔔 System Tray & Native Single Instance
-* Single-instance enforcement: launching a second copy brings the active RiftWatch window to the front.
-* Minimizes cleanly to the system tray near your Windows clock.
-* Windows autostart option on sign-in and desktop notifications for followed match kickoffs.
+<p align="center"><img src="screenshots/06_247_stream.png" alt="24/7 stream guide" width="780"></p>
 
 ---
 
-## 🛠️ How to Build from Source
+## 🔒 Privacy
 
-Requirements:
-- [Node.js](https://nodejs.org/) (v18+)
-- [Rust](https://rustup.rs/) (stable toolchain)
+No accounts, no analytics, no tracking. Your followed teams and settings stay on your device (browser storage or the app's data). RiftWatch only talks to:
+
+| Service | Why |
+|---|---|
+| `esports-api.lolesports.com` | Riot's public esports data: matches, schedules, standings, rosters |
+| `lolworlds.com` | The 24/7 stream schedule |
+| `api.github.com`, `raw.githubusercontent.com`, `github.com` | Update checks, the self-refreshing head-to-head data, and release downloads |
+
+The web version is served from lolworlds.com, which keeps normal web-server logs like any website.
+
+---
+
+## 🛠️ Build from source
+
+Requirements: [Node.js](https://nodejs.org/) 22, [Rust](https://rustup.rs/) (stable) and the Windows C++ build tools (or the `xwin` cross toolchain, see `src-tauri/.cargo/config.toml.example`).
 
 ```powershell
-# 1. Clone repository
-git clone https://github.com/drmonocle/riftwatch.git
-cd riftwatch
-
-# 2. Install dependencies and run Vite dev server
-npm install
-npm run dev
-
-# 3. Build standalone production Windows binary
-npm run build
-cargo build --manifest-path src-tauri/Cargo.toml --release
-```
-
-The resulting optimized binary is located at `src-tauri/target/release/RiftWatch.exe`.
-
-### Checks & releases
-
-```bash
-npm test               # unit tests (frontend)
-npm run check:version  # package.json / tauri.conf.json / Cargo.toml versions must match
+npm ci
+npm run tauri dev        # desktop app with hot reload
+npm run dev              # browser only
+npm run build:web        # the web version, built to dist-web/ for /riftwatch/
+npm test                 # frontend tests
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-**Publishing a release:** run `package_release.ps1`, then upload both `RiftWatch.exe` **and** `RiftWatch.exe.sha256` to the GitHub release. The in-app updater verifies the SHA-256 and refuses to install a binary without a matching checksum.
+**How it fits together**
+- `src/` React 19 + TypeScript + Tailwind. `src/platform.ts` tells the desktop app and the web page apart, and desktop-only features hide themselves in the browser.
+- `src-tauri/` Tauri v2 + Rust: tray, global hotkey, floating ticker, notifications, and the verified self-updater.
+- `scripts/h2h/refresh.py` + `.github/workflows/h2h-data.yml` rebuild the head-to-head data every 6 hours and publish it to the `h2h-data` branch, which the app downloads. The bundled `src/all_time_h2h.json` and `scripts/h2h/base_series.json` hold history up to 2026-09-25.
+- `web/` the service worker, manifest, icons and IIS config for the web version; `scripts/deploy_web.ps1` publishes it.
 
-Cross-compiling with xwin? Copy `src-tauri/.cargo/config.toml.example` to `config.toml` and set your local paths (it is git-ignored).
+**Releases** are built by GitHub Actions, not on a developer machine. Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` (`npm run check:version` enforces that they match), then push a tag:
+
+```powershell
+git tag v0.3.18 ; git push origin v0.3.18
+```
+
+The `Release` workflow tests, builds on Windows and attaches `RiftWatch.exe`, its SHA-256 and a zip to a **draft** release. Publishing the draft is what makes it the latest release and offers it to the in-app updater.
 
 ---
 
 ## ☕ Support
 
-RiftWatch is 100% free and open source. If you find it useful and want to support ongoing development:
-
-👉 [**Support on Ko-fi**](https://ko-fi.com/monocle)
-
----
+RiftWatch is free and open source. If it is useful to you: **[Support on Ko-fi](https://ko-fi.com/monocle)**.
 
 ## 📜 Disclaimer
 
-RiftWatch is an unofficial fan project by Monocle Productions LLC. It is not endorsed by or affiliated with Riot Games. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc.
+RiftWatch is an unofficial fan project by Monocle Productions LLC.
+
+RiftWatch isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.

@@ -1,0 +1,81 @@
+name: Release
+
+# Builds RiftWatch.exe on GitHub's Windows runners from the tagged commit and attaches it, its
+# SHA-256 and the zip to a DRAFT release. Review the draft on GitHub, then publish it (that is
+# what makes it "Latest" and reaches the in-app updater).
+#
+#   Tag a release:      git tag v0.3.14 && git push origin v0.3.14
+#   Build without tag:  Actions > Release > Run workflow (artifact only, no release)
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Tag must match the app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ("v$v" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} does not match package.json version $v" }
+
+      - name: Frontend checks and build
+        run: |
+          npm ci
+          npm run check:version
+          npx tsc --noEmit
+          npm test
+          npm run build
+
+      - name: Rust tests and release build
+        working-directory: src-tauri
+        run: |
+          cargo test --locked
+          cargo build --release --locked
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item src-tauri\target\release\riftwatch-tauri.exe release\RiftWatch.exe
+          $hash = (Get-FileHash release\RiftWatch.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path release\RiftWatch.exe.sha256 -Value "$hash  RiftWatch.exe" -Encoding ascii -NoNewline
+          Compress-Archive -Path release\RiftWatch.exe -DestinationPath release\RiftWatch-windows-x64.zip -Force
+          "RiftWatch.exe $([math]::Round((Get-Item release\RiftWatch.exe).Length / 1MB, 2)) MB, sha256 $hash"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RiftWatch-windows
+          path: |
+            release/RiftWatch.exe
+            release/RiftWatch.exe.sha256
+            release/RiftWatch-windows-x64.zip
+          if-no-files-found: error
+
+      - name: Draft the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $hash = (Get-Content release\RiftWatch.exe.sha256 -Raw).Split(' ')[0]
+          $notes = "Built from $tag by GitHub Actions.`n`n### Checksum`n- ``RiftWatch.exe``: ``$hash```n`n**SmartScreen:** RiftWatch isn't code-signed yet, so Windows may show ""Windows protected your PC"". Click **More info -> Run anyway**."
+          gh release create $tag release\RiftWatch.exe release\RiftWatch.exe.sha256 release\RiftWatch-windows-x64.zip --draft --title "RiftWatch $tag" --notes $notes

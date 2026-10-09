@@ -1,8 +1,9 @@
 import React from "react";
-import { AppSettings, Match, StreamEvent, AppUpdateInfo } from "../types";
-import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2 } from "lucide-react";
+import { AppSettings, Match, StreamEvent, AppUpdateInfo, LiveShow } from "../types";
+import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2, Download, Smartphone } from "lucide-react";
 import { currentStreamEvent, formatStreamHeaderTitle } from "../helpers";
 import { APP_VERSION } from "../version";
+import { IS_DESKTOP, IS_WEB, IS_WINDOWS_BROWSER, DESKTOP_DOWNLOAD_URL } from "../platform";
 
 interface HeaderProps {
   settings: AppSettings;
@@ -14,6 +15,10 @@ interface HeaderProps {
   onSelectTab: (tab: any) => void;
   onOpenUrl: (url: string) => void;
   updateInfo?: AppUpdateInfo | null;
+  /** Web only: present when the browser offers to install the page as an app. */
+  onInstall?: () => void;
+  /** Broadcasts on air with no match in progress (e.g. a delayed start). */
+  liveShows?: LiveShow[];
 }
 
 // Shared look for the small header controls: one line, never wrapping.
@@ -30,23 +35,36 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectTab,
   onOpenUrl,
   updateInfo,
+  onInstall,
+  liveShows = [],
 }) => {
   const hasLive = liveMatches.length > 0;
+  const onAir = !hasLive && liveShows.length > 0 ? liveShows[0] : null;
   const firstLive = hasLive ? liveMatches[0] : null;
   const currStream = currentStreamEvent(streamEvents);
   const streamInfo = formatStreamHeaderTitle(currStream);
   const extraLive = liveMatches.length > 1 ? ` +${liveMatches.length - 1}` : "";
 
   return (
-    <header className="bg-[#0a0e17] border-b border-[#c8aa6e] px-4 py-2 flex items-center gap-3 select-none">
+    <header className="bg-[#0a0e17] border-b border-[#c8aa6e] px-3 sm:px-4 py-2 flex items-center gap-3 select-none">
       {/* Brand */}
       <div className="flex items-baseline gap-1.5 cursor-pointer flex-shrink-0" onClick={() => onSelectTab("live")}>
         <span className="text-[#c8aa6e] font-bold text-lg tracking-wider">RIFTWATCH</span>
-        <span className="text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
+        <span className="hidden sm:inline text-[#a09b8c] text-[10px]">v{APP_VERSION}</span>
       </div>
 
-      {/* Status pills: these shrink and truncate instead of wrapping */}
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      {/* Support: sits just left of the live pills */}
+      <button
+        onClick={() => onOpenUrl("https://ko-fi.com/monocle")}
+        className={`${iconBtn} flex-shrink-0 bg-[#720e9e] border-[#720e9e] hover:bg-[#8c19bd] text-white`}
+        aria-label="Support RiftWatch on Ko-fi"
+        title="Support RiftWatch development on Ko-fi"
+      >
+        <Heart className="w-3.5 h-3.5 fill-current" />
+      </button>
+
+      {/* Status pills: these shrink and truncate instead of wrapping; on phones the ticker shows the same info */}
+      <div className="hidden sm:flex items-center gap-2 min-w-0 flex-1">
         {updateInfo?.hasUpdate && (
           <button
             onClick={() => onSelectTab("settings")}
@@ -63,13 +81,29 @@ export const Header: React.FC<HeaderProps> = ({
           className={`${pill} flex-shrink-0 ${
             hasLive
               ? "bg-[#1e131d] border-[#e84057] text-[#e84057] font-semibold"
-              : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] hover:border-[#c8aa6e]"
+              : onAir
+                ? "bg-[#1a1708] border-[#c8aa6e]/70 text-[#c8aa6e] font-semibold"
+                : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] hover:border-[#c8aa6e]"
           }`}
-          title={hasLive ? `${liveMatches.length} live pro match(es). Click to view.` : "No pro matches live right now"}
+          title={
+            hasLive
+              ? `${liveMatches.length} live pro match(es). Click to view.`
+              : onAir
+                ? `${onAir.leagueName} broadcast is on air, no match has started yet`
+                : "No pro matches live right now"
+          }
         >
-          <span className={`w-2 h-2 rounded-full ${hasLive ? "bg-[#e84057] animate-pulse" : "bg-[#7e8e9f]"}`} />
+          <span
+            className={`w-2 h-2 rounded-full ${
+              hasLive ? "bg-[#e84057] animate-pulse" : onAir ? "bg-[#c8aa6e] animate-pulse" : "bg-[#7e8e9f]"
+            }`}
+          />
           <span>
-            {hasLive ? `LIVE ${firstLive?.team1Code} vs ${firstLive?.team2Code}${extraLive}` : "No live matches"}
+            {hasLive
+              ? `LIVE ${firstLive?.team1Code} vs ${firstLive?.team2Code}${extraLive}`
+              : onAir
+                ? `${onAir.leagueName} on air`
+                : "No live matches"}
           </span>
         </button>
 
@@ -88,7 +122,31 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
+      <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+        {onInstall && (
+          <button
+            onClick={onInstall}
+            className={`${pill} font-semibold bg-[#0a1420] border-[#0ac8b9]/60 text-[#0ac8b9] hover:bg-[#121e2d]`}
+            aria-label="Install RiftWatch on this device"
+            title="Add RiftWatch to your home screen or desktop"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Install</span>
+          </button>
+        )}
+        {IS_WEB && IS_WINDOWS_BROWSER && (
+          <a
+            href={DESKTOP_DOWNLOAD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${pill} font-semibold bg-[#c8aa6e] border-[#c8aa6e] text-[#091428] hover:bg-[#f0e6d2]`}
+            title="Download RiftWatch for Windows (free, about 4 MB, no installer)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Download for Windows</span>
+            <span className="md:hidden">Windows</span>
+          </a>
+        )}
         <button
           onClick={() => onUpdateSettings({ spoilerMode: !settings.spoilerMode })}
           className={`${pill} font-medium ${
@@ -96,39 +154,37 @@ export const Header: React.FC<HeaderProps> = ({
               ? "bg-[#c8aa6e] border-[#c8aa6e] text-[#091428]"
               : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
           }`}
+          aria-label={settings.spoilerMode ? "Show spoilers" : "Hide spoilers"}
+          aria-pressed={settings.spoilerMode}
           title={settings.spoilerMode ? "Spoilers hidden: scores and gold are masked. Click to show." : "Spoilers shown. Click to hide scores and gold."}
         >
           {settings.spoilerMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          <span>Spoilers</span>
+          <span className="hidden sm:inline">Spoilers</span>
         </button>
 
-        <button
-          onClick={() => onUpdateSettings({ compactMode: !settings.compactMode })}
-          className={`${iconBtn} ${
-            settings.compactMode
-              ? "bg-[#0ac8b9] border-[#0ac8b9] text-[#091428]"
-              : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
-          }`}
-          title={`${settings.compactMode ? "Expand window" : "Compact window"} (Alt+Shift+L summons/hides app anywhere)`}
-        >
-          {settings.compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-        </button>
+        {IS_DESKTOP && (
+          <button
+            onClick={() => onUpdateSettings({ compactMode: !settings.compactMode })}
+            className={`${iconBtn} ${
+              settings.compactMode
+                ? "bg-[#0ac8b9] border-[#0ac8b9] text-[#091428]"
+                : "bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]"
+            }`}
+            aria-label={settings.compactMode ? "Expand window" : "Compact window"}
+            title={`${settings.compactMode ? "Expand window" : "Compact window"} (Alt+Shift+L summons/hides app anywhere)`}
+          >
+            {settings.compactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+          </button>
+        )}
 
         <button
           onClick={onRefresh}
           disabled={isRefreshing}
           className={`${iconBtn} bg-[#0a1420] border-[#1e282d] text-[#f0e6d2] hover:bg-[#121e2d]`}
+          aria-label="Refresh match data"
           title="Refresh match data"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-[#c8aa6e]" : ""}`} />
-        </button>
-
-        <button
-          onClick={() => onOpenUrl("https://ko-fi.com/monocle")}
-          className={`${iconBtn} bg-[#720e9e] border-[#720e9e] hover:bg-[#8c19bd] text-white`}
-          title="Support RiftWatch development on Ko-fi"
-        >
-          <Heart className="w-3.5 h-3.5 fill-current" />
         </button>
       </div>
     </header>

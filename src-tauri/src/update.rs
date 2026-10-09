@@ -40,6 +40,13 @@ pub fn parse_sha256(text: &str) -> Option<String> {
     }
 }
 
+/// Where the running exe is moved during an update: `RiftWatch.exe` -> `RiftWatch.exe.old`.
+pub fn old_exe_path(exe: &std::path::Path) -> std::path::PathBuf {
+    let mut name = exe.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+    name.push(".old");
+    exe.with_file_name(name)
+}
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|b| format!("{:02x}", b)).collect()
@@ -89,6 +96,12 @@ mod tests {
         assert_eq!(parse_sha256("not a hash"), None);
         assert_eq!(parse_sha256(&"g".repeat(64)), None);
         assert_eq!(parse_sha256(""), None);
+    }
+
+    #[test]
+    fn old_exe_sits_beside_the_exe() {
+        let p = std::path::Path::new("C:/Apps/RiftWatch/RiftWatch.exe");
+        assert_eq!(old_exe_path(p), std::path::Path::new("C:/Apps/RiftWatch/RiftWatch.exe.old"));
     }
 
     #[test]

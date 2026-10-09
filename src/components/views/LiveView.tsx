@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { Match, AppSettings, CatalogData } from "../../types";
+import { Match, AppSettings, CatalogData, LiveShow } from "../../types";
 import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star, Swords } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
-import { getLeagueBroadcastStreams, isMatchFollowed, computeHeadToHead, isFirstMeeting } from "../../helpers";
-import { H2HMeter, FirstMeetingTag } from "../H2HMeter";
+import { ShareMatchButton } from "../ShareMatchButton";
+import {
+  getLeagueBroadcastStreams,
+  isMatchFollowed,
+  computeHeadToHead,
+  isUpcomingOrDelayed,
+  minutesLate,
+  formatLate,
+  DELAY_GRACE_MIN,
+} from "../../helpers";
+import { H2HMeter } from "../H2HMeter";
 
 interface LiveViewProps {
   matches: Match[];
@@ -14,6 +23,12 @@ interface LiveViewProps {
   onSelectTab: (tab: any) => void;
   onUpdateSettings?: (s: Partial<AppSettings>) => void;
   onSelectTeam?: (teamCode: string, teamName?: string) => void;
+  /** From a #match/<id> link: scroll to this live match and flash it. */
+  highlightMatchId?: string | null;
+  /** True until the first data sync has finished. */
+  isLoading?: boolean;
+  /** Broadcast shows Riot reports as on air right now (they have no teams). */
+  liveShows?: LiveShow[];
 }
 
 // Live ticking countdown hook
@@ -107,12 +122,31 @@ export const LiveView: React.FC<LiveViewProps> = ({
   onSelectTab,
   onUpdateSettings,
   onSelectTeam,
+  highlightMatchId,
+  isLoading,
+  liveShows = [],
 }) => {
   const [revealedMatchIds, setRevealedMatchIds] = useState<Record<string, boolean>>({});
 
   const toggleReveal = (matchId: string) => {
     setRevealedMatchIds((prev) => ({ ...prev, [matchId]: !prev[matchId] }));
   };
+
+  // A shared link to a live match: scroll to its card and flash it.
+  const [flashMatchId, setFlashMatchId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!highlightMatchId) return;
+    setFlashMatchId(highlightMatchId);
+    const scroll = window.setTimeout(
+      () => document.getElementById(`match-${highlightMatchId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }),
+      50,
+    );
+    const clear = window.setTimeout(() => setFlashMatchId(null), 6000);
+    return () => {
+      window.clearTimeout(scroll);
+      window.clearTimeout(clear);
+    };
+  }, [highlightMatchId]);
 
   const toggleTeamFollow = (code: string) => {
     if (!onUpdateSettings || !code) return;
@@ -124,13 +158,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
   };
 
   const now = Date.now();
+  // Leagues whose broadcast is on air right now. A match in one of them that is past its start
+  // time is running late, not gone, so it stays on this tab (Riot keeps it "unstarted").
+  const liveLeagueSlugs = new Set(liveShows.map((s) => s.leagueSlug.toLowerCase()));
   const unstarted = schedule
-    .filter((m) => {
-      if (m.state === "completed") return false;
-      const t = new Date(m.startTimeUtc).getTime();
-      // Keep upcoming matches, or any match scheduled within the last 15 minutes that hasn't completed
-      return !isNaN(t) && t >= now - 15 * 60 * 1000;
-    })
+    .filter((m) => isUpcomingOrDelayed(m, liveLeagueSlugs, now))
     .sort((a, b) => new Date(a.startTimeUtc).getTime() - new Date(b.startTimeUtc).getTime());
 
   const hasWatchlist =
@@ -155,6 +187,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
       nextTag = isTeam
         ? "Next match you follow"
         : `Next in your leagues · ${nextMatch.leagueName}`;
+      if (minutesLate(nextMatch, now) >= DELAY_GRACE_MIN) nextTag = `Delayed · ${nextMatch.leagueName}`;
       comingUp = followedMatches.slice(1, 5);
     }
   } else {
@@ -167,6 +200,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
   }
 
   const countdown = useCountdown(nextMatch?.startTimeUtc);
+  const lateMin = nextMatch ? minutesLate(nextMatch, now) : 0;
+  const nextIsDelayed = lateMin >= DELAY_GRACE_MIN;
+  const nextShow = nextMatch
+    ? liveShows.find((s) => s.leagueSlug.toLowerCase() === (nextMatch!.leagueSlug || "").toLowerCase())
+    : undefined;
 
   // If pro matches are live right now
   if (matches.length > 0) {
@@ -194,17 +232,23 @@ export const LiveView: React.FC<LiveViewProps> = ({
             return (
               <div
                 key={m.matchId}
+                id={`match-${m.matchId}`}
                 className={`bg-[#0a1420] border rounded-lg p-4 transition-all hover:border-[#c8aa6e] ${
-                  isT1Followed || isT2Followed
-                    ? "border-[#c8aa6e] shadow-lg shadow-[#c8aa6e]/5"
-                    : "border-[#1e282d]"
+                  flashMatchId === m.matchId
+                    ? "border-[#0ac8b9] ring-2 ring-[#0ac8b9]/40"
+                    : isT1Followed || isT2Followed
+                      ? "border-[#c8aa6e] shadow-lg shadow-[#c8aa6e]/5"
+                      : "border-[#1e282d]"
                 }`}
               >
                 {/* Card Header: League & Best-of */}
                 <div className="flex items-center justify-between text-xs text-[#9bb3c9] mb-3 font-medium">
                   <span className="font-bold text-[#0ac8b9]">{m.leagueName}</span>
-                  <span className="font-medium bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]">
-                    Best of {m.bestOf}
+                  <span className="flex items-center gap-1.5">
+                    <ShareMatchButton match={m} />
+                    <span className="font-medium bg-[#091428] px-2 py-0.5 rounded border border-[#1e282d]">
+                      Best of {m.bestOf}
+                    </span>
                   </span>
                 </div>
 
@@ -223,6 +267,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
                             isT1Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                           }`}
+                          aria-label={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
                           title={isT1Followed ? `Unfollow ${m.team1Code}` : `Follow ${m.team1Code}`}
                         >
                           <Star className={`w-3.5 h-3.5 ${isT1Followed ? "fill-[#c8aa6e]" : ""}`} />
@@ -290,7 +335,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                     )}
                     {(() => {
                       const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule, m.matchId);
-                      return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} /> : null;
+                      return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} matchId={m.matchId} /> : null;
                     })()}
                   </div>
 
@@ -329,6 +374,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
                             isT2Followed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                           }`}
+                          aria-label={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
                           title={isT2Followed ? `Unfollow ${m.team2Code}` : `Follow ${m.team2Code}`}
                         >
                           <Star className={`w-3.5 h-3.5 ${isT2Followed ? "fill-[#c8aa6e]" : ""}`} />
@@ -411,6 +457,18 @@ export const LiveView: React.FC<LiveViewProps> = ({
     );
   }
 
+  // FIRST LOAD: nothing has arrived yet, so don't claim there are no matches.
+  if (isLoading && schedule.length === 0) {
+    return (
+      <div className="p-4 h-full flex items-center justify-center" role="status">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0a1420] border border-[#1e282d] text-[#9bb3c9] text-xs">
+          <Clock className="w-3.5 h-3.5 text-[#0ac8b9] animate-pulse" />
+          <span>Loading live matches and the schedule…</span>
+        </div>
+      </div>
+    );
+  }
+
   // IDLE STATE: No matches live right now -> Show Next Match Hero with Live Countdown
   return (
     <div className="p-4 space-y-6 max-w-4xl mx-auto overflow-y-auto h-full">
@@ -420,6 +478,25 @@ export const LiveView: React.FC<LiveViewProps> = ({
           <Clock className="w-3.5 h-3.5 text-[#0ac8b9]" />
           <span>No pro matches are live right now</span>
         </div>
+        {liveShows.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2" role="status">
+            {liveShows.map((s) => (
+              <button
+                key={s.leagueSlug}
+                type="button"
+                onClick={() => s.streamUrl && onOpenUrl(s.streamUrl)}
+                disabled={!s.streamUrl}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1a1708] border border-[#c8aa6e]/60 text-[#f0e6d2] text-xs hover:border-[#c8aa6e] disabled:cursor-default"
+                title={s.streamUrl ? `Open the ${s.leagueName} broadcast` : undefined}
+              >
+                <span className="w-2 h-2 rounded-full bg-[#e84057] animate-pulse" />
+                <span>
+                  <strong>{s.leagueName}</strong> broadcast is live
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Hero Next Match Card */}
@@ -488,6 +565,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           ? "text-[#c8aa6e]"
                           : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                       }`}
+                      aria-label={
+                        settings.followedTeams.includes(nextMatch.team1Code)
+                          ? `Unfollow ${nextMatch.team1Code}`
+                          : `Follow ${nextMatch.team1Code}`
+                      }
                       title={
                         settings.followedTeams.includes(nextMatch.team1Code)
                           ? `Unfollow ${nextMatch.team1Code}`
@@ -556,6 +638,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           ? "text-[#c8aa6e]"
                           : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                       }`}
+                      aria-label={
+                        settings.followedTeams.includes(nextMatch.team2Code)
+                          ? `Unfollow ${nextMatch.team2Code}`
+                          : `Follow ${nextMatch.team2Code}`
+                      }
                       title={
                         settings.followedTeams.includes(nextMatch.team2Code)
                           ? `Unfollow ${nextMatch.team2Code}`
@@ -586,29 +673,43 @@ export const LiveView: React.FC<LiveViewProps> = ({
                 if (h2h) {
                   return (
                     <div className="mt-3 w-full flex justify-center">
-                      <H2HMeter team1Code={nextMatch.team1Code} team2Code={nextMatch.team2Code} h2h={h2h} size="md" />
+                      <H2HMeter team1Code={nextMatch.team1Code} team2Code={nextMatch.team2Code} h2h={h2h} size="md" matchId={nextMatch.matchId} />
                     </div>
                   );
-                }
-                if (isFirstMeeting(nextMatch.team1Code, nextMatch.team2Code, schedule, nextMatch.matchId)) {
-                  return <FirstMeetingTag />;
                 }
                 return null;
               })()}
 
               {/* Live Ticking Countdown */}
               <div className="mt-5 pt-4 border-t border-[#1e282d]/80 w-full flex flex-col items-center">
-                <div className="text-xl sm:text-2xl font-extrabold text-[#0ac8b9] font-mono tracking-tight animate-pulse">
-                  {countdown.formatted || "Calculating…"}
-                </div>
+                {nextIsDelayed ? (
+                  <div className="flex flex-col items-center gap-1" role="status">
+                    <span className="px-2.5 py-0.5 rounded bg-[#c8aa6e] text-[#091428] text-[10px] font-extrabold uppercase tracking-wider">
+                      Delayed
+                    </span>
+                    <div className="text-xl sm:text-2xl font-extrabold text-[#c8aa6e] font-mono tracking-tight">
+                      {formatLate(lateMin)} late
+                    </div>
+                    <div className="text-[11px] text-[#9bb3c9]">
+                      {nextShow
+                        ? `The ${nextShow.leagueName} broadcast is on air. Game 1 hasn't started yet.`
+                        : "Riot hasn't marked this match as started yet."}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xl sm:text-2xl font-extrabold text-[#0ac8b9] font-mono tracking-tight animate-pulse">
+                    {countdown.formatted || "Calculating…"}
+                  </div>
+                )}
                 <div className="text-xs text-[#9bb3c9] mt-1 flex items-center gap-1.5 font-medium">
                   <Calendar className="w-3.5 h-3.5 text-[#c8aa6e]" />
                   <span>{formatMatchTime(nextMatch.startTimeUtc)}</span>
                 </div>
 
                 {/* Calendar Integration Button */}
-                <div className="mt-3.5 flex items-center justify-center">
+                <div className="mt-3.5 flex items-center justify-center gap-2">
                   <AddToCalendarMenu match={nextMatch} onOpenUrl={onOpenUrl} />
+                  <ShareMatchButton match={nextMatch} className="border border-[#1e282d] bg-[#091428] p-1.5" />
                 </div>
 
                 {/* Official League Broadcast Stream Channels */}
@@ -733,6 +834,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           className={`p-0.5 rounded hover:bg-[#1e282d] ${
                             settings.followedTeams.includes(m.team1Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                           }`}
+                          aria-label={
+                            settings.followedTeams.includes(m.team1Code)
+                              ? `Unfollow ${m.team1Code}`
+                              : `Follow ${m.team1Code}`
+                          }
                           title={
                             settings.followedTeams.includes(m.team1Code)
                               ? `Unfollow ${m.team1Code}`
@@ -762,6 +868,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                           className={`p-0.5 rounded hover:bg-[#1e282d] ${
                             settings.followedTeams.includes(m.team2Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                           }`}
+                          aria-label={
+                            settings.followedTeams.includes(m.team2Code)
+                              ? `Unfollow ${m.team2Code}`
+                              : `Follow ${m.team2Code}`
+                          }
                           title={
                             settings.followedTeams.includes(m.team2Code)
                               ? `Unfollow ${m.team2Code}`
@@ -843,6 +954,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       className={`p-0.5 rounded hover:bg-[#1e282d] ${
                         settings.followedTeams.includes(m.team1Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                       }`}
+                      aria-label={
+                        settings.followedTeams.includes(m.team1Code)
+                          ? `Unfollow ${m.team1Code}`
+                          : `Follow ${m.team1Code}`
+                      }
                       title={
                         settings.followedTeams.includes(m.team1Code)
                           ? `Unfollow ${m.team1Code}`
@@ -872,6 +988,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       className={`p-0.5 rounded hover:bg-[#1e282d] ${
                         settings.followedTeams.includes(m.team2Code) ? "text-[#c8aa6e]" : "text-[#9bb3c9]"
                       }`}
+                      aria-label={
+                        settings.followedTeams.includes(m.team2Code)
+                          ? `Unfollow ${m.team2Code}`
+                          : `Follow ${m.team2Code}`
+                      }
                       title={
                         settings.followedTeams.includes(m.team2Code)
                           ? `Unfollow ${m.team2Code}`
@@ -914,10 +1035,8 @@ export const LiveView: React.FC<LiveViewProps> = ({
   );
 };
 
-/** H2H meter for a compact match row, or a "First meeting" tag when they've never played. */
+/** H2H meter for a compact match row, when the teams have any recorded history. */
 const RowH2H: React.FC<{ m: Match; schedule: Match[] }> = ({ m, schedule }) => {
   const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule, m.matchId);
-  if (h2h) return <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} />;
-  if (isFirstMeeting(m.team1Code, m.team2Code, schedule, m.matchId)) return <FirstMeetingTag />;
-  return null;
+  return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} matchId={m.matchId} /> : null;
 };

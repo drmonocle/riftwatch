@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { AppSettings, Match, StreamEvent } from "../types";
 import { ChevronLeft, ChevronRight, Pin, PinOff, Minimize2, Maximize2, X } from "lucide-react";
 import { currentStreamEvent, nextUpcomingMatches, computeHeadToHead } from "../helpers";
+import { IS_DESKTOP } from "../platform";
 
 interface TickerBarProps {
   settings: AppSettings;
@@ -204,6 +205,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
             <button
               onClick={() => setIndex((prev) => (prev - 1 + items.length) % items.length)}
               className="p-0.5 hover:text-[#c8aa6e] rounded hover:bg-[#1e282d]"
+              aria-label="Previous item"
               title="Previous item"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -211,6 +213,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
             <button
               onClick={() => setIndex((prev) => (prev + 1) % items.length)}
               className="p-0.5 hover:text-[#c8aa6e] rounded hover:bg-[#1e282d]"
+              aria-label="Next item"
               title="Next item"
             >
               <ChevronRight className="w-3.5 h-3.5" />
@@ -220,7 +223,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 
         {/* Detach / Dock Mode Button */}
         {!isDetached ? (
-          <button
+          IS_DESKTOP && <button
             onClick={handleDetach}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:text-[#0ac8b9] hover:bg-[#1e282d] text-[10px]"
             title="Detach to floating desktop HUD overlay"
@@ -242,6 +245,8 @@ export const TickerBar: React.FC<TickerBarProps> = ({
               className={`p-1 rounded hover:bg-[#1e282d] ${
                 settings.tickerTopmost ? "text-[#c8aa6e]" : "text-[#7e8e9f]"
               }`}
+              aria-label={settings.tickerTopmost ? "Unpin from always on top" : "Pin always on top"}
+              aria-pressed={settings.tickerTopmost}
               title={settings.tickerTopmost ? "Pinned Always on Top" : "Unpinned"}
             >
               {settings.tickerTopmost ? <Pin className="w-3 h-3" /> : <PinOff className="w-3 h-3" />}
@@ -262,6 +267,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
         <button
           onClick={handleClose}
           className="p-1 hover:text-[#e84057] rounded hover:bg-[#1e282d]"
+          aria-label="Hide ticker bar"
           title="Hide ticker bar (can be restored in Settings)"
         >
           <X className="w-3 h-3" />

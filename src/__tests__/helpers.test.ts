@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, isFirstMeeting } from "../helpers";
+import { beforeAll, describe, expect, it } from "vitest";
+import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, applyH2HData, loadBundledH2H, h2hKey, recentMeetings, minutesLate, formatLate, isUpcomingOrDelayed, pickTeamByCode } from "../helpers";
+import { matchIdFromHash, matchShareUrl } from "../platform";
+
+// The bundled table is loaded on demand now (kept out of the startup bundle).
+beforeAll(async () => {
+  await loadBundledH2H();
+});
 import type { Match } from "../types";
 
 const match = (over: Partial<Match> = {}): Match => ({
@@ -24,6 +30,8 @@ describe("normalizeTeamCode", () => {
   it("uppercases, trims and applies aliases", () => {
     expect(normalizeTeamCode(" t1 ")).toBe("T1");
     expect(normalizeTeamCode("tlaw")).toBe("TL");
+    expect(normalizeTeamCode("KRX")).toBe("DRX");
+    expect(normalizeTeamCode("DNS")).toBe("KDF");
     expect(normalizeTeamCode("")).toBe("");
   });
 });
@@ -96,13 +104,111 @@ describe("buildAllTimeH2H", () => {
 });
 
 describe("computeHeadToHead", () => {
-  it("shows the meter only from 6 games and flags first meetings", () => {
+  it("shows any recorded history, and nothing when there is none", () => {
     // T1 vs GEN has hundreds of games in the bundled all-time data.
     expect(computeHeadToHead("T1", "GEN")?.totalGames).toBeGreaterThan(5);
     const done = (id: string) => match({ matchId: id, state: "completed", team1Code: "AAA", team2Code: "BBB", team1Score: 2, team2Score: 1 });
-    expect(computeHeadToHead("AAA", "BBB", [done("1")])).toBeNull();
-    expect(computeHeadToHead("AAA", "BBB", [done("1"), done("2")])?.totalGames).toBe(6);
-    expect(isFirstMeeting("AAA", "BBB", [])).toBe(true);
-    expect(isFirstMeeting("AAA", "BBB", [done("1")])).toBe(false);
+    expect(computeHeadToHead("AAA", "BBB", [])).toBeNull();
+    expect(computeHeadToHead("AAA", "BBB", [done("1")])).toMatchObject({ team1Wins: 2, team2Wins: 1, totalGames: 3 });
+    // The match itself never counts towards its own H2H.
+    expect(computeHeadToHead("AAA", "BBB", [done("1")], "1")).toBeNull();
+  });
+
+  it("takes a match back out of downloaded data that already includes it", () => {
+    const before = computeHeadToHead("T1", "GEN")!;
+    expect(
+      applyH2HData({ cutoff: "2030-01-01T00:00:00Z", pairs: { GEN__T1: [before.team2Wins + 1, before.team1Wins + 2] } }),
+    ).toBe(true);
+    const played = match({ matchId: "final", state: "completed", startTimeUtc: "2029-06-01T10:00:00Z", team1Score: 2, team2Score: 1 });
+    // T1 2-1 GEN is inside the downloaded table; on its own card it must not count.
+    expect(computeHeadToHead("T1", "GEN", [played], "final")).toMatchObject({
+      team1Wins: before.team1Wins,
+      team2Wins: before.team2Wins,
+    });
+    expect(computeHeadToHead("T1", "GEN", [played])?.totalGames).toBe(before.totalGames + 3);
+  });
+});
+describe("h2hKey", () => {
+  it("normalizes and sorts the codes", () => {
+    expect(h2hKey("t1", "GEN")).toBe("GEN__T1");
+    expect(h2hKey("GEN", "T1")).toBe("GEN__T1");
+    expect(h2hKey("KRX", "T1")).toBe("DRX__T1");
+  });
+});
+
+describe("recentMeetings", () => {
+  it("merges published history with newer schedule results, newest first, from team1's side", () => {
+    // Published rows are from the alphabetically-first team's side (GEN), so T1-first callers get them flipped.
+    const published: [string, string, number, number][] = [["2025-10-18", "Worlds 2025", 1, 0]];
+    const played = match({
+      matchId: "new",
+      state: "completed",
+      startTimeUtc: "2031-01-01T10:00:00Z",
+      team1Code: "T1",
+      team2Code: "GEN",
+      team1Score: 3,
+      team2Score: 2,
+      leagueName: "LCK",
+    });
+    const rows = recentMeetings("T1", "GEN", published, [played]);
+    expect(rows).toEqual([
+      { date: "2031-01-01", tournament: "LCK", team1Score: 3, team2Score: 2, matchId: "new" },
+      { date: "2025-10-18", tournament: "Worlds 2025", team1Score: 0, team2Score: 1 },
+    ]);
+    // The match the view was opened from is left out.
+    expect(recentMeetings("T1", "GEN", published, [played], "new")).toHaveLength(1);
+  });
+});
+
+describe("shareable match links", () => {
+  it("round-trips a match id through the web URL hash", () => {
+    const url = matchShareUrl("115 abc/1");
+    expect(url).toBe("https://lolworlds.com/riftwatch/#match/115%20abc%2F1");
+    expect(matchIdFromHash(new URL(url).hash)).toBe("115 abc/1");
+    expect(matchIdFromHash("#other")).toBeNull();
+    expect(matchIdFromHash("")).toBeNull();
+  });
+});
+
+describe("delayed matches", () => {
+  const NOW = new Date("2026-10-09T22:52:00Z").getTime();
+  const dsgFue = match({ matchId: "d", leagueSlug: "lcs_promotion", state: "unstarted", startTimeUtc: "2026-10-09T21:00:00Z", team1Code: "DSG", team2Code: "FUE" });
+
+  it("measures how late an unstarted match is", () => {
+    expect(minutesLate(dsgFue, NOW)).toBe(112);
+    expect(formatLate(112)).toBe("1h 52m");
+    expect(formatLate(25)).toBe("25m");
+    expect(minutesLate({ ...dsgFue, startTimeUtc: "2026-10-09T23:30:00Z" }, NOW)).toBe(0); // not due yet
+    expect(minutesLate({ ...dsgFue, state: "inProgress" }, NOW)).toBe(0);
+    expect(minutesLate({ ...dsgFue, state: "completed" }, NOW)).toBe(0);
+  });
+
+  it("keeps a late match on the Live tab only while its league's broadcast is on air", () => {
+    expect(isUpcomingOrDelayed(dsgFue, new Set(), NOW)).toBe(false); // old behaviour: dropped after 15 min
+    expect(isUpcomingOrDelayed(dsgFue, new Set(["lcs_promotion"]), NOW)).toBe(true);
+    expect(isUpcomingOrDelayed(dsgFue, new Set(["lck"]), NOW)).toBe(false);
+    expect(isUpcomingOrDelayed({ ...dsgFue, startTimeUtc: "2026-10-09T10:00:00Z" }, new Set(["lcs_promotion"]), NOW)).toBe(false); // 12 h late: stale
+    expect(isUpcomingOrDelayed({ ...dsgFue, state: "completed" }, new Set(["lcs_promotion"]), NOW)).toBe(false);
+    expect(isUpcomingOrDelayed({ ...dsgFue, startTimeUtc: "2026-10-09T23:30:00Z" }, new Set(), NOW)).toBe(true); // upcoming
+  });
+});
+
+describe("pickTeamByCode", () => {
+  const teams = [
+    { code: "KT", name: "kt Challengers", league: "LCK Challengers" },
+    { code: "KT", name: "kt Rolster", league: "LCK" },
+    { code: "HLE", name: "HLE Academy", league: "" },
+    { code: "HLE", name: "Hanwha Life Esports", league: "LCK" },
+    { code: "TLAW", name: "Team Liquid Alienware", league: "LCS" },
+    { code: "ONLY", name: "Only Entry", league: "LCK Challengers" },
+  ];
+  it("prefers the main-league team when a code is shared", () => {
+    expect(pickTeamByCode(teams, "KT")?.name).toBe("kt Rolster");
+    expect(pickTeamByCode(teams, "hle")?.name).toBe("Hanwha Life Esports");
+  });
+  it("uses aliases and falls back to whatever exists", () => {
+    expect(pickTeamByCode(teams, "TL")?.name).toBe("Team Liquid Alienware");
+    expect(pickTeamByCode(teams, "ONLY")?.name).toBe("Only Entry");
+    expect(pickTeamByCode(teams, "NOPE")).toBeUndefined();
   });
 });

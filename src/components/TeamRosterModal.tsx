@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { CatalogData, Match, AppSettings, PlayerEntry } from "../types";
 import { X, Star, Calendar, Shield, ExternalLink, User } from "lucide-react";
-import { computeHeadToHead } from "../helpers";
+import { computeHeadToHead, pickTeamByCode } from "../helpers";
 import { H2HMeter } from "./H2HMeter";
 
 interface TeamRosterModalProps {
@@ -59,17 +59,20 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
   if (!teamCode) return null;
 
   const upperCode = teamCode.toUpperCase();
-  const catalogTeam = catalog?.teams?.find(
-    (t) => t.code.toUpperCase() === upperCode || t.name.toLowerCase() === (teamName || "").toLowerCase()
-  );
+  // Exact name first (Riot reuses codes: "KT" is both kt Rolster and kt Challengers), then the
+  // main-league team for the code.
+  const catalogTeam =
+    (teamName ? catalog?.teams?.find((t) => t.name.toLowerCase() === teamName.toLowerCase()) : undefined) ??
+    (catalog?.teams ? pickTeamByCode(catalog.teams, teamCode) : undefined);
 
   const displayName = catalogTeam?.name || teamName || teamCode;
   const teamImage = catalogTeam?.image;
   const isTeamFollowed = settings.followedTeams.includes(upperCode);
 
   // Find all players matching this team
-  const players = (catalog?.players || [])
-    .filter((p) => p.teamCode.toUpperCase() === upperCode)
+  const allPlayers = catalog?.players || [];
+  const slugPlayers = catalogTeam?.slug ? allPlayers.filter((p) => p.teamSlug === catalogTeam.slug) : [];
+  const players = (slugPlayers.length > 0 ? slugPlayers : allPlayers.filter((p) => p.teamCode.toUpperCase() === upperCode))
     .sort((a, b) => {
       const orderA = ROLE_ORDER[a.role.toLowerCase()] || 99;
       const orderB = ROLE_ORDER[b.role.toLowerCase()] || 99;
@@ -119,6 +122,7 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
                   className={`p-1 rounded hover:bg-[#1e282d] transition-colors ${
                     isTeamFollowed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                   }`}
+                  aria-label={isTeamFollowed ? `Unfollow ${upperCode}` : `Follow ${upperCode}`}
                   title={isTeamFollowed ? `Unfollow ${upperCode}` : `Follow ${upperCode}`}
                 >
                   <Star className={`w-4 h-4 ${isTeamFollowed ? "fill-[#c8aa6e]" : ""}`} />
@@ -202,6 +206,7 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
                         className={`p-1.5 rounded hover:bg-[#1e282d] transition-colors shrink-0 ml-2 ${
                           isPlayerFollowed ? "text-[#c8aa6e]" : "text-[#9bb3c9] hover:text-[#c8aa6e]"
                         }`}
+                        aria-label={isPlayerFollowed ? `Unfollow ${p.name}` : `Follow ${p.name}`}
                         title={isPlayerFollowed ? `Unfollow ${p.name}` : `Follow ${p.name}`}
                       >
                         <Star className={`w-4 h-4 ${isPlayerFollowed ? "fill-[#c8aa6e]" : ""}`} />
@@ -243,7 +248,7 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
                           <div className="text-[10px] text-[#9bb3c9]">
                             {m.leagueName} · Bo{m.bestOf}
                           </div>
-                          {h2h && <H2HMeter team1Code={teamCode} team2Code={oppCode} h2h={h2h} />}
+                          {h2h && <H2HMeter team1Code={teamCode} team2Code={oppCode} h2h={h2h} matchId={m.matchId} />}
                         </div>
                         <div className="text-right font-mono text-[11px] text-[#0ac8b9]">
                           {new Date(m.startTimeUtc).toLocaleDateString([], {

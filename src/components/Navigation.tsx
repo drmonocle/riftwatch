@@ -25,14 +25,14 @@ export const Navigation: React.FC<NavigationProps> = ({ activeTab, onSelectTab, 
   ];
 
   return (
-    <nav className="bg-[#091428] border-b border-[#1e282d] px-4 flex items-center gap-1 select-none">
+    <nav className="bg-[#091428] border-b border-[#1e282d] px-2 sm:px-4 flex items-center gap-1 select-none overflow-x-auto">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
           <button
             key={tab.key}
             onClick={() => onSelectTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold tracking-wide border-b-2 transition-all relative ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs font-semibold tracking-wide whitespace-nowrap flex-shrink-0 border-b-2 transition-all relative ${
               isActive
                 ? "border-[#c8aa6e] text-[#c8aa6e] bg-[#0c1829]"
                 : "border-transparent text-[#7e8e9f] hover:text-[#f0e6d2] hover:bg-[#0c1829]/50"

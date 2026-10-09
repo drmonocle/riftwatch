@@ -1,20 +1,27 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AppSettings, Match, StreamEvent, CatalogData, AppUpdateInfo } from "./types";
+import { AppSettings, Match, StreamEvent, CatalogData, AppUpdateInfo, LiveShow } from "./types";
 import {
   loadSettings,
   saveSettings,
   fetchLiveMatches,
   fetchSchedule,
   fetchStreamSchedule,
+  loadCachedStreamSchedule,
+  saveStreamSchedule,
   loadCachedCatalog,
   loadBundledCatalog,
   fetchLiveCatalog,
   checkForAppUpdate,
+  loadCachedH2HData,
+  fetchH2HData,
   EMPTY_CATALOG,
 } from "./api";
 import { APP_VERSION } from "./version";
-import { ArrowDownToLine } from "lucide-react";
-import { reconcileLiveAndSchedule, playKickoffChime } from "./helpers";
+import { ArrowDownToLine, WifiOff, AlertTriangle } from "lucide-react";
+import { IS_DESKTOP, IS_WEB, matchIdFromHash } from "./platform";
+import { reconcileLiveAndSchedule, playKickoffChime, applyH2HData, loadBundledH2H } from "./helpers";
+import { H2HDetailsModal } from "./components/H2HDetailsModal";
+import { OPEN_H2H_EVENT, OpenH2HDetail } from "./components/H2HMeter";
 import { Header } from "./components/Header";
 import { Navigation, TabKey } from "./components/Navigation";
 import { TickerBar } from "./components/TickerBar";
@@ -34,6 +41,7 @@ const LIVE_POLL_MS = 60_000;
 const LIVE_POLL_ACTIVE_MS = 30_000; // faster while a match is in progress
 const SCHEDULE_POLL_MS = 5 * 60_000;
 const STREAM_POLL_MS = 15 * 60_000;
+const H2H_POLL_MS = 6 * 60 * 60_000;
 
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
@@ -47,32 +55,79 @@ export default function App() {
     IS_HUD_WINDOW ? EMPTY_CATALOG : loadCachedCatalog() ?? EMPTY_CATALOG,
   );
 
-  // Determine initial tab: on first launch, open directly to Watchlist so users configure their teams
+  // Initial tab. The desktop app's very first launch opens the Watchlist so people pick their
+  // teams; the public web page opens on live scores, so a first-time visitor sees matches at once.
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     try {
       const hasLaunched = localStorage.getItem("riftwatch_has_launched");
       if (!hasLaunched) {
         localStorage.setItem("riftwatch_has_launched", "true");
-        return "watchlist";
+        if (IS_DESKTOP) return "watchlist";
       }
     } catch {}
     return loadSettings().defaultTab || "live";
   });
 
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
+  const [liveShows, setLiveShows] = useState<LiveShow[]>([]);
   const [schedule, setSchedule] = useState<Match[]>([]);
-  const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
+  const [streamEvents, setStreamEvents] = useState<StreamEvent[]>(loadCachedStreamSchedule);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [syncFailed, setSyncFailed] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<{ code: string; name?: string } | null>(null);
+  const [h2hDetail, setH2hDetail] = useState<OpenH2HDetail | null>(null);
+  const [updateCheck, setUpdateCheck] = useState<{ at: number; error: string | null } | null>(null);
+  // Set when Riot's API stops answering: "riot-down" (no response), "riot-key" (401/403), "offline".
+  const [outage, setOutage] = useState<"riot-down" | "riot-key" | "offline" | null>(null);
+  const lastLiveOk = useRef(0);
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 4500);
+  }, []);
+  // Browser "install this site as an app" prompt (Chrome / Edge / Android); null where unsupported.
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
+  // Shareable links: #match/<id> opens that match once its data has loaded.
+  const [pendingMatchId, setPendingMatchId] = useState<string | null>(() => matchIdFromHash());
+  const [highlightMatchId, setHighlightMatchId] = useState<string | null>(null);
+
+  // Tapping any H2H meter opens the details view.
+  useEffect(() => {
+    if (IS_HUD_WINDOW) return;
+    const onOpen = (e: Event) => setH2hDetail((e as CustomEvent<OpenH2HDetail>).detail);
+    window.addEventListener(OPEN_H2H_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_H2H_EVENT, onOpen);
+  }, []);
+
+  useEffect(() => {
+    const onHash = () => setPendingMatchId(matchIdFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    if (!IS_WEB) return;
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    const onInstalled = () => setInstallPrompt(null);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
 
   // Persistent refs to prevent React stale closure bugs during periodic background polling
   const liveMatchesRef = useRef<Match[]>([]);
   const scheduleRef = useRef<Match[]>([]);
-  const streamEventsRef = useRef<StreamEvent[]>([]);
+  const streamEventsRef = useRef<StreamEvent[]>(streamEvents);
 
   useEffect(() => {
     liveMatchesRef.current = liveMatches;
@@ -85,6 +140,24 @@ export default function App() {
   useEffect(() => {
     streamEventsRef.current = streamEvents;
   }, [streamEvents]);
+
+  // All-time H2H table: the cached download if there is one (newest, instant), otherwise the copy
+  // bundled with the app; then the latest download. Kept out of the startup bundle either way.
+  const [, setH2hVersion] = useState(0);
+  useEffect(() => {
+    const cached = loadCachedH2HData();
+    if (cached && applyH2HData(cached)) setH2hVersion((v) => v + 1);
+    else loadBundledH2H().then((loaded) => loaded && setH2hVersion((v) => v + 1)).catch(() => {});
+    const refresh = () =>
+      fetchH2HData()
+        .then((data) => {
+          if (applyH2HData(data)) setH2hVersion((v) => v + 1);
+        })
+        .catch(() => {}); // offline or not published yet: keep what we have
+    refresh();
+    const timer = window.setInterval(refresh, H2H_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Sync settings across windows (main window and detached HUD window)
   useEffect(() => {
@@ -177,6 +250,7 @@ export default function App() {
 
       if (live.status === "fulfilled") {
         nextLive = live.value.matches;
+        setLiveShows(live.value.shows);
       }
       if (sched.status === "fulfilled" && sched.value && sched.value.length > 0) {
         nextSched = sched.value;
@@ -189,25 +263,44 @@ export default function App() {
       scheduleRef.current = finalSchedule;
       setLiveMatches(finalLive);
       setSchedule(finalSchedule);
-      liveCount.current = finalLive.filter((m) => m.state === "inProgress").length;
+      // Poll faster while a match is in progress or a broadcast is on air (a delayed match can
+      // start at any moment, and we want to catch Game 1 within seconds).
+      liveCount.current =
+        finalLive.filter((m) => m.state === "inProgress").length +
+        (live.status === "fulfilled" ? live.value.shows.length : 0);
 
       if (stream.status === "fulfilled" && stream.value && stream.value.length > 0) {
         streamEventsRef.current = stream.value;
         setStreamEvents(stream.value);
+        saveStreamSchedule(stream.value);
         lastStream.current = now;
       }
 
       const anyFailed = [live, sched, stream].some((r) => r.status === "rejected");
       setSyncFailed(anyFailed);
       if (!anyFailed || live.status === "fulfilled") setLastSync(Date.now());
+
+      // Riot outage banner: the live feed is polled every tick, so it is the signal. Only show it
+      // once we have had no answer for a few minutes (or never), so a single blip stays quiet.
+      if (live.status === "fulfilled") {
+        lastLiveOk.current = Date.now();
+        setOutage(null);
+      } else {
+        const msg = String((live.reason as any)?.message || "");
+        if (/HTTP (401|403)\b/.test(msg)) setOutage("riot-key");
+        else if (Date.now() - lastLiveOk.current > 3 * 60_000)
+          setOutage(typeof navigator !== "undefined" && navigator.onLine === false ? "offline" : "riot-down");
+      }
     } finally {
       inFlight.current = false;
       setIsRefreshing(false);
     }
   }, []);
 
-  // Desktop keyboard shortcuts (F5, Ctrl+R, Ctrl+1..6, Ctrl+S, Ctrl+D)
+  // Desktop keyboard shortcuts (F5, Ctrl+R, Ctrl+1..6, Ctrl+S, Ctrl+D). Not on the web page: there
+  // they would hijack the browser's own Reload, Save Page and tab-switching shortcuts.
   useEffect(() => {
+    if (!IS_DESKTOP) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't intercept when user is typing in an input
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) {
@@ -238,7 +331,7 @@ export default function App() {
       } else if (e.ctrlKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         handleUpdateSettings({ spoilerMode: !settingsRef.current.spoilerMode });
-      } else if (e.ctrlKey && e.key.toLowerCase() === "d") {
+      } else if (IS_DESKTOP && e.ctrlKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
         handleUpdateSettings({
           tickerMode: settingsRef.current.tickerMode === "detached" ? "docked" : "detached",
@@ -252,10 +345,12 @@ export default function App() {
 
   // Software update check
   const handleCheckForUpdate = useCallback(async () => {
+    if (!IS_DESKTOP) return; // the web version is always current
     setIsCheckingUpdate(true);
     try {
       const info = await checkForAppUpdate(APP_VERSION);
       setUpdateInfo(info);
+      setUpdateCheck({ at: Date.now(), error: info ? null : "Couldn't reach GitHub to check for updates." });
       if (info?.hasUpdate && !IS_HUD_WINDOW) {
         // Notify once per version rather than on every startup / manual check
         let alreadyNotified = false;
@@ -296,8 +391,13 @@ export default function App() {
     let cancelled = false;
     let timer: number | undefined;
 
+    let first = true;
     const loop = async () => {
-      if (!document.hidden) await refreshData();
+      // Always fetch once right away: a tab opened in the background (or preloaded by the
+      // browser) would otherwise sit on "Loading…" until it is switched to. After that, skip
+      // polls while hidden; the visibility handler catches up when the tab comes back.
+      if (first || !document.hidden) await refreshData();
+      first = false;
       if (cancelled) return;
       timer = window.setTimeout(loop, liveCount.current > 0 ? LIVE_POLL_ACTIVE_MS : LIVE_POLL_MS);
     };
@@ -429,11 +529,36 @@ export default function App() {
   // First run: load the snapshot bundled with the app (kept out of the startup bundle).
   useEffect(() => {
     if (IS_HUD_WINDOW || catalog.teams.length > 0) return;
-    loadBundledCatalog()
-      .then((bundled) => setCatalog((prev) => (prev.teams.length > 0 ? prev : bundled)))
-      .catch((e) => console.warn("Failed to load bundled catalog:", e));
+    const load = () =>
+      loadBundledCatalog()
+        .then((bundled) => setCatalog((prev) => (prev.teams.length > 0 ? prev : bundled)))
+        .catch((e) => console.warn("Failed to load bundled catalog:", e));
+    if (IS_DESKTOP) {
+      load();
+      return;
+    }
+    // Web: the 1 MB team directory can wait until the live data is on screen.
+    const timer = window.setTimeout(load, 1200);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Resolve a #match/<id> link once the live list or schedule contains it.
+  useEffect(() => {
+    if (!pendingMatchId) return;
+    if (liveMatches.some((m) => m.matchId === pendingMatchId)) {
+      setActiveTab("live");
+      setHighlightMatchId(pendingMatchId);
+      setPendingMatchId(null);
+    } else if (schedule.some((m) => m.matchId === pendingMatchId)) {
+      setActiveTab("schedule");
+      setHighlightMatchId(pendingMatchId);
+      setPendingMatchId(null);
+    } else if (lastSync && schedule.length > 0) {
+      showToast("That match isn't in the current schedule window.");
+      setPendingMatchId(null);
+    }
+  }, [pendingMatchId, liveMatches, schedule, lastSync, showToast]);
 
   // Refresh from Riot in the background if the saved copy is older than 24 hours
   useEffect(() => {
@@ -464,11 +589,11 @@ export default function App() {
       .then(({ invoke }) => {
         invoke("open_external_url", { url }).catch(() => {
           // Native side refused (not an http/https link) or isn't available (browser dev mode)
-          if (/^https?:\/\//i.test(url)) window.open(url, "_blank");
+          if (/^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener");
         });
       })
       .catch(() => {
-        if (/^https?:\/\//i.test(url)) window.open(url, "_blank");
+        if (/^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener");
       });
   };
 
@@ -510,13 +635,47 @@ export default function App() {
         onSelectTab={setActiveTab}
         onOpenUrl={handleOpenUrl}
         updateInfo={updateInfo}
+        onInstall={installPrompt ? () => installPrompt.prompt?.() : undefined}
+        liveShows={liveShows}
       />
 
       {/* Tab Navigation */}
       <Navigation activeTab={activeTab} onSelectTab={setActiveTab} liveCount={liveMatches.length} />
 
+      {/* Data outage banner */}
+      {outage && (
+        <div
+          role="status"
+          className={`flex items-center gap-2 px-4 py-2 text-xs border-b ${
+            outage === "riot-key"
+              ? "bg-[#1e131d] border-[#e84057]/60 text-[#f0e6d2]"
+              : "bg-[#1a1708] border-[#c8aa6e]/50 text-[#f0e6d2]"
+          }`}
+        >
+          {outage === "offline" ? (
+            <WifiOff className="w-4 h-4 text-[#c8aa6e] shrink-0" />
+          ) : (
+            <AlertTriangle className={`w-4 h-4 shrink-0 ${outage === "riot-key" ? "text-[#e84057]" : "text-[#c8aa6e]"}`} />
+          )}
+          <span>
+            {outage === "offline" && "You're offline. Live scores and schedules will come back when the connection does."}
+            {outage === "riot-down" &&
+              "Riot's LoL Esports data isn't responding right now. Nothing is wrong on your end; RiftWatch retries every minute and the 24/7 stream guide still works."}
+            {outage === "riot-key" && (
+              <>
+                Riot changed the key RiftWatch uses for esports data. Please{" "}
+                <button type="button" onClick={() => handleOpenUrl("https://github.com/drmonocle/riftwatch/releases")} className="underline hover:text-[#c8aa6e]">
+                  update RiftWatch
+                </button>
+                .
+              </>
+            )}
+          </span>
+        </div>
+      )}
+
       {/* Docked Ticker Bar */}
-      {settings.tickerMode === "docked" && (
+      {(settings.tickerMode === "docked" || (!IS_DESKTOP && settings.tickerMode === "detached")) && (
         <TickerBar
           settings={settings}
           liveMatches={liveMatches}
@@ -540,6 +699,9 @@ export default function App() {
             onSelectTab={setActiveTab}
             onUpdateSettings={handleUpdateSettings}
             onSelectTeam={(code, name) => setSelectedTeam({ code, name })}
+            highlightMatchId={highlightMatchId}
+            isLoading={lastSync === null && !syncFailed}
+            liveShows={liveShows}
           />
         )}
         {activeTab === "schedule" && (
@@ -550,6 +712,8 @@ export default function App() {
             onOpenUrl={handleOpenUrl}
             onUpdateSettings={handleUpdateSettings}
             onSelectTeam={(code, name) => setSelectedTeam({ code, name })}
+            highlightMatchId={highlightMatchId}
+            isLoading={lastSync === null && !syncFailed}
           />
         )}
         {activeTab === "stream" && (
@@ -580,9 +744,36 @@ export default function App() {
             updateInfo={updateInfo}
             onCheckForUpdate={handleCheckForUpdate}
             isCheckingUpdate={isCheckingUpdate}
+            lastUpdateCheck={updateCheck}
           />
         )}
       </main>
+
+      {/* All-time H2H details (opened from any H2H meter) */}
+      {h2hDetail && (
+        <H2HDetailsModal
+          team1Code={h2hDetail.team1Code}
+          team2Code={h2hDetail.team2Code}
+          matchId={h2hDetail.matchId}
+          schedule={schedule}
+          catalog={catalog}
+          spoilerMode={settings.spoilerMode}
+          onClose={() => setH2hDetail(null)}
+          onSelectTeam={(code, name) => {
+            setH2hDetail(null);
+            setSelectedTeam({ code, name });
+          }}
+        />
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-[#0a1420] border border-[#c8aa6e]/60 text-xs text-[#f0e6d2] shadow-xl"
+        >
+          {toast}
+        </div>
+      )}
 
       {/* Team Roster & Player Profiles Flyout Modal */}
       {selectedTeam && (
@@ -627,18 +818,19 @@ export default function App() {
           >
             Monocle Productions LLC
           </span>
-          <button
+          {IS_DESKTOP && <button
             onClick={() =>
               import("@tauri-apps/api/core")
                 .then(({ invoke }) => invoke("hide_main"))
                 .catch(() => {})
             }
             className="flex items-center gap-1 px-2 py-0.5 rounded border border-[#1e282d] text-[#a09b8c] hover:text-[#f0e6d2] hover:border-[#c8aa6e] hover:bg-[#121e2d] transition-colors"
+            aria-label="Hide RiftWatch to the system tray"
             title="Hide RiftWatch to the system tray (click the tray icon or press Alt+Shift+L to bring it back)"
           >
             <ArrowDownToLine className="w-3 h-3" />
             <span>Hide to tray</span>
-          </button>
+          </button>}
         </div>
       </footer>
     </div>

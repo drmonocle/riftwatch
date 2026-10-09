@@ -1,14 +1,17 @@
 import { Match, StreamEvent, AppSettings, League } from "./types";
-import allTimeH2HJson from "./all_time_h2h.json";
 
+// Current schedule codes folded into the code their franchise history is stored under in
+// all_time_h2h.json (keep in sync with CODE_ALIASES in h2h-refresh/assemble.py).
 const CODE_ALIASES: Record<string, string> = {
   TLAW: "TL",
   MKOI: "MDK",
   KBM: "KBM",
+  KRX: "DRX",
+  DNS: "KDF",
+  DNF: "KDF",
 };
 
-// all_time_h2h.json keys some teams by full name instead of the code the
-// schedule uses, so their history never matched. Only same-org renames here.
+// Full team names that can still appear as keys in all_time_h2h.json. Only same-org renames here.
 const H2H_NAME_ALIASES: Record<string, string> = {
   "NATUS VINCERE": "NAVI",
   "OKSAVINGSBANK BRION": "BRO",
@@ -43,7 +46,105 @@ export function buildAllTimeH2H(raw: Record<string, [number, number]>): Record<s
   return out;
 }
 
-const ALL_TIME_H2H = buildAllTimeH2H((allTimeH2HJson as unknown) as Record<string, [number, number]>);
+/** Games up to this moment are in the bundled all_time_h2h.json; later results come from the schedule. */
+export const BUNDLED_H2H_CUTOFF = "2026-09-26T00:00:00Z";
+
+// Empty until loadBundledH2H() or applyH2HData() runs; keeps the 170 KB table out of the startup bundle.
+let ALL_TIME_H2H: Record<string, [number, number]> = {};
+let H2H_CUTOFF_MS = new Date(BUNDLED_H2H_CUTOFF).getTime();
+let H2H_LOADED = false;
+
+/** True once any H2H table (bundled or downloaded) is in place. */
+export function isH2HLoaded(): boolean {
+  return H2H_LOADED;
+}
+
+/** Loads the table shipped inside the app, unless newer downloaded data is already applied. */
+export async function loadBundledH2H(): Promise<boolean> {
+  if (H2H_LOADED) return false;
+  const mod = await import("./all_time_h2h.json");
+  if (H2H_LOADED) return false; // downloaded data won the race
+  ALL_TIME_H2H = buildAllTimeH2H((mod.default ?? mod) as unknown as Record<string, [number, number]>);
+  H2H_LOADED = true;
+  return true;
+}
+
+/** Key for a pair in the H2H tables: codes normalized and sorted, joined by "__". */
+export function h2hKey(team1Code: string, team2Code: string): string {
+  const [a, b] = [normalizeTeamCode(team1Code), normalizeTeamCode(team2Code)].sort();
+  return `${a}__${b}`;
+}
+
+/** Start of the window the app fills from its own schedule (everything earlier is in the table). */
+export function h2hCutoffMs(): number {
+  return H2H_CUTOFF_MS;
+}
+
+/** Downloaded H2H data (see fetchH2HData). Only replaces the bundled table when it is newer. */
+export interface H2HData {
+  cutoff: string;
+  pairs: Record<string, [number, number]>;
+}
+
+export function applyH2HData(data: H2HData): boolean {
+  const cutoffMs = new Date(data.cutoff).getTime();
+  if (isNaN(cutoffMs) || cutoffMs <= H2H_CUTOFF_MS) return false;
+  ALL_TIME_H2H = buildAllTimeH2H(data.pairs);
+  H2H_CUTOFF_MS = cutoffMs;
+  H2H_LOADED = true;
+  return true;
+}
+
+/** One past series between two teams, as shown in the H2H details view. */
+export interface H2HMeeting {
+  date: string;
+  tournament: string;
+  /** Game wins for team1 / team2 of the pair as the caller ordered them. */
+  team1Score: number;
+  team2Score: number;
+  matchId?: string;
+}
+
+/**
+ * Past meetings for the details view: the published series history (up to the data cutoff)
+ * plus completed matches from the live schedule after it, newest first.
+ */
+export function recentMeetings(
+  team1Code: string,
+  team2Code: string,
+  published: [string, string, number, number][] | undefined,
+  schedule: Match[] | undefined,
+  excludeMatchId?: string,
+  limit = 10,
+): H2HMeeting[] {
+  const c1 = normalizeTeamCode(team1Code);
+  const c2 = normalizeTeamCode(team2Code);
+  const [a] = [c1, c2].sort();
+  const flip = a !== c1; // published scores are from the alphabetically-first team's side
+
+  const out: H2HMeeting[] = [];
+  for (const m of schedule || []) {
+    if (m.state !== "completed" || m.matchId === excludeMatchId) continue;
+    const m1 = normalizeTeamCode(m.team1Code);
+    const m2 = normalizeTeamCode(m.team2Code);
+    const direct = m1 === c1 && m2 === c2;
+    if (!direct && !(m1 === c2 && m2 === c1)) continue;
+    const t = new Date(m.startTimeUtc).getTime();
+    if (isNaN(t) || t < H2H_CUTOFF_MS) continue;
+    out.push({
+      date: m.startTimeUtc.slice(0, 10),
+      tournament: m.leagueName,
+      team1Score: direct ? m.team1Score : m.team2Score,
+      team2Score: direct ? m.team2Score : m.team1Score,
+      matchId: m.matchId,
+    });
+  }
+  for (const [date, tournament, aw, bw] of published || []) {
+    out.push({ date, tournament, team1Score: flip ? bw : aw, team2Score: flip ? aw : bw });
+  }
+  out.sort((x, y) => y.date.localeCompare(x.date));
+  return out.slice(0, limit);
+}
 
 /** If the schedule's latest started entry is older than this, the stream is treated as offline. */
 const MAX_AIRING_GAP_MS = 10 * 60 * 60 * 1000;
@@ -271,12 +372,78 @@ export function isMatchFollowed(
     const l = leaguesCatalog.find(
       (item) => item.slug.toLowerCase() === slug || item.name.toLowerCase() === name
     );
-    if (l?.region && settings.followedRegions.includes(l.region.toUpperCase())) {
+    if (l?.region && regionIsFollowed(l.region, settings.followedRegions)) {
       return true;
     }
   }
 
   return false;
+}
+
+/**
+ * Riot labels some leagues with regions the Regions tab doesn't list (the LTA leagues are
+ * "AMERICAS", LLA sub-leagues are "LATIN AMERICA NORTH/SOUTH", the CIS league is its own
+ * region). Map those onto the region cards so following a region covers them.
+ */
+const REGION_ALIASES: Record<string, string[]> = {
+  AMERICAS: ["NORTH AMERICA", "BRAZIL", "LATIN AMERICA"],
+  "LATIN AMERICA NORTH": ["LATIN AMERICA"],
+  "LATIN AMERICA SOUTH": ["LATIN AMERICA"],
+  "COMMONWEALTH OF INDEPENDENT STATES": ["EMEA"],
+};
+
+export function regionIsFollowed(leagueRegion: string, followedRegions: string[]): boolean {
+  const r = leagueRegion.toUpperCase();
+  const candidates = [r, ...(REGION_ALIASES[r] || [])];
+  return candidates.some((c) => followedRegions.includes(c));
+}
+
+/**
+ * Riot reuses team codes across tiers (27 in the bundled catalog: KT is both "kt Rolster" in the
+ * LCK and "kt Challengers"). Pick the main-league team for a code, not whichever is listed first.
+ */
+export function pickTeamByCode<T extends { code: string; league?: string }>(teams: T[], code: string): T | undefined {
+  const c = normalizeTeamCode(code);
+  const matches = teams.filter((t) => normalizeTeamCode(t.code) === c);
+  const lower = /challengers|academy|youth|queue|legends|all-?stars|promotion|regional/i;
+  return matches.find((t) => t.league && !lower.test(t.league)) ?? matches[0];
+}
+
+/** A match this many minutes past its start time with no start from Riot counts as delayed. */
+export const DELAY_GRACE_MIN = 10;
+/** How far past its start time an unstarted match stays on the Live tab while its broadcast is on air. */
+export const DELAY_MAX_HOURS = 8;
+
+/** Minutes a match is running late (0 if it isn't unstarted, or isn't past its start time yet). */
+export function minutesLate(m: Match, now = Date.now()): number {
+  if (m.state !== "unstarted") return 0;
+  const t = new Date(m.startTimeUtc).getTime();
+  if (isNaN(t) || t >= now) return 0;
+  return Math.floor((now - t) / 60_000);
+}
+
+/** "1h 52m", "25m" */
+export function formatLate(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/**
+ * Keep an unstarted match on the Live tab: upcoming ones, ones that start within the last 15
+ * minutes, and ones that are running late while their league's broadcast is on air (Riot leaves
+ * a delayed match "unstarted" until the first game actually begins).
+ */
+export function isUpcomingOrDelayed(m: Match, liveLeagueSlugs: Set<string>, now = Date.now()): boolean {
+  if (m.state === "completed") return false;
+  const t = new Date(m.startTimeUtc).getTime();
+  if (isNaN(t)) return false;
+  if (t >= now - 15 * 60_000) return true;
+  return (
+    m.state === "unstarted" &&
+    liveLeagueSlugs.has((m.leagueSlug || "").toLowerCase()) &&
+    t >= now - DELAY_MAX_HOURS * 3_600_000
+  );
 }
 
 /**
@@ -367,8 +534,8 @@ export interface HeadToHeadStats {
   lastDate?: string;
 }
 
-/** Fewer games than this and the record is too thin to show as a meter. */
-export const H2H_MIN_GAMES = 6;
+/** User requirement: show the H2H whenever the teams have any recorded history. */
+export const H2H_MIN_GAMES = 1;
 
 export function computeHeadToHead(
   team1Code: string,
@@ -377,20 +544,7 @@ export function computeHeadToHead(
   excludeMatchId?: string
 ): HeadToHeadStats | null {
   const stats = rawHeadToHead(team1Code, team2Code, schedule, excludeMatchId);
-  // Strict user requirement:
-  // "if teams have played each other more then 5 games it should show the h2h of all time between the 2 teams"
   return stats && stats.totalGames >= H2H_MIN_GAMES ? stats : null;
-}
-
-/** True when the two teams have no recorded games against each other at all. */
-export function isFirstMeeting(
-  team1Code: string,
-  team2Code: string,
-  schedule?: Match[],
-  excludeMatchId?: string
-): boolean {
-  const stats = rawHeadToHead(team1Code, team2Code, schedule, excludeMatchId);
-  return !!stats && stats.totalGames === 0;
 }
 
 function rawHeadToHead(
@@ -421,7 +575,19 @@ function rawHeadToHead(
     hasAllTimeRecord = true;
   }
 
-  // 2. Schedule additions: only count matches AFTER database cutoff (2026-09-26)
+  // A match played before the cutoff is already inside the all-time table. When it is the match
+  // being shown, take its own result back out so it never counts as its own H2H history.
+  const self = excludeMatchId ? schedule?.find((m) => m.matchId === excludeMatchId) : undefined;
+  if (hasAllTimeRecord && self && self.state === "completed") {
+    const selfTime = new Date(self.startTimeUtc).getTime();
+    if (!isNaN(selfTime) && selfTime < H2H_CUTOFF_MS) {
+      const selfIsC1Team1 = normalizeTeamCode(self.team1Code) === c1;
+      t1AllTimeWins = Math.max(0, t1AllTimeWins - ((selfIsC1Team1 ? self.team1Score : self.team2Score) || 0));
+      t2AllTimeWins = Math.max(0, t2AllTimeWins - ((selfIsC1Team1 ? self.team2Score : self.team1Score) || 0));
+    }
+  }
+
+  // 2. Schedule additions: only count matches AFTER the H2H data's cutoff
   // or count all completed matches if not in all_time_h2h, and strictly exclude `excludeMatchId`
   let scheduleT1Wins = 0;
   let scheduleT2Wins = 0;
@@ -429,7 +595,7 @@ function rawHeadToHead(
   let lastWinner: string | undefined;
   let lastDate: string | undefined;
 
-  const CUTOFF_MS = new Date("2026-09-26T00:00:00Z").getTime();
+  const CUTOFF_MS = H2H_CUTOFF_MS;
 
   if (schedule && schedule.length > 0) {
     const pastMatches = schedule

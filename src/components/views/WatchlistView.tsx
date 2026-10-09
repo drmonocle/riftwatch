@@ -498,7 +498,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-[11px] text-[#7e8e9f]">
-              Follow competitive ecosystems to track all tournaments and league games in those regions. All 7 major regions are enabled by default.
+              Following a region follows every league in it. All {MAJOR_REGIONS.length} regions are followed by default; unfollow the ones you don't care about to tighten "Followed only" and your match alerts.
             </div>
             <div className="flex items-center gap-2">
               <button
