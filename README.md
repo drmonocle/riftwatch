@@ -146,6 +146,18 @@ cargo build --manifest-path src-tauri/Cargo.toml --release
 
 The resulting optimized binary is located at `src-tauri/target/release/RiftWatch.exe`.
 
+### Checks & releases
+
+```bash
+npm test               # unit tests (frontend)
+npm run check:version  # package.json / tauri.conf.json / Cargo.toml versions must match
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+**Publishing a release:** run `package_release.ps1`, then upload both `RiftWatch.exe` **and** `RiftWatch.exe.sha256` to the GitHub release. The in-app updater verifies the SHA-256 and refuses to install a binary without a matching checksum.
+
+Cross-compiling with xwin? Copy `src-tauri/.cargo/config.toml.example` to `config.toml` and set your local paths (it is git-ignored).
+
 ---
 
 ## ☕ Support

@@ -255,18 +255,28 @@ export default function App() {
     try {
       const info = await checkForAppUpdate(APP_VERSION);
       setUpdateInfo(info);
-      if (info?.hasUpdate && settings.notifyKickoff) {
-        import("@tauri-apps/api/core").then(({ invoke }) => {
-          invoke("send_notification", {
-            title: "⚡ RiftWatch Update Available",
-            body: `Version v${info.latestVersion} is now available! Click to update.`,
-          }).catch(() => {});
-        });
+      if (info?.hasUpdate && !IS_HUD_WINDOW) {
+        // Notify once per version rather than on every startup / manual check
+        let alreadyNotified = false;
+        try {
+          alreadyNotified = localStorage.getItem("riftwatch_update_notified") === info.latestVersion;
+          if (!alreadyNotified) localStorage.setItem("riftwatch_update_notified", info.latestVersion);
+        } catch {
+          /* storage unavailable: fall through and notify */
+        }
+        if (!alreadyNotified) {
+          import("@tauri-apps/api/core").then(({ invoke }) => {
+            invoke("send_notification", {
+              title: "⚡ RiftWatch Update Available",
+              body: `Version v${info.latestVersion} is available. Open Settings to install it.`,
+            }).catch(() => {});
+          });
+        }
       }
     } finally {
       setIsCheckingUpdate(false);
     }
-  }, [settings.notifyKickoff]);
+  }, []);
 
   // Check for updates on startup (main window only, delayed 2.5s)
   useEffect(() => {

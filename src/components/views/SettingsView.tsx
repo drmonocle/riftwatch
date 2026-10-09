@@ -56,7 +56,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setInstallError(null);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("apply_app_update", { downloadUrl: updateInfo.downloadUrl });
+      await invoke("apply_app_update", {
+        downloadUrl: updateInfo.downloadUrl,
+        checksumUrl: updateInfo.checksumUrl,
+      });
     } catch (err: any) {
       setIsInstallingUpdate(false);
       setInstallError(typeof err === "string" ? err : err?.message || "Failed to download update.");

@@ -79,16 +79,6 @@ export interface StreamEvent {
   isBanger?: boolean;
 }
 
-export interface NewsItem {
-  id: string;
-  title: string;
-  source: string;
-  date: string;
-  summary: string;
-  tag: string;
-  url: string;
-}
-
 export interface Region {
   code: string;
   name: string;
@@ -157,5 +147,7 @@ export interface AppUpdateInfo {
   releaseNotes: string;
   releaseUrl: string;
   downloadUrl: string;
+  /** SHA-256 checksum file published next to the executable; required for in-app install. */
+  checksumUrl: string;
   publishedAt: string;
 }
