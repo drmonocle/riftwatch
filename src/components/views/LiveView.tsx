@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Match, AppSettings, CatalogData } from "../../types";
 import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star, Swords } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
-import { getLeagueBroadcastStreams, isMatchFollowed, computeHeadToHead, isFirstMeeting } from "../../helpers";
-import { H2HMeter, FirstMeetingTag } from "../H2HMeter";
+import { getLeagueBroadcastStreams, isMatchFollowed, computeHeadToHead } from "../../helpers";
+import { H2HMeter } from "../H2HMeter";
 
 interface LiveViewProps {
   matches: Match[];
@@ -590,9 +590,6 @@ export const LiveView: React.FC<LiveViewProps> = ({
                     </div>
                   );
                 }
-                if (isFirstMeeting(nextMatch.team1Code, nextMatch.team2Code, schedule, nextMatch.matchId)) {
-                  return <FirstMeetingTag />;
-                }
                 return null;
               })()}
 
@@ -914,10 +911,8 @@ export const LiveView: React.FC<LiveViewProps> = ({
   );
 };
 
-/** H2H meter for a compact match row, or a "First meeting" tag when they've never played. */
+/** H2H meter for a compact match row, when the teams have any recorded history. */
 const RowH2H: React.FC<{ m: Match; schedule: Match[] }> = ({ m, schedule }) => {
   const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule, m.matchId);
-  if (h2h) return <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} />;
-  if (isFirstMeeting(m.team1Code, m.team2Code, schedule, m.matchId)) return <FirstMeetingTag />;
-  return null;
+  return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} /> : null;
 };

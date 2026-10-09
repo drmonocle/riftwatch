@@ -6,6 +6,8 @@ import {
   fetchLiveMatches,
   fetchSchedule,
   fetchStreamSchedule,
+  loadCachedStreamSchedule,
+  saveStreamSchedule,
   loadCachedCatalog,
   loadBundledCatalog,
   fetchLiveCatalog,
@@ -61,7 +63,7 @@ export default function App() {
 
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
   const [schedule, setSchedule] = useState<Match[]>([]);
-  const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
+  const [streamEvents, setStreamEvents] = useState<StreamEvent[]>(loadCachedStreamSchedule);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [syncFailed, setSyncFailed] = useState(false);
@@ -72,7 +74,7 @@ export default function App() {
   // Persistent refs to prevent React stale closure bugs during periodic background polling
   const liveMatchesRef = useRef<Match[]>([]);
   const scheduleRef = useRef<Match[]>([]);
-  const streamEventsRef = useRef<StreamEvent[]>([]);
+  const streamEventsRef = useRef<StreamEvent[]>(streamEvents);
 
   useEffect(() => {
     liveMatchesRef.current = liveMatches;
@@ -194,6 +196,7 @@ export default function App() {
       if (stream.status === "fulfilled" && stream.value && stream.value.length > 0) {
         streamEventsRef.current = stream.value;
         setStreamEvents(stream.value);
+        saveStreamSchedule(stream.value);
         lastStream.current = now;
       }
 

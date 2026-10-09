@@ -367,8 +367,8 @@ export interface HeadToHeadStats {
   lastDate?: string;
 }
 
-/** Fewer games than this and the record is too thin to show as a meter. */
-export const H2H_MIN_GAMES = 6;
+/** User requirement: show the H2H whenever the teams have any recorded history. */
+export const H2H_MIN_GAMES = 1;
 
 export function computeHeadToHead(
   team1Code: string,
@@ -377,20 +377,7 @@ export function computeHeadToHead(
   excludeMatchId?: string
 ): HeadToHeadStats | null {
   const stats = rawHeadToHead(team1Code, team2Code, schedule, excludeMatchId);
-  // Strict user requirement:
-  // "if teams have played each other more then 5 games it should show the h2h of all time between the 2 teams"
   return stats && stats.totalGames >= H2H_MIN_GAMES ? stats : null;
-}
-
-/** True when the two teams have no recorded games against each other at all. */
-export function isFirstMeeting(
-  team1Code: string,
-  team2Code: string,
-  schedule?: Match[],
-  excludeMatchId?: string
-): boolean {
-  const stats = rawHeadToHead(team1Code, team2Code, schedule, excludeMatchId);
-  return !!stats && stats.totalGames === 0;
 }
 
 function rawHeadToHead(

@@ -440,6 +440,27 @@ export async function fetchSchedule(extraNewerPages = 2): Promise<Match[]> {
   return unique;
 }
 
+const STREAM_CACHE_KEY = "riftwatch_stream_schedule";
+
+/** Last 24/7 schedule fetched, so a lolworlds.com outage doesn't blank the Stream tab. */
+export function loadCachedStreamSchedule(): StreamEvent[] {
+  try {
+    const raw = localStorage.getItem(STREAM_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? (parsed as StreamEvent[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveStreamSchedule(events: StreamEvent[]): void {
+  try {
+    localStorage.setItem(STREAM_CACHE_KEY, JSON.stringify(events));
+  } catch (e) {
+    console.warn("Failed to cache stream schedule:", e);
+  }
+}
+
 export async function fetchStreamSchedule(): Promise<StreamEvent[]> {
   const data: any[] = await fetchJson(STREAM_SCHEDULE_URL, undefined, 20000);
   return data.map((item) => ({

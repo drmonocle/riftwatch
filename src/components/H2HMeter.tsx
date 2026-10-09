@@ -57,13 +57,3 @@ export const H2HMeter: React.FC<H2HMeterProps> = ({ team1Code, team2Code, h2h, s
     </div>
   );
 };
-
-/** Small tag for matchups with no recorded history. */
-export const FirstMeetingTag: React.FC = () => (
-  <span
-    className="mt-1 text-[9px] uppercase tracking-wide text-[#c8aa6e]/80"
-    title="These teams have no recorded games against each other"
-  >
-    First meeting
-  </span>
-);

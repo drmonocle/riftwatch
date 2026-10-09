@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, isFirstMeeting } from "../helpers";
+import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead } from "../helpers";
 import type { Match } from "../types";
 
 const match = (over: Partial<Match> = {}): Match => ({
@@ -96,13 +96,13 @@ describe("buildAllTimeH2H", () => {
 });
 
 describe("computeHeadToHead", () => {
-  it("shows the meter only from 6 games and flags first meetings", () => {
+  it("shows any recorded history, and nothing when there is none", () => {
     // T1 vs GEN has hundreds of games in the bundled all-time data.
     expect(computeHeadToHead("T1", "GEN")?.totalGames).toBeGreaterThan(5);
     const done = (id: string) => match({ matchId: id, state: "completed", team1Code: "AAA", team2Code: "BBB", team1Score: 2, team2Score: 1 });
-    expect(computeHeadToHead("AAA", "BBB", [done("1")])).toBeNull();
-    expect(computeHeadToHead("AAA", "BBB", [done("1"), done("2")])?.totalGames).toBe(6);
-    expect(isFirstMeeting("AAA", "BBB", [])).toBe(true);
-    expect(isFirstMeeting("AAA", "BBB", [done("1")])).toBe(false);
+    expect(computeHeadToHead("AAA", "BBB", [])).toBeNull();
+    expect(computeHeadToHead("AAA", "BBB", [done("1")])).toMatchObject({ team1Wins: 2, team2Wins: 1, totalGames: 3 });
+    // The match itself never counts towards its own H2H.
+    expect(computeHeadToHead("AAA", "BBB", [done("1")], "1")).toBeNull();
   });
 });
