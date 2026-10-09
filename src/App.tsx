@@ -382,8 +382,13 @@ export default function App() {
     let cancelled = false;
     let timer: number | undefined;
 
+    let first = true;
     const loop = async () => {
-      if (!document.hidden) await refreshData();
+      // Always fetch once right away: a tab opened in the background (or preloaded by the
+      // browser) would otherwise sit on "Loading…" until it is switched to. After that, skip
+      // polls while hidden; the visibility handler catches up when the tab comes back.
+      if (first || !document.hidden) await refreshData();
+      first = false;
       if (cancelled) return;
       timer = window.setTimeout(loop, liveCount.current > 0 ? LIVE_POLL_ACTIVE_MS : LIVE_POLL_MS);
     };
@@ -685,6 +690,7 @@ export default function App() {
             onUpdateSettings={handleUpdateSettings}
             onSelectTeam={(code, name) => setSelectedTeam({ code, name })}
             highlightMatchId={highlightMatchId}
+            isLoading={lastSync === null && !syncFailed}
           />
         )}
         {activeTab === "schedule" && (
@@ -696,6 +702,7 @@ export default function App() {
             onUpdateSettings={handleUpdateSettings}
             onSelectTeam={(code, name) => setSelectedTeam({ code, name })}
             highlightMatchId={highlightMatchId}
+            isLoading={lastSync === null && !syncFailed}
           />
         )}
         {activeTab === "stream" && (

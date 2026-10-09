@@ -16,6 +16,8 @@ interface ScheduleViewProps {
   onSelectTeam?: (teamCode: string, teamName?: string) => void;
   /** From a #match/<id> link: switch filters to show this match, scroll to it and flash it. */
   highlightMatchId?: string | null;
+  /** True until the first data sync has finished. */
+  isLoading?: boolean;
 }
 
 export const ScheduleView: React.FC<ScheduleViewProps> = ({
@@ -26,6 +28,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onUpdateSettings,
   onSelectTeam,
   highlightMatchId,
+  isLoading,
 }) => {
   const [mainSubTab, setMainSubTab] = useState<"matches" | "standings">("matches");
   const [filterRange, setFilterRange] = useState<"today" | "upcoming" | "results">(() => {
@@ -201,8 +204,10 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
           {/* Match Rows */}
           {filtered.length === 0 ? (
-            <div className="text-center py-16 text-[#9bb3c9] text-xs">
-              No scheduled matches match your active filters. Try switching tabs or turning off "Followed only".
+            <div className="text-center py-16 text-[#9bb3c9] text-xs" role="status">
+              {isLoading && schedule.length === 0
+                ? "Loading the schedule…"
+                : 'No scheduled matches match your active filters. Try switching tabs or turning off "Followed only".'}
             </div>
           ) : (
             <div className="space-y-2">

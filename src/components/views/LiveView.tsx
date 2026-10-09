@@ -17,6 +17,8 @@ interface LiveViewProps {
   onSelectTeam?: (teamCode: string, teamName?: string) => void;
   /** From a #match/<id> link: scroll to this live match and flash it. */
   highlightMatchId?: string | null;
+  /** True until the first data sync has finished. */
+  isLoading?: boolean;
 }
 
 // Live ticking countdown hook
@@ -111,6 +113,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
   onUpdateSettings,
   onSelectTeam,
   highlightMatchId,
+  isLoading,
 }) => {
   const [revealedMatchIds, setRevealedMatchIds] = useState<Record<string, boolean>>({});
 
@@ -434,6 +437,18 @@ export const LiveView: React.FC<LiveViewProps> = ({
               </div>
             );
           })}
+        </div>
+      </div>
+    );
+  }
+
+  // FIRST LOAD: nothing has arrived yet, so don't claim there are no matches.
+  if (isLoading && schedule.length === 0) {
+    return (
+      <div className="p-4 h-full flex items-center justify-center" role="status">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0a1420] border border-[#1e282d] text-[#9bb3c9] text-xs">
+          <Clock className="w-3.5 h-3.5 text-[#0ac8b9] animate-pulse" />
+          <span>Loading live matches and the schedule…</span>
         </div>
       </div>
     );
