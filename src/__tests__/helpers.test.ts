@@ -24,6 +24,8 @@ describe("normalizeTeamCode", () => {
   it("uppercases, trims and applies aliases", () => {
     expect(normalizeTeamCode(" t1 ")).toBe("T1");
     expect(normalizeTeamCode("tlaw")).toBe("TL");
+    expect(normalizeTeamCode("KRX")).toBe("DRX");
+    expect(normalizeTeamCode("DNS")).toBe("KDF");
     expect(normalizeTeamCode("")).toBe("");
   });
 });

@@ -1,14 +1,18 @@
 import { Match, StreamEvent, AppSettings, League } from "./types";
 import allTimeH2HJson from "./all_time_h2h.json";
 
+// Current schedule codes folded into the code their franchise history is stored under in
+// all_time_h2h.json (keep in sync with CODE_ALIASES in h2h-refresh/assemble.py).
 const CODE_ALIASES: Record<string, string> = {
   TLAW: "TL",
   MKOI: "MDK",
   KBM: "KBM",
+  KRX: "DRX",
+  DNS: "KDF",
+  DNF: "KDF",
 };
 
-// all_time_h2h.json keys some teams by full name instead of the code the
-// schedule uses, so their history never matched. Only same-org renames here.
+// Full team names that can still appear as keys in all_time_h2h.json. Only same-org renames here.
 const H2H_NAME_ALIASES: Record<string, string> = {
   "NATUS VINCERE": "NAVI",
   "OKSAVINGSBANK BRION": "BRO",
