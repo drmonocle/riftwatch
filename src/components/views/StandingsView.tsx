@@ -119,9 +119,6 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
   const revealKey = `${selectedTournament}:${stageIndex}`;
   const hideResults = settings.spoilerMode && !revealedStages[revealKey];
 
-  const teamName = (code: string, fallback: string) =>
-    catalog?.teams.find((t) => t.code.toUpperCase() === code.toUpperCase())?.name || fallback;
-
   return (
     <div className="space-y-4 select-none">
       {/* League pills + full league picker */}
@@ -272,7 +269,7 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
                                   title={`View ${team.name} roster`}
                                 >
                                   <span className="sm:hidden">{team.code}</span>
-                                  <span className="hidden sm:inline">{teamName(team.code, team.name)}</span>
+                                  <span className="hidden sm:inline">{team.name}</span>
                                 </button>
                                 {onToggleTeamFollow && (
                                   <button

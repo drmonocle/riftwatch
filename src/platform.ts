@@ -25,6 +25,14 @@ export function matchIdFromHash(hash: string = window.location.hash): string | n
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** Download for the desktop app. Disabled on the web page until the public release is ready. */
-export const DESKTOP_DOWNLOAD_ENABLED = false;
+/**
+ * Download for the desktop app, served straight from GitHub's release CDN so a rush of visitors
+ * never touches the web server. "latest/download" always resolves to the newest published release.
+ */
 export const DESKTOP_DOWNLOAD_URL = "https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch.exe";
+export const DESKTOP_RELEASES_URL = "https://github.com/drmonocle/riftwatch/releases/latest";
+export const DESKTOP_CHECKSUM_URL = "https://github.com/drmonocle/riftwatch/releases/latest/download/RiftWatch.exe.sha256";
+
+/** The desktop app is Windows-only, so only offer it to browsers on Windows. */
+export const IS_WINDOWS_BROWSER: boolean =
+  typeof navigator !== "undefined" && /windows/i.test(navigator.userAgent);

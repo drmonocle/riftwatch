@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { CatalogData, Match, AppSettings, PlayerEntry } from "../types";
 import { X, Star, Calendar, Shield, ExternalLink, User } from "lucide-react";
-import { computeHeadToHead } from "../helpers";
+import { computeHeadToHead, pickTeamByCode } from "../helpers";
 import { H2HMeter } from "./H2HMeter";
 
 interface TeamRosterModalProps {
@@ -59,17 +59,20 @@ export const TeamRosterModal: React.FC<TeamRosterModalProps> = ({
   if (!teamCode) return null;
 
   const upperCode = teamCode.toUpperCase();
-  const catalogTeam = catalog?.teams?.find(
-    (t) => t.code.toUpperCase() === upperCode || t.name.toLowerCase() === (teamName || "").toLowerCase()
-  );
+  // Exact name first (Riot reuses codes: "KT" is both kt Rolster and kt Challengers), then the
+  // main-league team for the code.
+  const catalogTeam =
+    (teamName ? catalog?.teams?.find((t) => t.name.toLowerCase() === teamName.toLowerCase()) : undefined) ??
+    (catalog?.teams ? pickTeamByCode(catalog.teams, teamCode) : undefined);
 
   const displayName = catalogTeam?.name || teamName || teamCode;
   const teamImage = catalogTeam?.image;
   const isTeamFollowed = settings.followedTeams.includes(upperCode);
 
   // Find all players matching this team
-  const players = (catalog?.players || [])
-    .filter((p) => p.teamCode.toUpperCase() === upperCode)
+  const allPlayers = catalog?.players || [];
+  const slugPlayers = catalogTeam?.slug ? allPlayers.filter((p) => p.teamSlug === catalogTeam.slug) : [];
+  const players = (slugPlayers.length > 0 ? slugPlayers : allPlayers.filter((p) => p.teamCode.toUpperCase() === upperCode))
     .sort((a, b) => {
       const orderA = ROLE_ORDER[a.role.toLowerCase()] || 99;
       const orderB = ROLE_ORDER[b.role.toLowerCase()] || 99;

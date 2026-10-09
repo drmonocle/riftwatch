@@ -55,13 +55,14 @@ export default function App() {
     IS_HUD_WINDOW ? EMPTY_CATALOG : loadCachedCatalog() ?? EMPTY_CATALOG,
   );
 
-  // Determine initial tab: on first launch, open directly to Watchlist so users configure their teams
+  // Initial tab. The desktop app's very first launch opens the Watchlist so people pick their
+  // teams; the public web page opens on live scores, so a first-time visitor sees matches at once.
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     try {
       const hasLaunched = localStorage.getItem("riftwatch_has_launched");
       if (!hasLaunched) {
         localStorage.setItem("riftwatch_has_launched", "true");
-        return "watchlist";
+        if (IS_DESKTOP) return "watchlist";
       }
     } catch {}
     return loadSettings().defaultTab || "live";
@@ -296,8 +297,10 @@ export default function App() {
     }
   }, []);
 
-  // Desktop keyboard shortcuts (F5, Ctrl+R, Ctrl+1..6, Ctrl+S, Ctrl+D)
+  // Desktop keyboard shortcuts (F5, Ctrl+R, Ctrl+1..6, Ctrl+S, Ctrl+D). Not on the web page: there
+  // they would hijack the browser's own Reload, Save Page and tab-switching shortcuts.
   useEffect(() => {
+    if (!IS_DESKTOP) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't intercept when user is typing in an input
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) {

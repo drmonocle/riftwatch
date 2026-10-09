@@ -398,6 +398,17 @@ export function regionIsFollowed(leagueRegion: string, followedRegions: string[]
   return candidates.some((c) => followedRegions.includes(c));
 }
 
+/**
+ * Riot reuses team codes across tiers (27 in the bundled catalog: KT is both "kt Rolster" in the
+ * LCK and "kt Challengers"). Pick the main-league team for a code, not whichever is listed first.
+ */
+export function pickTeamByCode<T extends { code: string; league?: string }>(teams: T[], code: string): T | undefined {
+  const c = normalizeTeamCode(code);
+  const matches = teams.filter((t) => normalizeTeamCode(t.code) === c);
+  const lower = /challengers|academy|youth|queue|legends|all-?stars|promotion|regional/i;
+  return matches.find((t) => t.league && !lower.test(t.league)) ?? matches[0];
+}
+
 /** A match this many minutes past its start time with no start from Riot counts as delayed. */
 export const DELAY_GRACE_MIN = 10;
 /** How far past its start time an unstarted match stays on the Live tab while its broadcast is on air. */

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { X, Swords, Eye, EyeOff, Globe, Home } from "lucide-react";
 import { Match, CatalogData } from "../types";
-import { computeHeadToHead, h2hKey, normalizeTeamCode, recentMeetings, H2HMeeting } from "../helpers";
+import { computeHeadToHead, h2hKey, normalizeTeamCode, pickTeamByCode, recentMeetings, H2HMeeting } from "../helpers";
 import { fetchH2HSeries, H2HSeriesEntry } from "../api";
 import { H2HBar, T1_COLOR, T2_COLOR } from "./H2HMeter";
 
@@ -18,8 +18,7 @@ interface H2HDetailsModalProps {
 }
 
 function teamInfo(catalog: CatalogData | undefined, code: string) {
-  const c = normalizeTeamCode(code);
-  const t = catalog?.teams.find((x) => normalizeTeamCode(x.code) === c);
+  const t = catalog ? pickTeamByCode(catalog.teams, code) : undefined;
   return { name: t?.name || code, image: t?.image };
 }
 

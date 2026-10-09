@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, applyH2HData, loadBundledH2H, h2hKey, recentMeetings, minutesLate, formatLate, isUpcomingOrDelayed } from "../helpers";
+import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, applyH2HData, loadBundledH2H, h2hKey, recentMeetings, minutesLate, formatLate, isUpcomingOrDelayed, pickTeamByCode } from "../helpers";
 import { matchIdFromHash, matchShareUrl } from "../platform";
 
 // The bundled table is loaded on demand now (kept out of the startup bundle).
@@ -190,5 +190,25 @@ describe("delayed matches", () => {
     expect(isUpcomingOrDelayed({ ...dsgFue, startTimeUtc: "2026-10-09T10:00:00Z" }, new Set(["lcs_promotion"]), NOW)).toBe(false); // 12 h late: stale
     expect(isUpcomingOrDelayed({ ...dsgFue, state: "completed" }, new Set(["lcs_promotion"]), NOW)).toBe(false);
     expect(isUpcomingOrDelayed({ ...dsgFue, startTimeUtc: "2026-10-09T23:30:00Z" }, new Set(), NOW)).toBe(true); // upcoming
+  });
+});
+
+describe("pickTeamByCode", () => {
+  const teams = [
+    { code: "KT", name: "kt Challengers", league: "LCK Challengers" },
+    { code: "KT", name: "kt Rolster", league: "LCK" },
+    { code: "HLE", name: "HLE Academy", league: "" },
+    { code: "HLE", name: "Hanwha Life Esports", league: "LCK" },
+    { code: "TLAW", name: "Team Liquid Alienware", league: "LCS" },
+    { code: "ONLY", name: "Only Entry", league: "LCK Challengers" },
+  ];
+  it("prefers the main-league team when a code is shared", () => {
+    expect(pickTeamByCode(teams, "KT")?.name).toBe("kt Rolster");
+    expect(pickTeamByCode(teams, "hle")?.name).toBe("Hanwha Life Esports");
+  });
+  it("uses aliases and falls back to whatever exists", () => {
+    expect(pickTeamByCode(teams, "TL")?.name).toBe("Team Liquid Alienware");
+    expect(pickTeamByCode(teams, "ONLY")?.name).toBe("Only Entry");
+    expect(pickTeamByCode(teams, "NOPE")).toBeUndefined();
   });
 });

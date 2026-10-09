@@ -22,7 +22,14 @@ import {
 import { APP_VERSION } from "../../version";
 import { DEFAULT_FOLLOWED_REGIONS, DEFAULT_FOLLOWED_LEAGUES } from "../../api";
 import { playKickoffChime } from "../../helpers";
-import { IS_DESKTOP, RIOT_LEGAL_NOTICE } from "../../platform";
+import {
+  IS_DESKTOP,
+  IS_WEB,
+  RIOT_LEGAL_NOTICE,
+  DESKTOP_DOWNLOAD_URL,
+  DESKTOP_RELEASES_URL,
+  DESKTOP_CHECKSUM_URL,
+} from "../../platform";
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -227,6 +234,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           )}
         </div>
       </section>
+      )}
+
+      {/* 0b. Web version: offer the Windows app (served by GitHub, not this server) */}
+      {IS_WEB && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-bold text-[#c8aa6e] uppercase tracking-wider flex items-center gap-1.5">
+            <Download className="w-3.5 h-3.5 text-[#0ac8b9]" />
+            RiftWatch for Windows
+          </h2>
+          <div className="p-4 rounded-lg border border-[#1e282d] bg-[#0a1420] space-y-3">
+            <p className="text-[#9bb3c9] text-xs leading-relaxed">
+              The desktop app adds a floating always-on-top ticker, a system tray icon, a global hotkey
+              (Alt+Shift+L), kickoff notifications and automatic updates. It is free, about 4 MB, and needs
+              no installer.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={DESKTOP_DOWNLOAD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-[#c8aa6e] hover:bg-[#f0e6d2] text-[#091428] font-bold text-xs transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download RiftWatch.exe</span>
+              </a>
+              <a
+                href={DESKTOP_RELEASES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#091428] hover:bg-[#121e2d] border border-[#1e282d] hover:border-[#c8aa6e] text-[#f0e6d2] font-semibold text-xs transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-[#7e8e9f]" />
+                <span>Release notes</span>
+              </a>
+              <a
+                href={DESKTOP_CHECKSUM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-[#7e8e9f] hover:text-[#c8aa6e] underline"
+              >
+                SHA-256 checksum
+              </a>
+            </div>
+            <p className="text-[11px] text-[#7e8e9f] leading-relaxed">
+              Windows 10 or 11. RiftWatch isn't code-signed yet, so Windows SmartScreen may say "Windows
+              protected your PC": click <strong>More info</strong>, then <strong>Run anyway</strong>. The
+              download comes straight from GitHub.
+            </p>
+          </div>
+        </section>
       )}
       {/* 1. Display & Live Ticker Bar */}
       <section className="space-y-3">

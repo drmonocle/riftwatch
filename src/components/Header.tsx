@@ -3,7 +3,7 @@ import { AppSettings, Match, StreamEvent, AppUpdateInfo, LiveShow } from "../typ
 import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2, Download, Smartphone } from "lucide-react";
 import { currentStreamEvent, formatStreamHeaderTitle } from "../helpers";
 import { APP_VERSION } from "../version";
-import { IS_DESKTOP, IS_WEB, DESKTOP_DOWNLOAD_ENABLED, DESKTOP_DOWNLOAD_URL } from "../platform";
+import { IS_DESKTOP, IS_WEB, IS_WINDOWS_BROWSER, DESKTOP_DOWNLOAD_URL } from "../platform";
 
 interface HeaderProps {
   settings: AppSettings;
@@ -124,27 +124,18 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline">Install</span>
           </button>
         )}
-        {IS_WEB && (
-          <button
-            onClick={() => DESKTOP_DOWNLOAD_ENABLED && onOpenUrl(DESKTOP_DOWNLOAD_URL)}
-            disabled={!DESKTOP_DOWNLOAD_ENABLED}
-            className={`${pill} font-semibold ${
-              DESKTOP_DOWNLOAD_ENABLED
-                ? "bg-[#c8aa6e] border-[#c8aa6e] text-[#091428] hover:bg-[#f0e6d2]"
-                : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] cursor-not-allowed"
-            }`}
-            title={
-              DESKTOP_DOWNLOAD_ENABLED
-                ? "Download the RiftWatch desktop app for Windows"
-                : "The Windows desktop app is coming soon"
-            }
+        {IS_WEB && IS_WINDOWS_BROWSER && (
+          <a
+            href={DESKTOP_DOWNLOAD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${pill} font-semibold bg-[#c8aa6e] border-[#c8aa6e] text-[#091428] hover:bg-[#f0e6d2]`}
+            title="Download RiftWatch for Windows (free, about 4 MB, no installer)"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">
-              {DESKTOP_DOWNLOAD_ENABLED ? "Download for Windows" : "Windows app: coming soon"}
-            </span>
-            <span className="md:hidden">{DESKTOP_DOWNLOAD_ENABLED ? "Windows" : "Soon"}</span>
-          </button>
+            <span className="hidden md:inline">Download for Windows</span>
+            <span className="md:hidden">Windows</span>
+          </a>
         )}
         <button
           onClick={() => onUpdateSettings({ spoilerMode: !settings.spoilerMode })}
