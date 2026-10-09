@@ -1,12 +1,19 @@
 import { Match, StreamEvent, AppSettings, League } from "./types";
 import allTimeH2HJson from "./all_time_h2h.json";
 
-const ALL_TIME_H2H: Record<string, [number, number]> = (allTimeH2HJson as unknown) as Record<string, [number, number]>;
-
 const CODE_ALIASES: Record<string, string> = {
   TLAW: "TL",
   MKOI: "MDK",
   KBM: "KBM",
+};
+
+// all_time_h2h.json keys some teams by full name instead of the code the
+// schedule uses, so their history never matched. Only same-org renames here.
+const H2H_NAME_ALIASES: Record<string, string> = {
+  "NATUS VINCERE": "NAVI",
+  "OKSAVINGSBANK BRION": "BRO",
+  "HANJIN BRION": "BRO",
+  "KIWOOM DRX": "DRX",
 };
 
 export function normalizeTeamCode(code: string): string {
@@ -14,6 +21,29 @@ export function normalizeTeamCode(code: string): string {
   const upper = code.trim().toUpperCase();
   return CODE_ALIASES[upper] || upper;
 }
+
+/** Merges the raw "A__B": [aWins, bWins] records under normalized team codes. */
+export function buildAllTimeH2H(raw: Record<string, [number, number]>): Record<string, [number, number]> {
+  const out: Record<string, [number, number]> = {};
+  for (const [key, [aWins, bWins]] of Object.entries(raw)) {
+    const [rawA, rawB] = key.split("__");
+    const a = normalizeTeamCode(H2H_NAME_ALIASES[rawA] || rawA);
+    const b = normalizeTeamCode(H2H_NAME_ALIASES[rawB] || rawB);
+    if (!a || !b || a === b) continue;
+    if (out[`${a}__${b}`]) {
+      out[`${a}__${b}`][0] += aWins;
+      out[`${a}__${b}`][1] += bWins;
+    } else if (out[`${b}__${a}`]) {
+      out[`${b}__${a}`][0] += bWins;
+      out[`${b}__${a}`][1] += aWins;
+    } else {
+      out[`${a}__${b}`] = [aWins, bWins];
+    }
+  }
+  return out;
+}
+
+const ALL_TIME_H2H = buildAllTimeH2H((allTimeH2HJson as unknown) as Record<string, [number, number]>);
 
 /** If the schedule's latest started entry is older than this, the stream is treated as offline. */
 const MAX_AIRING_GAP_MS = 10 * 60 * 60 * 1000;
@@ -337,7 +367,33 @@ export interface HeadToHeadStats {
   lastDate?: string;
 }
 
+/** Fewer games than this and the record is too thin to show as a meter. */
+export const H2H_MIN_GAMES = 6;
+
 export function computeHeadToHead(
+  team1Code: string,
+  team2Code: string,
+  schedule?: Match[],
+  excludeMatchId?: string
+): HeadToHeadStats | null {
+  const stats = rawHeadToHead(team1Code, team2Code, schedule, excludeMatchId);
+  // Strict user requirement:
+  // "if teams have played each other more then 5 games it should show the h2h of all time between the 2 teams"
+  return stats && stats.totalGames >= H2H_MIN_GAMES ? stats : null;
+}
+
+/** True when the two teams have no recorded games against each other at all. */
+export function isFirstMeeting(
+  team1Code: string,
+  team2Code: string,
+  schedule?: Match[],
+  excludeMatchId?: string
+): boolean {
+  const stats = rawHeadToHead(team1Code, team2Code, schedule, excludeMatchId);
+  return !!stats && stats.totalGames === 0;
+}
+
+function rawHeadToHead(
   team1Code: string,
   team2Code: string,
   schedule?: Match[],
@@ -416,12 +472,6 @@ export function computeHeadToHead(
   const team1Wins = t1AllTimeWins + scheduleT1Wins;
   const team2Wins = t2AllTimeWins + scheduleT2Wins;
   const totalGames = team1Wins + team2Wins;
-
-  // Strict user requirement:
-  // "if teams have played each other more then 5 games it should show the h2h of all time between the 2 teams"
-  if (totalGames <= 5) {
-    return null;
-  }
 
   return {
     team1Wins,

@@ -13,6 +13,7 @@ import {
   EMPTY_CATALOG,
 } from "./api";
 import { APP_VERSION } from "./version";
+import { ArrowDownToLine } from "lucide-react";
 import { reconcileLiveAndSchedule, playKickoffChime } from "./helpers";
 import { Header } from "./components/Header";
 import { Navigation, TabKey } from "./components/Navigation";
@@ -626,6 +627,18 @@ export default function App() {
           >
             Monocle Productions LLC
           </span>
+          <button
+            onClick={() =>
+              import("@tauri-apps/api/core")
+                .then(({ invoke }) => invoke("hide_main"))
+                .catch(() => {})
+            }
+            className="flex items-center gap-1 px-2 py-0.5 rounded border border-[#1e282d] text-[#a09b8c] hover:text-[#f0e6d2] hover:border-[#c8aa6e] hover:bg-[#121e2d] transition-colors"
+            title="Hide RiftWatch to the system tray (click the tray icon or press Alt+Shift+L to bring it back)"
+          >
+            <ArrowDownToLine className="w-3 h-3" />
+            <span>Hide to tray</span>
+          </button>
         </div>
       </footer>
     </div>

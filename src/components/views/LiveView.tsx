@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Match, AppSettings, CatalogData } from "../../types";
 import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star, Swords } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
-import { getLeagueBroadcastStreams, isMatchFollowed, computeHeadToHead } from "../../helpers";
+import { getLeagueBroadcastStreams, isMatchFollowed, computeHeadToHead, isFirstMeeting } from "../../helpers";
+import { H2HMeter, FirstMeetingTag } from "../H2HMeter";
 
 interface LiveViewProps {
   matches: Match[];
@@ -287,6 +288,10 @@ export const LiveView: React.FC<LiveViewProps> = ({
                         </span>
                       </button>
                     )}
+                    {(() => {
+                      const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule, m.matchId);
+                      return h2h ? <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} /> : null;
+                    })()}
                   </div>
 
                   {/* Team 2 */}
@@ -580,13 +585,13 @@ export const LiveView: React.FC<LiveViewProps> = ({
                 const h2h = computeHeadToHead(nextMatch.team1Code, nextMatch.team2Code, schedule, nextMatch.matchId);
                 if (h2h) {
                   return (
-                    <div className="flex items-center justify-center gap-2 mt-2 px-3 py-1 rounded-full bg-[#091428] border border-[#c8aa6e]/40 text-[#c8aa6e] text-xs font-medium">
-                      <Swords className="w-3.5 h-3.5 text-[#0ac8b9]" />
-                      <span>
-                        All-Time H2H: <strong className="text-[#f0e6d2]">{nextMatch.team1Code} {h2h.team1Wins} - {h2h.team2Wins} {nextMatch.team2Code}</strong> ({h2h.totalGames} all-time games)
-                      </span>
+                    <div className="mt-3 w-full flex justify-center">
+                      <H2HMeter team1Code={nextMatch.team1Code} team2Code={nextMatch.team2Code} h2h={h2h} size="md" />
                     </div>
                   );
+                }
+                if (isFirstMeeting(nextMatch.team1Code, nextMatch.team2Code, schedule, nextMatch.matchId)) {
+                  return <FirstMeetingTag />;
                 }
                 return null;
               })()}
@@ -773,6 +778,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                       <span className="text-[#9bb3c9] text-[11px] font-medium">Bo{m.bestOf}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      <RowH2H m={m} schedule={schedule} />
                       <AddToCalendarMenu match={m} onOpenUrl={onOpenUrl} compact={true} />
                       <div className="text-[#9bb3c9] font-mono text-[11px] font-medium">
                         {formatMatchTime(m.startTimeUtc)}
@@ -882,6 +888,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
                   <span className="text-[#9bb3c9] text-[11px] font-medium">Bo{m.bestOf}</span>
                 </div>
                 <div className="flex items-center gap-2">
+                  <RowH2H m={m} schedule={schedule} />
                   <AddToCalendarMenu match={m} onOpenUrl={onOpenUrl} compact={true} />
                   <div className="text-[#9bb3c9] font-mono text-[11px] font-medium">
                     {formatMatchTime(m.startTimeUtc)}
@@ -905,4 +912,12 @@ export const LiveView: React.FC<LiveViewProps> = ({
       </div>
     </div>
   );
+};
+
+/** H2H meter for a compact match row, or a "First meeting" tag when they've never played. */
+const RowH2H: React.FC<{ m: Match; schedule: Match[] }> = ({ m, schedule }) => {
+  const h2h = computeHeadToHead(m.team1Code, m.team2Code, schedule, m.matchId);
+  if (h2h) return <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} />;
+  if (isFirstMeeting(m.team1Code, m.team2Code, schedule, m.matchId)) return <FirstMeetingTag />;
+  return null;
 };

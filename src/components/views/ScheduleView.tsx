@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { Match, AppSettings, CatalogData } from "../../types";
 import { Search, Calendar, Star, Trophy } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
-import { isMatchFollowed, computeHeadToHead } from "../../helpers";
+import { isMatchFollowed, computeHeadToHead, isFirstMeeting } from "../../helpers";
+import { H2HMeter, FirstMeetingTag } from "../H2HMeter";
 import { StandingsView } from "./StandingsView";
 
 interface ScheduleViewProps {
@@ -268,12 +269,10 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                           )}
                         </div>
                         {(showScore || m.state !== "completed") && h2h && (
-                          <span
-                            className="text-[9px] font-mono text-[#9bb3c9] mt-0.5"
-                            title={`All-Time Head-to-Head: ${m.team1Code} ${h2h.team1Wins}-${h2h.team2Wins} ${m.team2Code} (${h2h.totalGames} games)`}
-                          >
-                            All-Time H2H {h2h.team1Wins}:{h2h.team2Wins}
-                          </span>
+                          <H2HMeter team1Code={m.team1Code} team2Code={m.team2Code} h2h={h2h} />
+                        )}
+                        {m.state !== "completed" && !h2h && isFirstMeeting(m.team1Code, m.team2Code, schedule, m.matchId) && (
+                          <FirstMeetingTag />
                         )}
                       </div>
 

@@ -45,6 +45,13 @@ fn show_main(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn hide_main(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+}
+
+#[tauri::command]
 fn set_compact_mode(app: tauri::AppHandle, compact: bool) {
     if let Some(w) = app.get_webview_window("main") {
         if compact {
@@ -430,6 +437,7 @@ pub fn run() {
             set_ticker_topmost,
             start_window_drag,
             show_main,
+            hide_main,
             set_compact_mode,
             quit_app,
             open_external_url,
