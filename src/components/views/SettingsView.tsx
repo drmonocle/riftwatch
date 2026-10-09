@@ -282,6 +282,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               protected your PC": click <strong>More info</strong>, then <strong>Run anyway</strong>. The
               download comes straight from GitHub.
             </p>
+            <p className="text-[11px] text-[#7e8e9f] leading-relaxed">
+              <strong>Code signing:</strong> RiftWatch has applied for free code signing from SignPath.io,
+              with a certificate from the SignPath Foundation. Until that is approved, releases are unsigned.{" "}
+              <a
+                href="https://github.com/drmonocle/riftwatch/blob/main/CODE_SIGNING_POLICY.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-[#c8aa6e]"
+              >
+                Code signing policy
+              </a>
+            </p>
           </div>
         </section>
       )}
