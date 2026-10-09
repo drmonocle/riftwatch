@@ -1,0 +1,17 @@
+# Windows cross-build helper (xwin). Copy to config.toml and set the paths for your machine; config.toml is git-ignored.
+# Cargo does not expand environment variables here, so replace %USERPROFILE% with your absolute home path.
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link"
+rustflags = [
+    "-L", "native=%USERPROFILE%/.xwin/VC/Tools/MSVC/14.44.17.14/lib/x86_64",
+    "-L", "native=%USERPROFILE%/.xwin/Windows Kits/10/Lib/10.0.26100/ucrt/x86_64",
+    "-L", "native=%USERPROFILE%/.xwin/Windows Kits/10/Lib/10.0.26100/um/x86_64",
+]
+
+[env]
+INCLUDE = "%USERPROFILE%/.xwin/VC/Tools/MSVC/14.44.17.14/include;%USERPROFILE%/.xwin/Windows Kits/10/Include/10.0.26100/ucrt;%USERPROFILE%/.xwin/Windows Kits/10/Include/10.0.26100/um;%USERPROFILE%/.xwin/Windows Kits/10/Include/10.0.26100/shared"
+LIB = "%USERPROFILE%/.xwin/VC/Tools/MSVC/14.44.17.14/lib/x86_64;%USERPROFILE%/.xwin/Windows Kits/10/Lib/10.0.26100/ucrt/x86_64;%USERPROFILE%/.xwin/Windows Kits/10/Lib/10.0.26100/um/x86_64"
+CC = "cl.exe"
+CXX = "cl.exe"
+AR = "lib.exe"
+RC = "rc.exe"

@@ -6,6 +6,8 @@ use tauri::{
 };
 use tauri_plugin_opener::OpenerExt;
 
+mod update;
+
 #[tauri::command]
 fn start_window_drag(window: tauri::WebviewWindow) {
     let _ = window.start_dragging();
@@ -48,7 +50,7 @@ fn set_compact_mode(app: tauri::AppHandle, compact: bool) {
         if compact {
             let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 780.0, height: 500.0 }));
         } else {
-            let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1040.0, height: 720.0 }));
+            let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 1000.0, height: 720.0 }));
         }
     }
 }
@@ -125,15 +127,15 @@ fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn apply_app_update(app: tauri::AppHandle, download_url: String) -> Result<(), String> {
+fn apply_app_update(app: tauri::AppHandle, download_url: String, checksum_url: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
         use std::os::windows::process::CommandExt;
 
-        // Security check: Only allow downloads from official repository releases
-        if !download_url.starts_with("https://github.com/drmonocle/riftwatch/releases/") {
-            return Err("Invalid update source URL. Only official GitHub releases are allowed.".into());
+        // Security: only exact official release-asset URLs, and the binary must match its published SHA-256.
+        if !update::is_official_release_asset(&download_url) || !update::is_official_release_asset(&checksum_url) {
+            return Err("Invalid update source URL. Only official GitHub release assets are allowed.".into());
         }
 
         let current_exe = std::env::current_exe().map_err(|e| format!("Failed to locate current executable: {}", e))?;
@@ -141,28 +143,56 @@ fn apply_app_update(app: tauri::AppHandle, download_url: String) -> Result<(), S
 
         let temp_dir = std::env::temp_dir();
         let new_exe = temp_dir.join("RiftWatch_update.exe");
+        let sum_file = temp_dir.join("RiftWatch_update.sha256");
 
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         const DETACHED_PROCESS: u32 = 0x00000008;
 
-        // Download via Windows native curl.exe with -L for redirects
-        let curl_status = Command::new("curl.exe")
-            .args(["-L", "-s", "-S", "-f", "-o", new_exe.to_str().unwrap(), &download_url])
-            .creation_flags(CREATE_NO_WINDOW)
-            .status()
-            .map_err(|e| format!("Failed to run download helper: {}", e))?;
-
-        if !curl_status.success() {
-            return Err("Failed to download update binary. Check your network connection.".into());
-        }
-
-        if let Ok(meta) = std::fs::metadata(&new_exe) {
-            if meta.len() < 500_000 {
-                return Err("Downloaded update file is invalid or truncated.".into());
+        // Download via Windows native curl.exe: https only (including redirects), size- and time-limited.
+        let download = |url: &str, dest: &std::path::Path, max_bytes: u64| -> Result<(), String> {
+            let status = Command::new("curl.exe")
+                .args([
+                    "-L", "-s", "-S", "-f",
+                    "--proto", "=https", "--proto-redir", "=https",
+                    "--max-filesize", &max_bytes.to_string(),
+                    "--max-time", "180",
+                    "-o", &dest.to_string_lossy(),
+                    url,
+                ])
+                .creation_flags(CREATE_NO_WINDOW)
+                .status()
+                .map_err(|e| format!("Failed to run download helper: {}", e))?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err("Failed to download update. Check your network connection.".to_string())
             }
-        } else {
-            return Err("Downloaded update file not found on disk.".into());
+        };
+
+        let cleanup = || {
+            let _ = std::fs::remove_file(&new_exe);
+            let _ = std::fs::remove_file(&sum_file);
+        };
+
+        download(&checksum_url, &sum_file, 4096).map_err(|e| { cleanup(); e })?;
+        let expected = std::fs::read_to_string(&sum_file)
+            .ok()
+            .and_then(|t| update::parse_sha256(&t))
+            .ok_or_else(|| { cleanup(); "Update checksum file is missing or malformed.".to_string() })?;
+
+        download(&download_url, &new_exe, update::MAX_UPDATE_BYTES).map_err(|e| { cleanup(); e })?;
+
+        let bytes = std::fs::read(&new_exe).map_err(|_| { cleanup(); "Downloaded update file not found on disk.".to_string() })?;
+        if bytes.len() < 500_000 {
+            cleanup();
+            return Err("Downloaded update file is invalid or truncated.".into());
         }
+        if update::sha256_hex(&bytes) != expected {
+            cleanup();
+            return Err("Update failed integrity check (SHA-256 mismatch). Install was aborted.".into());
+        }
+        drop(bytes);
+        let _ = std::fs::remove_file(&sum_file);
 
         let script_path = temp_dir.join("riftwatch_apply_update.ps1");
         let current_exe_str = current_exe.to_string_lossy().replace(r"\\?\", "");
@@ -172,6 +202,7 @@ fn apply_app_update(app: tauri::AppHandle, download_url: String) -> Result<(), S
             "$oldPid = {pid}\r\n\
 $target = '{target}'\r\n\
 $source = '{source}'\r\n\
+$expected = '{expected}'\r\n\
 \r\n\
 try {{\r\n\
     $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue\r\n\
@@ -185,6 +216,7 @@ try {{\r\n\
 }} catch {{}}\r\n\
 \r\n\
 Start-Sleep -Milliseconds 600\r\n\
+if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLower() -ne $expected) {{ Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue; exit 1 }}\r\n\
 try {{ Unblock-File -LiteralPath $source -ErrorAction SilentlyContinue }} catch {{}}\r\n\
 \r\n\
 $swapped = $false\r\n\
@@ -223,7 +255,8 @@ if ($swapped) {{\r\n\
 try {{ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue }} catch {{}}\r\n",
             pid = pid,
             target = current_exe_str.replace("'", "''"),
-            source = new_exe_str.replace("'", "''")
+            source = new_exe_str.replace("'", "''"),
+            expected = expected
         );
 
         std::fs::write(&script_path, script_content).map_err(|e| format!("Failed to write update script: {}", e))?;

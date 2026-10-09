@@ -33,3 +33,6 @@ Thumbs.db
 .idea/
 *.suo
 *.user
+
+# Per-machine cargo config
+src-tauri/.cargo/config.toml

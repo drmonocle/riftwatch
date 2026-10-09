@@ -1,5 +1,7 @@
-import { Match, LiveStats, StreamEvent, AppSettings, NewsItem, Team, Region, League, PlayerEntry, AppUpdateInfo } from "./types";
+import { Match, LiveStats, StreamEvent, AppSettings, Team, Region, League, PlayerEntry, AppUpdateInfo } from "./types";
 
+// Public key used by the lolesports.com web client (not a private secret). Riot may rotate it; if the
+// app suddenly shows "sync failed" with HTTP 401/403, look up the current key from lolesports.com.
 const RIOT_API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z";
 const RIOT_BASE = "https://esports-api.lolesports.com/persisted/gw";
 const STREAM_SCHEDULE_URL = "https://lolworlds.com/api.ashx?type=schedule-json";
@@ -455,75 +457,6 @@ export async function fetchStreamSchedule(): Promise<StreamEvent[]> {
   }));
 }
 
-export async function fetchCuratedNews(): Promise<NewsItem[]> {
-  // Authoritative, tier-1 LoL Esports journalism dispatches
-  return [
-    {
-      id: "news-sheep-1",
-      title: "Sources: T1 Finalizes Multi-Year Core Roster Extensions Ahead of 2026 Season",
-      source: "Sheep Esports",
-      date: "Today",
-      summary: "Following their historic international runs, T1 has secured key multi-year commitments to retain their world-championship caliber core through 2026.",
-      tag: "Transfers & Rumors",
-      url: "https://www.sheepesports.com",
-    },
-    {
-      id: "news-inven-1",
-      title: "LCK Post-Match: Faker on Adapting to Fearless Draft & Shotcalling Under Pressure",
-      source: "Inven Global",
-      date: "Today",
-      summary: "In an exclusive press conference, Faker breaks down how the Fearless Draft format tests player versatility, champion depth, and mid-series adaptation.",
-      tag: "LCK & Interviews",
-      url: "https://www.invenglobal.com/esports",
-    },
-    {
-      id: "news-riot-1",
-      title: "First Stand 2026: Official International Tournament Format, Schedule & Venues",
-      source: "Riot LoL Esports",
-      date: "Yesterday",
-      summary: "Riot Games officially unveils the structure for First Stand, uniting split-one champions across LCK, LPL, LEC, LCS, and LCP in high-stakes competition.",
-      tag: "Official Dispatches",
-      url: "https://lolesports.com/news",
-    },
-    {
-      id: "news-inven-2",
-      title: "Gen.G Chovy: 'Fearless Draft Rewards Teams That Understand Global Tempo Over Safe Metas'",
-      source: "Inven Global",
-      date: "2 days ago",
-      summary: "Chovy discusses the evolution of mid lane itemization, wave priority in the current competitive patch, and preparation for international clashes.",
-      tag: "LCK & Interviews",
-      url: "https://www.invenglobal.com/esports",
-    },
-    {
-      id: "news-sheep-2",
-      title: "Sources: LEC Off-Season Shuffle Begins as Teams Eye Rising ERL Standouts",
-      source: "Sheep Esports",
-      date: "3 days ago",
-      summary: "Multiple European organizations are evaluating top performers from EMEA Masters to inject fresh talent into upcoming split rosters.",
-      tag: "Transfers & Rumors",
-      url: "https://www.sheepesports.com",
-    },
-    {
-      id: "news-dot-1",
-      title: "Competitive Patch Breakdown: Priority Champions & Winrate Shifts Across Major Leagues",
-      source: "Dot Esports",
-      date: "3 days ago",
-      summary: "Comprehensive statistical analysis of pick-ban presence, objective trading tempo, and champion tier shifts across LCK, LPL, and LEC pro play.",
-      tag: "Meta & Analysis",
-      url: "https://dotesports.com/league-of-legends",
-    },
-    {
-      id: "news-riot-2",
-      title: "LoL Esports Global Rulebook Update: Competitive Rulings & In-Game Pause Protocols",
-      source: "Riot LoL Esports",
-      date: "4 days ago",
-      summary: "Official competitive operations notice regarding standardized hardware timeout protocols and referee decision trees during live tier-1 stages.",
-      tag: "Official Dispatches",
-      url: "https://lolesports.com/news",
-    },
-  ];
-}
-
 /**
  * Compare two semver-like strings (e.g., "0.3.5" vs "0.3.6").
  * Returns 1 if v1 > v2, -1 if v1 < v2, and 0 if equal.
@@ -566,6 +499,11 @@ export async function checkForAppUpdate(currentVersion: string): Promise<AppUpda
       exeAsset?.browser_download_url ||
       `https://github.com/drmonocle/riftwatch/releases/download/${latestTag}/RiftWatch.exe`;
 
+    const sumAsset = (data.assets || []).find((a: any) =>
+      a.name?.toLowerCase() === `${String(exeAsset?.name || "RiftWatch.exe").toLowerCase()}.sha256`
+    );
+    const checksumUrl = sumAsset?.browser_download_url || `${downloadUrl}.sha256`;
+
     return {
       hasUpdate,
       currentVersion: cleanCurrent,
@@ -574,6 +512,7 @@ export async function checkForAppUpdate(currentVersion: string): Promise<AppUpda
       releaseNotes: data.body || "",
       releaseUrl: data.html_url || "https://github.com/drmonocle/riftwatch/releases",
       downloadUrl,
+      checksumUrl,
       publishedAt: data.published_at || "",
     };
   } catch (err) {
