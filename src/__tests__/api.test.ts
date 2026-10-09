@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { pickCurrentTournament } from "../api";
+import { pickCurrentTournament, loadSettings, saveSettings, DEFAULT_SETTINGS } from "../api";
+import { regionIsFollowed, isMatchFollowed } from "../helpers";
 
 describe("pickCurrentTournament", () => {
   const t = (id: string, start: string, end: string) => ({ id, slug: id, startDate: start, endDate: end });
@@ -44,5 +45,59 @@ describe("buildStreamUrl", () => {
   it("passes through explicit http(s) links and rejects unknown providers", () => {
     expect(buildStreamUrl([{ provider: "x", parameter: "https://example.com/s" }])).toBe("https://example.com/s");
     expect(buildStreamUrl([{ provider: "mystery", parameter: "abc" }])).toBe("");
+  });
+});
+
+// A tiny localStorage for the settings tests (vitest runs in Node).
+function fakeStorage() {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k: string) => (m.has(k) ? m.get(k)! : null),
+    setItem: (k: string, v: string) => void m.set(k, String(v)),
+    removeItem: (k: string) => void m.delete(k),
+    clear: () => m.clear(),
+    key: () => null,
+    length: 0,
+  } as unknown as Storage;
+}
+
+describe("loadSettings", () => {
+  it("keeps an empty region list empty (Unfollow All must stick)", () => {
+    (globalThis as any).localStorage = fakeStorage();
+    (globalThis as any).window = globalThis;
+    (globalThis as any).dispatchEvent = () => true;
+    saveSettings({ ...DEFAULT_SETTINGS, followedRegions: [], followedLeagues: [] });
+    const s = loadSettings();
+    expect(s.followedRegions).toEqual([]);
+    expect(s.followedLeagues).toEqual([]);
+  });
+  it("maps old region codes and falls back only when a list is missing", () => {
+    (globalThis as any).localStorage = fakeStorage();
+    localStorage.setItem("riftwatch_settings", JSON.stringify({ followedRegions: ["EUROPE", "KOREA", "EMEA"] }));
+    const s = loadSettings();
+    expect(s.followedRegions).toEqual(["EMEA", "KOREA"]);
+    expect(s.followedTeams).toEqual(DEFAULT_SETTINGS.followedTeams);
+  });
+});
+
+describe("regionIsFollowed", () => {
+  it("matches Riot's extra region labels onto the region cards", () => {
+    expect(regionIsFollowed("KOREA", ["KOREA"])).toBe(true);
+    expect(regionIsFollowed("korea", ["KOREA"])).toBe(true);
+    expect(regionIsFollowed("AMERICAS", ["BRAZIL"])).toBe(true);
+    expect(regionIsFollowed("LATIN AMERICA SOUTH", ["LATIN AMERICA"])).toBe(true);
+    expect(regionIsFollowed("COMMONWEALTH OF INDEPENDENT STATES", ["EMEA"])).toBe(true);
+    expect(regionIsFollowed("AMERICAS", ["KOREA"])).toBe(false);
+    expect(regionIsFollowed("KOREA", [])).toBe(false);
+  });
+  it("is used by isMatchFollowed", () => {
+    const m = {
+      matchId: "1", leagueName: "LTA North", leagueSlug: "lta_north", blockName: "", startTimeUtc: "", state: "unstarted" as const,
+      bestOf: 3, team1Code: "AAA", team1Name: "A", team1Score: 0, team2Code: "BBB", team2Name: "B", team2Score: 0, games: [],
+    };
+    const leagues = [{ slug: "lta_north", name: "LTA North", region: "AMERICAS" }];
+    const base = { ...DEFAULT_SETTINGS, followedTeams: [], followedLeagues: [] };
+    expect(isMatchFollowed(m, { ...base, followedRegions: ["NORTH AMERICA"] }, leagues)).toBe(true);
+    expect(isMatchFollowed(m, { ...base, followedRegions: [] }, leagues)).toBe(false);
   });
 });

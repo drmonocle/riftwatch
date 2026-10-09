@@ -372,12 +372,30 @@ export function isMatchFollowed(
     const l = leaguesCatalog.find(
       (item) => item.slug.toLowerCase() === slug || item.name.toLowerCase() === name
     );
-    if (l?.region && settings.followedRegions.includes(l.region.toUpperCase())) {
+    if (l?.region && regionIsFollowed(l.region, settings.followedRegions)) {
       return true;
     }
   }
 
   return false;
+}
+
+/**
+ * Riot labels some leagues with regions the Regions tab doesn't list (the LTA leagues are
+ * "AMERICAS", LLA sub-leagues are "LATIN AMERICA NORTH/SOUTH", the CIS league is its own
+ * region). Map those onto the region cards so following a region covers them.
+ */
+const REGION_ALIASES: Record<string, string[]> = {
+  AMERICAS: ["NORTH AMERICA", "BRAZIL", "LATIN AMERICA"],
+  "LATIN AMERICA NORTH": ["LATIN AMERICA"],
+  "LATIN AMERICA SOUTH": ["LATIN AMERICA"],
+  "COMMONWEALTH OF INDEPENDENT STATES": ["EMEA"],
+};
+
+export function regionIsFollowed(leagueRegion: string, followedRegions: string[]): boolean {
+  const r = leagueRegion.toUpperCase();
+  const candidates = [r, ...(REGION_ALIASES[r] || [])];
+  return candidates.some((c) => followedRegions.includes(c));
 }
 
 /**

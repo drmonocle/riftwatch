@@ -124,16 +124,16 @@ export function loadSettings(): AppSettings {
     const raw = localStorage.getItem("riftwatch_settings");
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Ensure all major regions are followed if not already configured
-      if (!Array.isArray(parsed.followedRegions) || parsed.followedRegions.length === 0) {
-        parsed.followedRegions = [...DEFAULT_FOLLOWED_REGIONS];
-      } else {
-        // Map region codes saved by older versions (EUROPE, APAC) to the real ones.
-        const mapped: string[] = parsed.followedRegions.map((c: string) => LEGACY_REGION_CODES[c] || c);
-        const hadLegacy = mapped.some((c, i) => c !== parsed.followedRegions[i]);
-        // If the user never customised (old default list), follow every region now.
-        parsed.followedRegions = hadLegacy && mapped.length >= 7 ? [...DEFAULT_FOLLOWED_REGIONS] : Array.from(new Set(mapped));
+      // A list that is missing or corrupt gets the default. An EMPTY list is a choice the user
+      // made ("Unfollow All") and must stay empty: this function runs after every save, so
+      // refilling it here made unfollowing regions impossible.
+      for (const key of ["followedTeams", "followedPlayers", "followedLeagues", "followedRegions"] as const) {
+        if (!Array.isArray(parsed[key])) parsed[key] = [...DEFAULT_SETTINGS[key]];
       }
+      // Region codes saved by older versions (EUROPE, APAC) map to the current ones.
+      parsed.followedRegions = Array.from(
+        new Set((parsed.followedRegions as string[]).map((c) => LEGACY_REGION_CODES[c] || c)),
+      );
       return { ...DEFAULT_SETTINGS, ...parsed };
     }
   } catch (e) {
