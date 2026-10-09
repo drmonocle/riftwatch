@@ -67,7 +67,7 @@ Everything above, plus things a browser can't do:
 
 **Install:** download `RiftWatch.exe` and run it. It is one portable file: no installer, no admin rights. It uses the Microsoft Edge WebView2 runtime that ships with Windows 10 and 11.
 
-> **"Windows protected your PC"?** RiftWatch is not code-signed yet, so Windows SmartScreen may warn the first time. Click **More info → Run anyway**. Every release publishes the SHA-256 of `RiftWatch.exe` (`RiftWatch.exe.sha256`) so you can check your download.
+> **"Windows protected your PC"?** RiftWatch is not code-signed yet, so Windows SmartScreen may warn the first time. Click **More info → Run anyway**. Every release publishes the SHA-256 of `RiftWatch.exe` (`RiftWatch.exe.sha256`) so you can check your download. See the [code signing policy](CODE_SIGNING_POLICY.md).
 
 Keyboard (Windows app): `F5` / `Ctrl+R` refresh · `Ctrl+1…6` switch tabs · `Ctrl+S` spoiler mode · `Ctrl+D` detach / dock the ticker.
 
