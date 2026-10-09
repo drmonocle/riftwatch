@@ -64,6 +64,18 @@ export interface LiveStats {
   };
 }
 
+/**
+ * A broadcast "show" Riot reports as in progress (pre-game or desk coverage). It has no teams, so
+ * it isn't a match, but it tells us a league's broadcast is on air, which matters when a match
+ * that was scheduled to start is running late.
+ */
+export interface LiveShow {
+  leagueSlug: string;
+  leagueName: string;
+  startTimeUtc: string;
+  streamUrl: string;
+}
+
 export interface StreamEvent {
   id: string | number;
   type: string;

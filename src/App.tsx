@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AppSettings, Match, StreamEvent, CatalogData, AppUpdateInfo } from "./types";
+import { AppSettings, Match, StreamEvent, CatalogData, AppUpdateInfo, LiveShow } from "./types";
 import {
   loadSettings,
   saveSettings,
@@ -68,6 +68,7 @@ export default function App() {
   });
 
   const [liveMatches, setLiveMatches] = useState<Match[]>([]);
+  const [liveShows, setLiveShows] = useState<LiveShow[]>([]);
   const [schedule, setSchedule] = useState<Match[]>([]);
   const [streamEvents, setStreamEvents] = useState<StreamEvent[]>(loadCachedStreamSchedule);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -248,6 +249,7 @@ export default function App() {
 
       if (live.status === "fulfilled") {
         nextLive = live.value.matches;
+        setLiveShows(live.value.shows);
       }
       if (sched.status === "fulfilled" && sched.value && sched.value.length > 0) {
         nextSched = sched.value;
@@ -260,7 +262,11 @@ export default function App() {
       scheduleRef.current = finalSchedule;
       setLiveMatches(finalLive);
       setSchedule(finalSchedule);
-      liveCount.current = finalLive.filter((m) => m.state === "inProgress").length;
+      // Poll faster while a match is in progress or a broadcast is on air (a delayed match can
+      // start at any moment, and we want to catch Game 1 within seconds).
+      liveCount.current =
+        finalLive.filter((m) => m.state === "inProgress").length +
+        (live.status === "fulfilled" ? live.value.shows.length : 0);
 
       if (stream.status === "fulfilled" && stream.value && stream.value.length > 0) {
         streamEventsRef.current = stream.value;
@@ -627,6 +633,7 @@ export default function App() {
         onOpenUrl={handleOpenUrl}
         updateInfo={updateInfo}
         onInstall={installPrompt ? () => installPrompt.prompt?.() : undefined}
+        liveShows={liveShows}
       />
 
       {/* Tab Navigation */}
@@ -691,6 +698,7 @@ export default function App() {
             onSelectTeam={(code, name) => setSelectedTeam({ code, name })}
             highlightMatchId={highlightMatchId}
             isLoading={lastSync === null && !syncFailed}
+            liveShows={liveShows}
           />
         )}
         {activeTab === "schedule" && (

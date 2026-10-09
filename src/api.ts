@@ -1,4 +1,4 @@
-import { Match, LiveStats, StreamEvent, AppSettings, Team, Region, League, PlayerEntry, AppUpdateInfo } from "./types";
+import { Match, LiveStats, LiveShow, StreamEvent, AppSettings, Team, Region, League, PlayerEntry, AppUpdateInfo } from "./types";
 import type { H2HData } from "./helpers";
 
 // Public key used by the lolesports.com web client (not a private secret). Riot may rotate it; if the
@@ -331,14 +331,30 @@ export function buildStreamUrl(streams: any[] | undefined): string {
   }
 }
 
-export async function fetchLiveMatches(): Promise<{ matches: Match[]; liveStats: Record<string, LiveStats> }> {
+export async function fetchLiveMatches(): Promise<{
+  matches: Match[];
+  liveStats: Record<string, LiveStats>;
+  shows: LiveShow[];
+}> {
   const data = await fetchJson(`${RIOT_BASE}/getLive?hl=en-US`, { headers: riotHeaders });
   const rawEvents = data?.data?.schedule?.events || [];
 
   const matches: Match[] = [];
   const liveStats: Record<string, LiveStats> = {};
+  const shows: LiveShow[] = [];
 
   for (const ev of rawEvents) {
+    if (ev.type === "show") {
+      if (ev.state === "inProgress" && ev.league?.slug) {
+        shows.push({
+          leagueSlug: String(ev.league.slug),
+          leagueName: ev.league.name || ev.league.slug,
+          startTimeUtc: ev.startTime || "",
+          streamUrl: buildStreamUrl(ev.streams),
+        });
+      }
+      continue;
+    }
     if (ev.type !== "match") continue;
     const m = ev.match;
     if (!m) continue;
@@ -376,7 +392,7 @@ export async function fetchLiveMatches(): Promise<{ matches: Match[]; liveStats:
       })),
     });
   }
-  return { matches, liveStats };
+  return { matches, liveStats, shows };
 }
 
 function scheduleEventsToMatches(rawEvents: any[]): Match[] {

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, applyH2HData, loadBundledH2H, h2hKey, recentMeetings } from "../helpers";
+import { isMatchCompleted, normalizeTeamCode, reconcileLiveAndSchedule, computeLeagueStandings, buildAllTimeH2H, computeHeadToHead, applyH2HData, loadBundledH2H, h2hKey, recentMeetings, minutesLate, formatLate, isUpcomingOrDelayed } from "../helpers";
 import { matchIdFromHash, matchShareUrl } from "../platform";
 
 // The bundled table is loaded on demand now (kept out of the startup bundle).
@@ -167,5 +167,28 @@ describe("shareable match links", () => {
     expect(matchIdFromHash(new URL(url).hash)).toBe("115 abc/1");
     expect(matchIdFromHash("#other")).toBeNull();
     expect(matchIdFromHash("")).toBeNull();
+  });
+});
+
+describe("delayed matches", () => {
+  const NOW = new Date("2026-10-09T22:52:00Z").getTime();
+  const dsgFue = match({ matchId: "d", leagueSlug: "lcs_promotion", state: "unstarted", startTimeUtc: "2026-10-09T21:00:00Z", team1Code: "DSG", team2Code: "FUE" });
+
+  it("measures how late an unstarted match is", () => {
+    expect(minutesLate(dsgFue, NOW)).toBe(112);
+    expect(formatLate(112)).toBe("1h 52m");
+    expect(formatLate(25)).toBe("25m");
+    expect(minutesLate({ ...dsgFue, startTimeUtc: "2026-10-09T23:30:00Z" }, NOW)).toBe(0); // not due yet
+    expect(minutesLate({ ...dsgFue, state: "inProgress" }, NOW)).toBe(0);
+    expect(minutesLate({ ...dsgFue, state: "completed" }, NOW)).toBe(0);
+  });
+
+  it("keeps a late match on the Live tab only while its league's broadcast is on air", () => {
+    expect(isUpcomingOrDelayed(dsgFue, new Set(), NOW)).toBe(false); // old behaviour: dropped after 15 min
+    expect(isUpcomingOrDelayed(dsgFue, new Set(["lcs_promotion"]), NOW)).toBe(true);
+    expect(isUpcomingOrDelayed(dsgFue, new Set(["lck"]), NOW)).toBe(false);
+    expect(isUpcomingOrDelayed({ ...dsgFue, startTimeUtc: "2026-10-09T10:00:00Z" }, new Set(["lcs_promotion"]), NOW)).toBe(false); // 12 h late: stale
+    expect(isUpcomingOrDelayed({ ...dsgFue, state: "completed" }, new Set(["lcs_promotion"]), NOW)).toBe(false);
+    expect(isUpcomingOrDelayed({ ...dsgFue, startTimeUtc: "2026-10-09T23:30:00Z" }, new Set(), NOW)).toBe(true); // upcoming
   });
 });

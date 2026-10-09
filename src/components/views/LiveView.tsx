@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { Match, AppSettings, CatalogData } from "../../types";
+import { Match, AppSettings, CatalogData, LiveShow } from "../../types";
 import { Tv, ExternalLink, Calendar, Clock, ChevronRight, Star, Swords } from "lucide-react";
 import { AddToCalendarMenu } from "../AddToCalendarMenu";
 import { ShareMatchButton } from "../ShareMatchButton";
-import { getLeagueBroadcastStreams, isMatchFollowed, computeHeadToHead } from "../../helpers";
+import {
+  getLeagueBroadcastStreams,
+  isMatchFollowed,
+  computeHeadToHead,
+  isUpcomingOrDelayed,
+  minutesLate,
+  formatLate,
+  DELAY_GRACE_MIN,
+} from "../../helpers";
 import { H2HMeter } from "../H2HMeter";
 
 interface LiveViewProps {
@@ -19,6 +27,8 @@ interface LiveViewProps {
   highlightMatchId?: string | null;
   /** True until the first data sync has finished. */
   isLoading?: boolean;
+  /** Broadcast shows Riot reports as on air right now (they have no teams). */
+  liveShows?: LiveShow[];
 }
 
 // Live ticking countdown hook
@@ -114,6 +124,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
   onSelectTeam,
   highlightMatchId,
   isLoading,
+  liveShows = [],
 }) => {
   const [revealedMatchIds, setRevealedMatchIds] = useState<Record<string, boolean>>({});
 
@@ -147,13 +158,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
   };
 
   const now = Date.now();
+  // Leagues whose broadcast is on air right now. A match in one of them that is past its start
+  // time is running late, not gone, so it stays on this tab (Riot keeps it "unstarted").
+  const liveLeagueSlugs = new Set(liveShows.map((s) => s.leagueSlug.toLowerCase()));
   const unstarted = schedule
-    .filter((m) => {
-      if (m.state === "completed") return false;
-      const t = new Date(m.startTimeUtc).getTime();
-      // Keep upcoming matches, or any match scheduled within the last 15 minutes that hasn't completed
-      return !isNaN(t) && t >= now - 15 * 60 * 1000;
-    })
+    .filter((m) => isUpcomingOrDelayed(m, liveLeagueSlugs, now))
     .sort((a, b) => new Date(a.startTimeUtc).getTime() - new Date(b.startTimeUtc).getTime());
 
   const hasWatchlist =
@@ -178,6 +187,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
       nextTag = isTeam
         ? "Next match you follow"
         : `Next in your leagues · ${nextMatch.leagueName}`;
+      if (minutesLate(nextMatch, now) >= DELAY_GRACE_MIN) nextTag = `Delayed · ${nextMatch.leagueName}`;
       comingUp = followedMatches.slice(1, 5);
     }
   } else {
@@ -190,6 +200,11 @@ export const LiveView: React.FC<LiveViewProps> = ({
   }
 
   const countdown = useCountdown(nextMatch?.startTimeUtc);
+  const lateMin = nextMatch ? minutesLate(nextMatch, now) : 0;
+  const nextIsDelayed = lateMin >= DELAY_GRACE_MIN;
+  const nextShow = nextMatch
+    ? liveShows.find((s) => s.leagueSlug.toLowerCase() === (nextMatch!.leagueSlug || "").toLowerCase())
+    : undefined;
 
   // If pro matches are live right now
   if (matches.length > 0) {
@@ -463,6 +478,25 @@ export const LiveView: React.FC<LiveViewProps> = ({
           <Clock className="w-3.5 h-3.5 text-[#0ac8b9]" />
           <span>No pro matches are live right now</span>
         </div>
+        {liveShows.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2" role="status">
+            {liveShows.map((s) => (
+              <button
+                key={s.leagueSlug}
+                type="button"
+                onClick={() => s.streamUrl && onOpenUrl(s.streamUrl)}
+                disabled={!s.streamUrl}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1a1708] border border-[#c8aa6e]/60 text-[#f0e6d2] text-xs hover:border-[#c8aa6e] disabled:cursor-default"
+                title={s.streamUrl ? `Open the ${s.leagueName} broadcast` : undefined}
+              >
+                <span className="w-2 h-2 rounded-full bg-[#e84057] animate-pulse" />
+                <span>
+                  <strong>{s.leagueName}</strong> broadcast is live
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Hero Next Match Card */}
@@ -648,9 +682,25 @@ export const LiveView: React.FC<LiveViewProps> = ({
 
               {/* Live Ticking Countdown */}
               <div className="mt-5 pt-4 border-t border-[#1e282d]/80 w-full flex flex-col items-center">
-                <div className="text-xl sm:text-2xl font-extrabold text-[#0ac8b9] font-mono tracking-tight animate-pulse">
-                  {countdown.formatted || "Calculating…"}
-                </div>
+                {nextIsDelayed ? (
+                  <div className="flex flex-col items-center gap-1" role="status">
+                    <span className="px-2.5 py-0.5 rounded bg-[#c8aa6e] text-[#091428] text-[10px] font-extrabold uppercase tracking-wider">
+                      Delayed
+                    </span>
+                    <div className="text-xl sm:text-2xl font-extrabold text-[#c8aa6e] font-mono tracking-tight">
+                      {formatLate(lateMin)} late
+                    </div>
+                    <div className="text-[11px] text-[#9bb3c9]">
+                      {nextShow
+                        ? `The ${nextShow.leagueName} broadcast is on air. Game 1 hasn't started yet.`
+                        : "Riot hasn't marked this match as started yet."}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xl sm:text-2xl font-extrabold text-[#0ac8b9] font-mono tracking-tight animate-pulse">
+                    {countdown.formatted || "Calculating…"}
+                  </div>
+                )}
                 <div className="text-xs text-[#9bb3c9] mt-1 flex items-center gap-1.5 font-medium">
                   <Calendar className="w-3.5 h-3.5 text-[#c8aa6e]" />
                   <span>{formatMatchTime(nextMatch.startTimeUtc)}</span>

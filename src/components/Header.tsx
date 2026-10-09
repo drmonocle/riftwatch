@@ -1,5 +1,5 @@
 import React from "react";
-import { AppSettings, Match, StreamEvent, AppUpdateInfo } from "../types";
+import { AppSettings, Match, StreamEvent, AppUpdateInfo, LiveShow } from "../types";
 import { Radio, RefreshCw, Eye, EyeOff, Heart, Sparkles, Minimize2, Maximize2, Download, Smartphone } from "lucide-react";
 import { currentStreamEvent, formatStreamHeaderTitle } from "../helpers";
 import { APP_VERSION } from "../version";
@@ -17,6 +17,8 @@ interface HeaderProps {
   updateInfo?: AppUpdateInfo | null;
   /** Web only: present when the browser offers to install the page as an app. */
   onInstall?: () => void;
+  /** Broadcasts on air with no match in progress (e.g. a delayed start). */
+  liveShows?: LiveShow[];
 }
 
 // Shared look for the small header controls: one line, never wrapping.
@@ -34,8 +36,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenUrl,
   updateInfo,
   onInstall,
+  liveShows = [],
 }) => {
   const hasLive = liveMatches.length > 0;
+  const onAir = !hasLive && liveShows.length > 0 ? liveShows[0] : null;
   const firstLive = hasLive ? liveMatches[0] : null;
   const currStream = currentStreamEvent(streamEvents);
   const streamInfo = formatStreamHeaderTitle(currStream);
@@ -67,13 +71,29 @@ export const Header: React.FC<HeaderProps> = ({
           className={`${pill} flex-shrink-0 ${
             hasLive
               ? "bg-[#1e131d] border-[#e84057] text-[#e84057] font-semibold"
-              : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] hover:border-[#c8aa6e]"
+              : onAir
+                ? "bg-[#1a1708] border-[#c8aa6e]/70 text-[#c8aa6e] font-semibold"
+                : "bg-[#0a1420] border-[#1e282d] text-[#7e8e9f] hover:border-[#c8aa6e]"
           }`}
-          title={hasLive ? `${liveMatches.length} live pro match(es). Click to view.` : "No pro matches live right now"}
+          title={
+            hasLive
+              ? `${liveMatches.length} live pro match(es). Click to view.`
+              : onAir
+                ? `${onAir.leagueName} broadcast is on air, no match has started yet`
+                : "No pro matches live right now"
+          }
         >
-          <span className={`w-2 h-2 rounded-full ${hasLive ? "bg-[#e84057] animate-pulse" : "bg-[#7e8e9f]"}`} />
+          <span
+            className={`w-2 h-2 rounded-full ${
+              hasLive ? "bg-[#e84057] animate-pulse" : onAir ? "bg-[#c8aa6e] animate-pulse" : "bg-[#7e8e9f]"
+            }`}
+          />
           <span>
-            {hasLive ? `LIVE ${firstLive?.team1Code} vs ${firstLive?.team2Code}${extraLive}` : "No live matches"}
+            {hasLive
+              ? `LIVE ${firstLive?.team1Code} vs ${firstLive?.team2Code}${extraLive}`
+              : onAir
+                ? `${onAir.leagueName} on air`
+                : "No live matches"}
           </span>
         </button>
 

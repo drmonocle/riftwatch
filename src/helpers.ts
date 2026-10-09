@@ -398,6 +398,43 @@ export function regionIsFollowed(leagueRegion: string, followedRegions: string[]
   return candidates.some((c) => followedRegions.includes(c));
 }
 
+/** A match this many minutes past its start time with no start from Riot counts as delayed. */
+export const DELAY_GRACE_MIN = 10;
+/** How far past its start time an unstarted match stays on the Live tab while its broadcast is on air. */
+export const DELAY_MAX_HOURS = 8;
+
+/** Minutes a match is running late (0 if it isn't unstarted, or isn't past its start time yet). */
+export function minutesLate(m: Match, now = Date.now()): number {
+  if (m.state !== "unstarted") return 0;
+  const t = new Date(m.startTimeUtc).getTime();
+  if (isNaN(t) || t >= now) return 0;
+  return Math.floor((now - t) / 60_000);
+}
+
+/** "1h 52m", "25m" */
+export function formatLate(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/**
+ * Keep an unstarted match on the Live tab: upcoming ones, ones that start within the last 15
+ * minutes, and ones that are running late while their league's broadcast is on air (Riot leaves
+ * a delayed match "unstarted" until the first game actually begins).
+ */
+export function isUpcomingOrDelayed(m: Match, liveLeagueSlugs: Set<string>, now = Date.now()): boolean {
+  if (m.state === "completed") return false;
+  const t = new Date(m.startTimeUtc).getTime();
+  if (isNaN(t)) return false;
+  if (t >= now - 15 * 60_000) return true;
+  return (
+    m.state === "unstarted" &&
+    liveLeagueSlugs.has((m.leagueSlug || "").toLowerCase()) &&
+    t >= now - DELAY_MAX_HOURS * 3_600_000
+  );
+}
+
 /**
  * Helper to determine if a match has reached completion,
  * either by state === "completed" or by one team reaching the wins threshold (e.g. 3 in Bo5, 2 in Bo3).
