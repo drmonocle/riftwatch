@@ -4,7 +4,7 @@ This is the code signing policy for **RiftWatch** (`RiftWatch.exe`), the Windows
 
 ## Status
 
-RiftWatch has applied to the [SignPath Foundation](https://signpath.org/) free code signing program for open source projects. **Until the application is accepted and the first signed release is published, `RiftWatch.exe` is not code-signed**, and Windows may warn about an unknown publisher. Every release still publishes the SHA-256 of `RiftWatch.exe` (`RiftWatch.exe.sha256`).
+RiftWatch is **not code-signed** at the moment, so Windows may warn about an unknown publisher. A free signing application (SignPath Foundation) was declined, and signing may be revisited once the project has more of a track record. Every release still publishes the SHA-256 of `RiftWatch.exe` (`RiftWatch.exe.sha256`).
 
 ## Signing service (once accepted)
 
