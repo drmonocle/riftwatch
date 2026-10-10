@@ -4,8 +4,13 @@ name: Release
 # SHA-256 and the zip to a DRAFT release. Review the draft on GitHub, then publish it (that is
 # what makes it "Latest" and reaches the in-app updater).
 #
-#   Tag a release:      git tag v0.3.14 && git push origin v0.3.14
+#   Tag a release:      git tag v0.3.19 && git push origin v0.3.19
 #   Build without tag:  Actions > Release > Run workflow (artifact only, no release)
+#
+# Code signing (SignPath Foundation) switches on by itself once the repository variable
+# SIGNPATH_ORGANIZATION_ID exists; see CODE_SIGNING_POLICY.md. Until then releases are unsigned.
+# When it is on, the run pauses at "Sign with SignPath" until the maintainer approves the signing
+# request in SignPath, then continues with the signed file.
 on:
   push:
     tags: ["v*"]
@@ -13,6 +18,10 @@ on:
 
 permissions:
   contents: write
+  actions: read   # SignPath reads this run's metadata to verify the build came from this workflow
+
+env:
+  SIGNING: ${{ startsWith(github.ref, 'refs/tags/v') && vars.SIGNPATH_ORGANIZATION_ID != '' }}
 
 jobs:
   build:
@@ -50,15 +59,55 @@ jobs:
           cargo test --locked
           cargo build --release --locked
 
-      - name: Package
+      - name: Collect the unsigned exe and check its metadata
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force release | Out-Null
-          Copy-Item src-tauri\target\release\riftwatch-tauri.exe release\RiftWatch.exe
+          New-Item -ItemType Directory -Force unsigned, release | Out-Null
+          Copy-Item src-tauri\target\release\riftwatch-tauri.exe unsigned\RiftWatch.exe
+          $vi = (Get-Item unsigned\RiftWatch.exe).VersionInfo
+          $want = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "ProductName=$($vi.ProductName) ProductVersion=$($vi.ProductVersion) CompanyName=$($vi.CompanyName) Copyright=$($vi.LegalCopyright)"
+          if ($vi.ProductName -ne "RiftWatch") { throw "ProductName is '$($vi.ProductName)', expected RiftWatch" }
+          if ($vi.ProductVersion -ne $want) { throw "ProductVersion is '$($vi.ProductVersion)', expected $want" }
+
+      - name: Upload the unsigned exe
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: RiftWatch-unsigned
+          path: unsigned/RiftWatch.exe
+          if-no-files-found: error
+
+      - name: Sign with SignPath (waits for the maintainer's approval)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: signed
+
+      - name: Package (checksum is computed on the final file)
+        shell: pwsh
+        run: |
+          if ($env:SIGNING -eq 'true') {
+            $signed = Get-ChildItem signed -Recurse -Filter RiftWatch.exe | Select-Object -First 1
+            if (-not $signed) { throw "SignPath returned no RiftWatch.exe" }
+            $sig = Get-AuthenticodeSignature $signed.FullName
+            "Signature: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne 'Valid') { throw "The signed file's signature is $($sig.Status), not Valid" }
+            Copy-Item $signed.FullName release\RiftWatch.exe -Force
+          } else {
+            Copy-Item unsigned\RiftWatch.exe release\RiftWatch.exe -Force
+          }
           $hash = (Get-FileHash release\RiftWatch.exe -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path release\RiftWatch.exe.sha256 -Value "$hash  RiftWatch.exe" -Encoding ascii -NoNewline
           Compress-Archive -Path release\RiftWatch.exe -DestinationPath release\RiftWatch-windows-x64.zip -Force
-          "RiftWatch.exe $([math]::Round((Get-Item release\RiftWatch.exe).Length / 1MB, 2)) MB, sha256 $hash"
+          "RiftWatch.exe $([math]::Round((Get-Item release\RiftWatch.exe).Length / 1MB, 2)) MB, sha256 $hash, signed=$env:SIGNING"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -77,5 +126,11 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           $hash = (Get-Content release\RiftWatch.exe.sha256 -Raw).Split(' ')[0]
-          $notes = "Built from $tag by GitHub Actions.`n`n### Checksum`n- ``RiftWatch.exe``: ``$hash```n`n**SmartScreen:** RiftWatch isn't code-signed yet, so Windows may show ""Windows protected your PC"". Click **More info -> Run anyway**."
+          if ($env:SIGNING -eq 'true') {
+            $sig = Get-AuthenticodeSignature release\RiftWatch.exe
+            $trust = "**Signed.** Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). Signer: ``$($sig.SignerCertificate.Subject)``."
+          } else {
+            $trust = "**SmartScreen:** RiftWatch isn't code-signed yet, so Windows may show ""Windows protected your PC"". Click **More info -> Run anyway**."
+          }
+          $notes = "Built from $tag by GitHub Actions.`n`n### Checksum`n- ``RiftWatch.exe``: ``$hash```n`n$trust"
           gh release create $tag release\RiftWatch.exe release\RiftWatch.exe.sha256 release\RiftWatch-windows-x64.zip --draft --title "RiftWatch $tag" --notes $notes
