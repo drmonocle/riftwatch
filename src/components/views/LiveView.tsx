@@ -453,6 +453,52 @@ export const LiveView: React.FC<LiveViewProps> = ({
             );
           })}
         </div>
+
+        {/* Up next: keeps the page useful when only one or two matches are live */}
+        {(() => {
+          const pool = hasWatchlist ? unstarted.filter(isFollowed) : unstarted;
+          const upNext = (pool.length > 0 ? pool : unstarted).slice(0, 5);
+          if (upNext.length === 0) return null;
+          return (
+            <section className="space-y-2 pt-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-[#7e8e9f] uppercase tracking-wider">Up Next</span>
+                <button
+                  onClick={() => onSelectTab("schedule")}
+                  className="text-[#0ac8b9] hover:underline text-[11px] font-medium"
+                >
+                  Full schedule →
+                </button>
+              </div>
+              <div className="grid gap-2">
+                {upNext.map((m) => (
+                  <div
+                    key={m.matchId}
+                    className="flex items-center justify-between p-3 rounded-lg bg-[#0a1420] border border-[#1e282d] text-xs"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="font-bold text-[#0ac8b9] text-[11px] w-20 truncate">{m.leagueName}</span>
+                      <span className="text-[#f0e6d2] font-semibold truncate">
+                        {m.team1Name} <span className="text-[#9bb3c9] mx-1">vs</span> {m.team2Name}
+                      </span>
+                      <span className="text-[#9bb3c9] text-[11px] font-medium">Bo{m.bestOf}</span>
+                    </div>
+                    <div className="text-[#9bb3c9] font-mono text-[11px] font-medium shrink-0 ml-2">
+                      {formatMatchTime(m.startTimeUtc)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-[#7e8e9f] text-center pt-1">
+                Want fewer leagues or only your teams? Pick them in the{" "}
+                <button onClick={() => onSelectTab("watchlist")} className="text-[#c8aa6e] hover:underline">
+                  Watchlist
+                </button>{" "}
+                tab.
+              </p>
+            </section>
+          );
+        })()}
       </div>
     );
   }
