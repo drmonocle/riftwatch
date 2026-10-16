@@ -1,0 +1,23 @@
+name: Mirror head-to-head data
+
+# Installed RiftWatch apps (0.3.40 and older) read their head-to-head data from this repository's h2h-data
+# branch. This keeps it a copy of drmonocle/riftwise's h2h-data branch until those apps have updated.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Copy h2h-data from drmonocle/riftwise
+        run: |
+          git fetch --depth 1 https://github.com/drmonocle/riftwise.git h2h-data
+          git push --force origin FETCH_HEAD:refs/heads/h2h-data
